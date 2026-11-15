@@ -2,8 +2,11 @@ import {
   Injectable,
   ConflictException,
   BadRequestException,
+  NotFoundException,
 } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { SystemDbService } from "../../common/database/system-db.service.js";
+import { TenantContextService } from "../../common/database/tenant-context.service.js";
 import argon2 from "argon2";
 import {
   TenantSignupDto,
@@ -15,7 +18,10 @@ import {
 
 @Injectable()
 export class TenantsService {
-  constructor(private readonly systemDb: SystemDbService) {}
+  constructor(
+    private readonly systemDb: SystemDbService,
+    private readonly tenantContext: TenantContextService,
+  ) {}
 
   async signup(payload: TenantSignupDto, ip?: string) {
     const parseResult = TenantSignupSchema.safeParse(payload);
@@ -74,6 +80,30 @@ export class TenantsService {
         pinHash,
       },
       ip,
+    });
+  }
+
+  async updateSettings(
+    tenantId: string,
+    settings: Record<string, unknown>,
+    name?: string,
+  ) {
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const tenant = await tx.tenant.findUnique({
+        where: { id: tenantId },
+        select: { id: true, name: true, slug: true, settings: true },
+      });
+      if (!tenant) throw new NotFoundException("Tenant not found");
+      const currentSettings = (tenant.settings as Record<string, unknown>) || {};
+      const mergedSettings = { ...currentSettings, ...settings };
+      return tx.tenant.update({
+        where: { id: tenantId },
+        data: {
+          settings: mergedSettings as Prisma.InputJsonValue,
+          ...(name ? { name } : {}),
+        },
+        select: { id: true, name: true, slug: true, settings: true },
+      });
     });
   }
 }

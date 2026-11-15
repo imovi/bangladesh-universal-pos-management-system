@@ -7,7 +7,7 @@ import { Prisma } from "@prisma/client";
 import { v7 as uuidv7 } from "uuid";
 import { TenantContextService } from "../../common/database/tenant-context.service.js";
 import { AuditService } from "../audit/audit.service.js";
-import { CreatePurchaseOrderDto } from "@universal-pos/shared";
+import { CreatePurchaseOrderDto, formatDateKey } from "@universal-pos/shared";
 
 @Injectable()
 export class PurchaseOrdersService {
@@ -15,6 +15,30 @@ export class PurchaseOrdersService {
     private readonly tenantContext: TenantContextService,
     private readonly auditService: AuditService,
   ) {}
+
+  private async generatePoNumber(
+    tenantId: string,
+    tx: Prisma.TransactionClient,
+    timeZone = "Asia/Dhaka",
+  ): Promise<string> {
+    const dateKey = formatDateKey(new Date(), timeZone);
+    await tx.$executeRaw`
+      INSERT INTO document_counters (id, tenant_id, doc_type, date_key, last_seq, updated_at)
+      VALUES (${uuidv7()}::uuid, ${tenantId}::uuid, 'PO', ${dateKey}, 0, NOW())
+      ON CONFLICT (tenant_id, doc_type, date_key) DO NOTHING;
+    `;
+    const counters = await tx.$queryRaw<{ last_seq: number }[]>`
+      SELECT last_seq FROM document_counters
+      WHERE tenant_id = ${tenantId}::uuid AND doc_type = 'PO' AND date_key = ${dateKey}
+      FOR UPDATE;
+    `;
+    const nextSeq = (counters[0]?.last_seq || 0) + 1;
+    await tx.$executeRaw`
+      UPDATE document_counters SET last_seq = ${nextSeq}, updated_at = NOW()
+      WHERE tenant_id = ${tenantId}::uuid AND doc_type = 'PO' AND date_key = ${dateKey};
+    `;
+    return `PO-${dateKey}-${String(nextSeq).padStart(4, "0")}`;
+  }
 
   private prepareOrderItems(
     tenantId: string,
@@ -48,7 +72,7 @@ export class PurchaseOrdersService {
   ) {
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const poNumber =
-        dto.poNumber || `PO-${Date.now().toString().slice(-6)}`;
+        dto.poNumber || (await this.generatePoNumber(tenantId, tx));
       const { totalEstimatedMinor, itemsData } = this.prepareOrderItems(
         tenantId,
         dto.items,

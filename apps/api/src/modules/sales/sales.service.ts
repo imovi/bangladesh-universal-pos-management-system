@@ -14,10 +14,8 @@ import { validateDiscountsNonNegative, enforceDiscountAndOverrideLimits } from "
 @Injectable()
 export class SalesService {
   constructor(
-    private readonly tenantContext: TenantContextService,
-    private readonly auditService: AuditService,
-    private readonly inventoryService: InventoryService,
-    private readonly systemDb: SystemDbService,
+    private readonly tenantContext: TenantContextService, private readonly auditService: AuditService,
+    private readonly inventoryService: InventoryService, private readonly systemDb: SystemDbService,
   ) {}
 
   private async generateInvoiceNumber(
@@ -117,8 +115,7 @@ export class SalesService {
         details: [{
           field: "expectedTotalMinor",
           issue: `Expected total ${dto.expectedTotalMinor} does not match computed total ${calculated.totalMinor}`,
-          serverTotalMinor: Number(calculated.totalMinor),
-          clientTotalMinor: dto.expectedTotalMinor,
+          serverTotalMinor: Number(calculated.totalMinor), clientTotalMinor: dto.expectedTotalMinor,
           breakdown: {
             grossMinor: Number(calculated.grossMinor), discountMinor: Number(calculated.totalDiscountMinor),
             taxMinor: Number(calculated.taxMinor), totalMinor: Number(calculated.totalMinor),
@@ -149,34 +146,36 @@ export class SalesService {
     return { calculated, paidMinor, changeMinor };
   }
 
-  private async checkIdempotency(tx: Prisma.TransactionClient, id: string | undefined, tenantId: string) {
-    if (!id) return null;
-    const existing = await tx.sale.findUnique({
-      where: { id },
-      include: { items: true, payments: true },
+  private isSameSalePayload(existing: any, dto: CreateSaleDto): boolean {
+    if (BigInt(dto.expectedTotalMinor) !== existing.totalMinor) return false;
+    if (dto.items.length !== existing.items.length) return false;
+    return dto.items.every((incoming) => {
+      const match = existing.items.find((it: any) => it.variantId === incoming.variantId);
+      return match && Number(match.quantity) === incoming.quantity;
     });
-    return existing && existing.tenantId === tenantId ? { ...existing, isDuplicate: true } : null;
+  }
+
+  private async checkIdempotency(
+    tx: Prisma.TransactionClient, id: string | undefined, tenantId: string, dto: CreateSaleDto,
+  ) {
+    if (!id) return null;
+    const existing = await tx.sale.findUnique({ where: { id }, include: { items: true, payments: true } });
+    if (!existing || existing.tenantId !== tenantId) return null;
+    if (this.isSameSalePayload(existing, dto)) return { ...existing, isDuplicate: true };
+    throw new ConflictException({
+      code: "IDEMPOTENCY_CONFLICT", message: "A sale with this ID already exists with a different payload",
+    });
   }
 
   private buildSaleItemsData(
-    tenantId: string,
-    lines: any[],
-    costMap: Map<string, bigint>,
-    originalPrices: (bigint | null)[],
+    tenantId: string, lines: any[], costMap: Map<string, bigint>, originalPrices: (bigint | null)[],
   ) {
     return lines.map((l: any, idx: number) => ({
-      id: uuidv7(),
-      tenantId,
-      variantId: l.variantId,
-      unitPriceMinor: l.unitPriceMinor,
-      originalUnitPriceMinor: originalPrices[idx] ?? null,
-      unitCostMinor: costMap.get(l.variantId) ?? 0n,
-      quantity: new Prisma.Decimal(l.quantity),
-      subtotalMinor: l.grossMinor,
+      id: uuidv7(), tenantId, variantId: l.variantId, unitPriceMinor: l.unitPriceMinor,
+      originalUnitPriceMinor: originalPrices[idx] ?? null, unitCostMinor: costMap.get(l.variantId) ?? 0n,
+      quantity: new Prisma.Decimal(l.quantity), subtotalMinor: l.grossMinor,
       discountMinor: l.lineDiscountMinor + l.allocatedBillDiscountMinor,
-      taxRateBp: l.taxRateBp,
-      taxMinor: l.taxMinor,
-      totalMinor: l.totalMinor,
+      taxRateBp: l.taxRateBp, taxMinor: l.taxMinor, totalMinor: l.totalMinor,
     }));
   }
 
@@ -194,8 +193,7 @@ export class SalesService {
         items: { create: this.buildSaleItemsData(tenantId, meta.calc.lines, meta.costMap, meta.originalPrices) },
         payments: {
           create: dto.payments.map((p) => ({
-            id: uuidv7(), tenantId, paymentMethod: p.paymentMethod,
-            amountMinor: BigInt(p.amountMinor), reference: p.reference,
+            id: uuidv7(), tenantId, paymentMethod: p.paymentMethod, amountMinor: BigInt(p.amountMinor), reference: p.reference,
           })),
         },
       },
@@ -204,9 +202,18 @@ export class SalesService {
   }
 
   private async loadShiftAndVariants(tx: Prisma.TransactionClient, tenantId: string, dto: CreateSaleDto) {
-    const shift = await tx.shift.findUnique({ where: { id: dto.shiftId } });
+    const shift = await tx.shift.findUnique({
+      where: { id: dto.shiftId },
+      include: { register: true },
+    });
     if (!shift || shift.tenantId !== tenantId || shift.status !== "open") {
       throw new BadRequestException("Active open shift required for sale");
+    }
+    if (shift.register.branchId !== dto.branchId) {
+      throw new UnprocessableEntityException({
+        code: "BRANCH_SHIFT_MISMATCH",
+        message: "Shift register branch does not match sale branch",
+      });
     }
     const defaultTax = await tx.taxClass.findFirst({ where: { tenantId, isDefault: true } });
     const variants = await tx.productVariant.findMany({
@@ -219,12 +226,13 @@ export class SalesService {
   private async finalizeSaleOperations(
     tx: Prisma.TransactionClient,
     tenantId: string,
-    meta: { saleId: string; inv: string; calc: any; branchId: string; customerId?: string; userId: string; ip?: string },
+    meta: { saleId: string; inv: string; calc: any; branchId: string; customerId?: string; userId: string; ip?: string; costMap: Map<string, bigint> },
   ) {
     await this.inventoryService.applyMovements(
       tenantId, tx,
       meta.calc.lines.map((l: any) => ({
         branchId: meta.branchId, variantId: l.variantId, qtyDelta: -Number(l.quantity),
+        unitCostMinor: meta.costMap.get(l.variantId) ?? 0n,
         type: "sale", refType: "sale", refId: meta.saleId, reason: `Sale ${meta.inv}`, actorUserId: meta.userId,
       })),
     );
@@ -238,54 +246,78 @@ export class SalesService {
     );
   }
 
+  private async getTenantSettings(tenantId: string) {
+    const tenant = await this.systemDb.findTenantById(tenantId);
+    const settings = (tenant?.settings as Record<string, unknown>) || {};
+    return {
+      pricesIncludeTax: (settings.prices_include_tax as boolean) ?? true,
+      timeZone: (settings.timezone as string) || "Asia/Dhaka",
+    };
+  }
+
+  private async handleOverrideAudit(
+    tx: Prisma.TransactionClient, tenantId: string, userId: string,
+    saleId: string, inv: string, ov: { priceOverrideUsed: boolean; discountOverrideUsed: boolean }, ip?: string,
+  ) {
+    if (!ov.priceOverrideUsed && !ov.discountOverrideUsed) return;
+    await this.auditService.log({
+      tenantId, actorUserId: userId, action: "sale.override", entityType: "sale", entityId: saleId,
+      after: { invoiceNumber: inv, ...ov }, ip,
+    }, tx);
+  }
+
+  private async handleSaleCreationConflict(tenantId: string, dto: CreateSaleDto): Promise<any> {
+    if (dto.id) {
+      const existing = await this.findById(tenantId, dto.id).catch(() => null);
+      if (existing) {
+        if (this.isSameSalePayload(existing, dto)) return { ...existing, isDuplicate: true };
+        throw new ConflictException({
+          code: "IDEMPOTENCY_CONFLICT", message: "A sale with this ID already exists with a different payload",
+        });
+      }
+    }
+    throw new ConflictException({
+      code: "CONCURRENT_REQUEST", message: "A concurrent request with the same identifier is in progress",
+    });
+  }
+
   async create(
     tenantId: string, dto: CreateSaleDto, userId: string, ip?: string,
     user?: { isOwner?: boolean; permissions?: string[] },
   ) {
-    const tenant = await this.systemDb.findTenantById(tenantId);
-    const tenantSettings = (tenant?.settings as Record<string, unknown>) || {};
-    const pricesIncludeTax = (tenantSettings.prices_include_tax as boolean) ?? true;
-    const timeZone = (tenantSettings.timezone as string) || "Asia/Dhaka";
+    const { pricesIncludeTax, timeZone } = await this.getTenantSettings(tenantId);
+    try {
+      return await this.tenantContext.runWithTenant(tenantId, async (tx) => {
+        const duplicate = await this.checkIdempotency(tx, dto.id, tenantId, dto);
+        if (duplicate) return duplicate;
 
-    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
-      const duplicate = await this.checkIdempotency(tx, dto.id, tenantId);
-      if (duplicate) return duplicate;
+        const { shift, defaultTaxRateBp, variants } = await this.loadShiftAndVariants(tx, tenantId, dto);
+        const variantMap = new Map(variants.map((v) => [v.id, v]));
+        const { lineInputs, originalPrices } = this.resolveItemPricingAndTaxes(dto.items, variantMap, defaultTaxRateBp, user);
+        const ov = await enforceDiscountAndOverrideLimits(tx, userId, tenantId, dto, lineInputs, user);
+        const { calculated, paidMinor, changeMinor } = this.computeAndValidateTotals(dto, lineInputs, pricesIncludeTax);
 
-      const { shift, defaultTaxRateBp, variants } = await this.loadShiftAndVariants(tx, tenantId, dto);
-      const variantMap = new Map(variants.map((v) => [v.id, v]));
-      const { lineInputs, originalPrices } = this.resolveItemPricingAndTaxes(dto.items, variantMap, defaultTaxRateBp, user);
+        const saleId = dto.id || uuidv7();
+        const inv = await this.generateInvoiceNumber(tenantId, shift.registerId, tx, timeZone);
+        const costMap = new Map(variants.map((v) => [v.id, v.costMinor]));
 
-      const { discountOverrideUsed, priceOverrideUsed } = await enforceDiscountAndOverrideLimits(
-        tx, userId, tenantId, dto, lineInputs, user,
-      );
+        const sale = await this.executeSaleInsert(tx, tenantId, dto, {
+          saleId, inv, calc: calculated, paid: paidMinor, change: changeMinor,
+          userId, costMap, originalPrices,
+        });
 
-      const { calculated, paidMinor, changeMinor } = this.computeAndValidateTotals(dto, lineInputs, pricesIncludeTax);
-
-      const saleId = dto.id || uuidv7();
-      const invoiceNumber = await this.generateInvoiceNumber(tenantId, shift.registerId, tx, timeZone);
-      const costMap = new Map(variants.map((v) => [v.id, v.costMinor]));
-
-      const sale = await this.executeSaleInsert(tx, tenantId, dto, {
-        saleId, inv: invoiceNumber, calc: calculated, paid: paidMinor, change: changeMinor,
-        userId, costMap, originalPrices,
+        await this.finalizeSaleOperations(tx, tenantId, {
+          saleId, inv, calc: calculated, branchId: dto.branchId, customerId: dto.customerId, userId, ip, costMap,
+        });
+        await this.handleOverrideAudit(tx, tenantId, userId, saleId, inv, ov, ip);
+        return sale;
       });
-
-      await this.finalizeSaleOperations(tx, tenantId, {
-        saleId, inv: invoiceNumber, calc: calculated, branchId: dto.branchId, customerId: dto.customerId, userId, ip,
-      });
-
-      if (priceOverrideUsed || discountOverrideUsed) {
-        await this.auditService.log(
-          {
-            tenantId, actorUserId: userId, action: "sale.override", entityType: "sale", entityId: saleId,
-            after: { invoiceNumber, priceOverrideUsed, discountOverrideUsed }, ip,
-          },
-          tx,
-        );
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        return this.handleSaleCreationConflict(tenantId, dto);
       }
-
-      return sale;
-    });
+      throw err;
+    }
   }
 
   async voidSale(tenantId: string, saleId: string, dto: VoidSaleDto, userId: string, ip?: string) {
@@ -309,19 +341,17 @@ export class SalesService {
         tenantId, tx,
         sale.items.map((it) => ({
           branchId: sale.branchId, variantId: it.variantId, qtyDelta: Number(it.quantity),
+          unitCostMinor: it.unitCostMinor,
           type: "sale_void", refType: "sale_void", refId: saleId,
           reason: `Void sale ${sale.invoiceNumber}: ${dto.reason}`, actorUserId: userId,
         })),
       );
 
       await this.updateCustomerMetrics(tx, sale.customerId || undefined, sale.totalMinor, true);
-      await this.auditService.log(
-        {
-          tenantId, actorUserId: userId, action: "sale.void", entityType: "sale", entityId: saleId,
-          before: { status: "completed" }, after: { status: "voided", reason: dto.reason }, ip,
-        },
-        tx,
-      );
+      await this.auditService.log({
+        tenantId, actorUserId: userId, action: "sale.void", entityType: "sale", entityId: saleId,
+        before: { status: "completed" }, after: { status: "voided", reason: dto.reason }, ip,
+      }, tx);
       return voided;
     });
   }
@@ -341,8 +371,7 @@ export class SalesService {
   }
 
   async findMany(
-    tenantId: string,
-    query: { branchId?: string; shiftId?: string; status?: string; page?: number; limit?: number },
+    tenantId: string, query: { branchId?: string; shiftId?: string; status?: string; page?: number; limit?: number },
   ) {
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const where: Prisma.SaleWhereInput = { tenantId };

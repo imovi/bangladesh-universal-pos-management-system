@@ -7,6 +7,7 @@ import { InventoryService } from "../inventory/inventory.service.js";
 import {
   CreateGoodsReceiptDto,
   calculateWeightedAverageCost,
+  formatDateKey,
 } from "@universal-pos/shared";
 
 @Injectable()
@@ -16,6 +17,30 @@ export class GoodsReceiptsService {
     private readonly auditService: AuditService,
     private readonly inventoryService: InventoryService,
   ) {}
+
+  private async generateGrnNumber(
+    tenantId: string,
+    tx: Prisma.TransactionClient,
+    timeZone = "Asia/Dhaka",
+  ): Promise<string> {
+    const dateKey = formatDateKey(new Date(), timeZone);
+    await tx.$executeRaw`
+      INSERT INTO document_counters (id, tenant_id, doc_type, date_key, last_seq, updated_at)
+      VALUES (${uuidv7()}::uuid, ${tenantId}::uuid, 'GRN', ${dateKey}, 0, NOW())
+      ON CONFLICT (tenant_id, doc_type, date_key) DO NOTHING;
+    `;
+    const counters = await tx.$queryRaw<{ last_seq: number }[]>`
+      SELECT last_seq FROM document_counters
+      WHERE tenant_id = ${tenantId}::uuid AND doc_type = 'GRN' AND date_key = ${dateKey}
+      FOR UPDATE;
+    `;
+    const nextSeq = (counters[0]?.last_seq || 0) + 1;
+    await tx.$executeRaw`
+      UPDATE document_counters SET last_seq = ${nextSeq}, updated_at = NOW()
+      WHERE tenant_id = ${tenantId}::uuid AND doc_type = 'GRN' AND date_key = ${dateKey};
+    `;
+    return `GRN-${dateKey}-${String(nextSeq).padStart(4, "0")}`;
+  }
 
   private async updateWeightedAverageCost(
     tenantId: string,
@@ -145,7 +170,7 @@ export class GoodsReceiptsService {
   ) {
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const grnNumber =
-        dto.grnNumber || `GRN-${Date.now().toString().slice(-6)}`;
+        dto.grnNumber || (await this.generateGrnNumber(tenantId, tx));
       const grnId = uuidv7();
 
       await this.processReceiptItems(tenantId, tx, dto.branchId, dto.items);

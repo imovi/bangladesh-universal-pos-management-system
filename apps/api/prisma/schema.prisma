@@ -45,6 +45,7 @@ model Tenant {
   saleItems          SaleItem[]
   salePayments       SalePayment[]
   receiptCounters    ReceiptCounter[]
+  documentCounters   DocumentCounter[]
 
   @@map("tenants")
 }
@@ -784,6 +785,21 @@ model ReceiptCounter {
   @@index([tenantId])
   @@index([registerId])
   @@map("receipt_counters")
+}
+
+model DocumentCounter {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  docType   String   @map("doc_type")
+  dateKey   String   @map("date_key")
+  lastSeq   Int      @default(0) @map("last_seq")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, docType, dateKey])
+  @@index([tenantId])
+  @@map("document_counters")
 }
 
 

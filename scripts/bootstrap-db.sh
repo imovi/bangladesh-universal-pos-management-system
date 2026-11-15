@@ -15,11 +15,18 @@ PGPASSWORD="${POSTGRES_PASSWORD:-pos_secret}" psql -h "$ADMIN_HOST" -p "$ADMIN_P
 
     DO \$\$
     BEGIN
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'pos_app') THEN
+            CREATE ROLE pos_app NOLOGIN NOINHERIT;
+        END IF;
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'pos_system') THEN
+            CREATE ROLE pos_system NOLOGIN NOINHERIT;
+        END IF;
         IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$RUNTIME_USER') THEN
             EXECUTE format('CREATE ROLE %I WITH LOGIN PASSWORD %L NOINHERIT', '$RUNTIME_USER', '$RUNTIME_PASSWORD');
         ELSE
             EXECUTE format('ALTER ROLE %I WITH PASSWORD %L NOINHERIT', '$RUNTIME_USER', '$RUNTIME_PASSWORD');
         END IF;
+        EXECUTE format('GRANT pos_app, pos_system TO %I', '$RUNTIME_USER');
     END
     \$\$;
 

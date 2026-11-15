@@ -57,16 +57,23 @@ export class SystemDbService {
   }
 
   /**
-   * Updates tenant settings via pos_system role.
+   * Updates tenant settings via pos_app role under tenant context.
    */
   async updateTenantSettings(id: string, settings: Record<string, unknown>) {
     return this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SET LOCAL ROLE pos_system;`;
+      await tx.$executeRaw`SET LOCAL ROLE pos_app;`;
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${id}, true);`;
+      const current = await tx.tenant.findUnique({
+        where: { id },
+        select: { id: true, name: true, slug: true, settings: true },
+      });
+      const currentSettings = (current?.settings as Record<string, unknown>) || {};
       return tx.tenant.update({
         where: { id },
         data: {
-          settings: settings as Prisma.InputJsonValue,
+          settings: { ...currentSettings, ...settings } as Prisma.InputJsonValue,
         },
+        select: { id: true, name: true, slug: true, settings: true },
       });
     });
   }

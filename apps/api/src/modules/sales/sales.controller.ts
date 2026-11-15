@@ -5,6 +5,7 @@ import {
   Param,
   Body,
   Query,
+  Headers,
   UseGuards,
   Req,
   Res,
@@ -34,6 +35,7 @@ export class SalesController {
   async create(
     @Req() req: any,
     @Res({ passthrough: true }) res: Response,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
     @Body() body: unknown,
     @Ip() ip: string,
   ) {
@@ -43,6 +45,17 @@ export class SalesController {
         code: "VALIDATION_ERROR",
         errors: parse.error.flatten(),
       });
+    }
+
+    if (idempotencyKey && parse.data.id && parse.data.id !== idempotencyKey) {
+      throw new BadRequestException({
+        code: "IDEMPOTENCY_KEY_MISMATCH",
+        message: "Idempotency-Key header must match body id when provided",
+      });
+    }
+
+    if (idempotencyKey && !parse.data.id) {
+      parse.data.id = idempotencyKey;
     }
 
     const sale = await this.salesService.create(

@@ -83,16 +83,17 @@ export class InventoryService {
     }
 
     for (const item of deltasByItem.values()) {
-      const level = await tx.stockLevel.findUnique({
-        where: {
-          tenantId_branchId_variantId: {
-            tenantId,
-            branchId: item.branchId,
-            variantId: item.variantId,
-          },
-        },
-      });
-      const currentQty = level ? Number(level.qty) : 0;
+      await tx.$executeRaw`
+        INSERT INTO stock_levels (id, tenant_id, branch_id, variant_id, qty, updated_at)
+        VALUES (${uuidv7()}::uuid, ${tenantId}::uuid, ${item.branchId}::uuid, ${item.variantId}::uuid, 0, NOW())
+        ON CONFLICT (tenant_id, branch_id, variant_id) DO NOTHING;
+      `;
+      const levels = await tx.$queryRaw<{ qty: string | number }[]>`
+        SELECT qty FROM stock_levels
+        WHERE tenant_id = ${tenantId}::uuid AND branch_id = ${item.branchId}::uuid AND variant_id = ${item.variantId}::uuid
+        FOR UPDATE;
+      `;
+      const currentQty = levels.length > 0 ? Number(levels[0].qty) : 0;
       if (currentQty + item.totalNegativeDelta < 0) {
         throw new BadRequestException(
           `Insufficient stock for variant ${item.variantId}`,

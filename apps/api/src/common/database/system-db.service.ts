@@ -35,8 +35,11 @@ export class SystemDbService {
    * Finds a tenant by its unique slug (used for public login flow).
    */
   async findTenantBySlug(slug: string) {
-    return this.prisma.tenant.findUnique({
-      where: { slug },
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SET LOCAL ROLE pos_system;`;
+      return tx.tenant.findUnique({
+        where: { slug },
+      });
     });
   }
 
@@ -44,8 +47,11 @@ export class SystemDbService {
    * Finds a tenant by its primary key ID.
    */
   async findTenantById(id: string) {
-    return this.prisma.tenant.findUnique({
-      where: { id },
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SET LOCAL ROLE pos_system;`;
+      return tx.tenant.findUnique({
+        where: { id },
+      });
     });
   }
 
@@ -54,24 +60,11 @@ export class SystemDbService {
    * (since client presents only the opaque token string).
    */
   async findRefreshTokenByHash(tokenHash: string) {
-    return this.prisma.refreshToken.findFirst({
-      where: { tokenHash },
-      include: {
-        user: {
-          include: {
-            tenant: true,
-            userRoles: {
-              include: {
-                role: {
-                  include: {
-                    rolePermissions: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SET LOCAL ROLE pos_system;`;
+      return tx.refreshToken.findFirst({
+        where: { tokenHash },
+      });
     });
   }
 
@@ -79,9 +72,12 @@ export class SystemDbService {
    * Revokes all refresh tokens belonging to a user (used during compromised token reuse).
    */
   async revokeAllUserRefreshTokens(userId: string) {
-    return this.prisma.refreshToken.updateMany({
-      where: { userId },
-      data: { revokedAt: new Date() },
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SET LOCAL ROLE pos_system;`;
+      return tx.refreshToken.updateMany({
+        where: { userId },
+        data: { revokedAt: new Date() },
+      });
     });
   }
 
@@ -92,6 +88,7 @@ export class SystemDbService {
    */
   async createTenantWithInitialData(data: CreateTenantSignupData) {
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SET LOCAL ROLE pos_system;`;
       // 1. Create Tenant
       const tenant = await tx.tenant.create({
         data: {

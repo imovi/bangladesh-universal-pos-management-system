@@ -1,19 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import { TenantContextService } from '../src/common/database/tenant-context.service.js';
+import { createTestPrismaClient } from './test-db-helper.js';
 
 describe('Fix 3: Fail-Closed Tenant Context', () => {
   let prisma: PrismaClient;
   let service: TenantContextService;
 
   beforeAll(async () => {
-    prisma = new PrismaClient({
-      datasources: {
-        db: {
-          url: process.env.DATABASE_URL || 'postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public',
-        },
-      },
-    });
+    prisma = createTestPrismaClient();
     await prisma.$connect();
     service = new TenantContextService(prisma as any);
   });

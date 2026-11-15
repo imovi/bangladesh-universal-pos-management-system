@@ -11,6 +11,8 @@ export const envSchema = z
       .default("development"),
     PORT: z.coerce.number().default(4000),
     DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+    TEST_DATABASE_URL: z.string().optional(),
+    MIGRATION_DATABASE_URL: z.string().optional(),
     REDIS_URL: z.string().default("redis://localhost:6379"),
     JWT_ACCESS_SECRET: z
       .string()

@@ -48,21 +48,39 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Bootstrap PostgreSQL roles and test database
+        run: bash scripts/bootstrap-db.sh
+        env:
+          POSTGRES_USER: pos_admin
+          POSTGRES_PASSWORD: pos_secret
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_RUNTIME_USER: pos_runtime
+          POSTGRES_RUNTIME_PASSWORD: pos_runtime_secret
+
       - name: Generate Prisma Client
         run: npx prisma generate --schema=apps/api/prisma/schema.prisma
 
-      - name: Run Prisma migrations
+      - name: Run Prisma migrations as owner (dev DB)
         run: npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
         env:
           DATABASE_URL: postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public
 
+      - name: Run Prisma migrations as owner (test DB)
+        run: npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
+        env:
+          DATABASE_URL: postgresql://pos_admin:pos_secret@localhost:5432/universal_pos_test?schema=public
+
       - name: Build packages
         run: npm run build
 
-      - name: Run tests with coverage
+      - name: Run tests with coverage as non-superuser pos_runtime
         run: npm run test:cov
         env:
           NODE_ENV: test
-          DATABASE_URL: postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public
+          DATABASE_URL: postgresql://pos_runtime:pos_runtime_secret@localhost:5432/universal_pos?schema=public
+          TEST_DATABASE_URL: postgresql://pos_runtime:pos_runtime_secret@localhost:5432/universal_pos_test?schema=public
+          MIGRATION_DATABASE_URL: postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public
+          MIGRATION_TEST_DATABASE_URL: postgresql://pos_admin:pos_secret@localhost:5432/universal_pos_test?schema=public
           JWT_ACCESS_SECRET: test-jwt-access-secret-minimum-32-chars-long
           JWT_REFRESH_SECRET: test-jwt-refresh-secret-minimum-32-chars-long

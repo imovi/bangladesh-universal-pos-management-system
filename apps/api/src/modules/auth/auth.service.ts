@@ -182,13 +182,32 @@ export class AuthService {
       throw new UnauthorizedException("Refresh token has expired");
     }
 
-    const { user } = tokenRecord;
-    if (!user.isActive || user.tenant.status !== "active") {
-      throw new UnauthorizedException("User or tenant account is inactive");
+    const tenant = await this.systemDb.findTenantById(tokenRecord.tenantId);
+    if (!tenant || tenant.status !== "active") {
+      throw new UnauthorizedException("Tenant account is inactive");
     }
 
     // Execute token rotation inside Tenant Context
     return this.tenantContext.runWithTenant(tokenRecord.tenantId, async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: tokenRecord.userId },
+        include: {
+          userRoles: {
+            include: {
+              role: {
+                include: {
+                  rolePermissions: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!user || !user.isActive) {
+        throw new UnauthorizedException("User account is inactive");
+      }
+
       await tx.refreshToken.update({
         where: { id: tokenRecord.id },
         data: { revokedAt: new Date() },
@@ -211,7 +230,7 @@ export class AuthService {
       const jwtPayload: JwtPayload = {
         sub: user.id,
         tenantId: user.tenantId,
-        tenantSlug: user.tenant.slug,
+        tenantSlug: tenant.slug,
         email: user.email,
         roles: roleNames,
         permissions: Array.from(permissionSet),

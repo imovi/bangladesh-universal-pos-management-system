@@ -157,27 +157,32 @@ describe("AuthService Unit Tests", () => {
 
   it("rotates refresh token and returns new token pair", async () => {
     const tenantId = "0193309a-6b21-7000-8000-000000000001";
+    mockSystemDb.findTenantById.mockResolvedValue({
+      id: tenantId,
+      status: "active",
+      slug: "my-store",
+    });
     mockSystemDb.findRefreshTokenByHash.mockResolvedValue({
       id: "token-valid-id",
       userId: "user-1",
       tenantId,
       revokedAt: null,
       expiresAt: new Date(Date.now() + 1000000),
-      user: {
-        id: "user-1",
-        tenantId,
-        email: "user@test.com",
-        isActive: true,
-        tenant: { status: "active", slug: "my-store" },
-        userRoles: [
-          {
-            role: {
-              name: "Cashier",
-              rolePermissions: [{ permissionKey: "sale.read" }],
-            },
+    });
+
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      tenantId,
+      email: "user@test.com",
+      isActive: true,
+      userRoles: [
+        {
+          role: {
+            name: "Cashier",
+            rolePermissions: [{ permissionKey: "sale.read" }],
           },
-        ],
-      },
+        },
+      ],
     });
 
     const res = await authService.refresh({ refreshToken: "rt_valid_token" });

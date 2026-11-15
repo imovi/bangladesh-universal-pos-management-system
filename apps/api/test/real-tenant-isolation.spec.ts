@@ -4,9 +4,11 @@ import { TenantsService } from '../src/modules/tenants/tenants.service.js';
 import { SystemDbService } from '../src/common/database/system-db.service.js';
 import { TenantContextService } from '../src/common/database/tenant-context.service.js';
 import { ConflictException } from '@nestjs/common';
+import { truncateTestDatabase, createTestPrismaClient, createTestAdminPrismaClient } from './test-db-helper.js';
 
 describe('Fix 4: Real PostgreSQL Tenant Isolation Integration Tests', () => {
   let prisma: PrismaClient;
+  let adminPrisma: PrismaClient;
   let systemDb: SystemDbService;
   let tenantContext: TenantContextService;
   let tenantsService: TenantsService;
@@ -15,20 +17,14 @@ describe('Fix 4: Real PostgreSQL Tenant Isolation Integration Tests', () => {
   let tenantB: { tenantId: string; slug: string; ownerEmail: string; branchId: string };
 
   beforeAll(async () => {
-    prisma = new PrismaClient({
-      datasources: {
-        db: {
-          url: process.env.DATABASE_URL || 'postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public',
-        },
-      },
-    });
+    await truncateTestDatabase();
+    prisma = createTestPrismaClient();
+    adminPrisma = createTestAdminPrismaClient();
     await prisma.$connect();
+    await adminPrisma.$connect();
     systemDb = new SystemDbService(prisma as any);
     tenantContext = new TenantContextService(prisma as any);
     tenantsService = new TenantsService(systemDb);
-
-    // Clean test slate
-    await prisma.$executeRawUnsafe(`TRUNCATE TABLE tenants CASCADE;`);
 
     // 1. Provision Tenant A
     tenantA = await tenantsService.signup({
@@ -69,6 +65,7 @@ describe('Fix 4: Real PostgreSQL Tenant Isolation Integration Tests', () => {
 
   afterAll(async () => {
     await prisma.$disconnect();
+    await adminPrisma.$disconnect();
   });
 
   it('proves same email and branch code exist in both tenants, but duplicates in same tenant are rejected', async () => {
@@ -178,16 +175,37 @@ describe('Fix 4: Real PostgreSQL Tenant Isolation Integration Tests', () => {
       await tx.$executeRaw`SET LOCAL ROLE pos_app;`;
       await tx.$executeRaw`SELECT set_config('app.tenant_id', '', true);`;
 
-      const [branches, users, roles, auditLogs]: [any[], any[], any[], any[]] = await Promise.all([
-        tx.$queryRaw`SELECT * FROM branches;`,
-        tx.$queryRaw`SELECT * FROM users;`,
-        tx.$queryRaw`SELECT * FROM roles;`,
-        tx.$queryRaw`SELECT * FROM audit_logs;`,
-      ]);
+      const [
+        branches,
+        users,
+        roles,
+        rolePermissions,
+        userRoles,
+        userBranches,
+        refreshTokens,
+        featureFlags,
+        auditLogs,
+      ]: [any[], any[], any[], any[], any[], any[], any[], any[], any[]] =
+        await Promise.all([
+          tx.$queryRaw`SELECT * FROM branches;`,
+          tx.$queryRaw`SELECT * FROM users;`,
+          tx.$queryRaw`SELECT * FROM roles;`,
+          tx.$queryRaw`SELECT * FROM role_permissions;`,
+          tx.$queryRaw`SELECT * FROM user_roles;`,
+          tx.$queryRaw`SELECT * FROM user_branches;`,
+          tx.$queryRaw`SELECT * FROM refresh_tokens;`,
+          tx.$queryRaw`SELECT * FROM feature_flags;`,
+          tx.$queryRaw`SELECT * FROM audit_logs;`,
+        ]);
 
       expect(branches.length).toBe(0);
       expect(users.length).toBe(0);
       expect(roles.length).toBe(0);
+      expect(rolePermissions.length).toBe(0);
+      expect(userRoles.length).toBe(0);
+      expect(userBranches.length).toBe(0);
+      expect(refreshTokens.length).toBe(0);
+      expect(featureFlags.length).toBe(0);
       expect(auditLogs.length).toBe(0);
     });
   });
@@ -211,8 +229,8 @@ describe('Fix 4: Real PostgreSQL Tenant Isolation Integration Tests', () => {
   });
 
   it('a signup that fails midway leaves no tenant, branch, role, or user behind', async () => {
-    const preTenantsCount = await prisma.tenant.count({ where: { slug: 'failing-signup' } });
-    expect(preTenantsCount).toBe(0);
+    const preTenant = await systemDb.findTenantBySlug('failing-signup');
+    expect(preTenant).toBeNull();
 
     // Intentionally cause failure during creation
     await expect(
@@ -234,10 +252,10 @@ describe('Fix 4: Real PostgreSQL Tenant Isolation Integration Tests', () => {
       }),
     ).rejects.toThrow();
 
-    // Verify atomic rollback
-    const postTenant = await prisma.tenant.findUnique({ where: { slug: 'failing-signup' } });
-    const postUsers = await prisma.user.findMany({ where: { email: 'fail@owner.com' } });
-    const postBranches = await prisma.branch.findMany({ where: { code: 'FAIL-01' } });
+    // Verify atomic rollback using admin client (direct DB check)
+    const postTenant = await adminPrisma.tenant.findUnique({ where: { slug: 'failing-signup' } });
+    const postUsers = await adminPrisma.user.findMany({ where: { email: 'fail@owner.com' } });
+    const postBranches = await adminPrisma.branch.findMany({ where: { code: 'FAIL-01' } });
 
     expect(postTenant).toBeNull();
     expect(postUsers.length).toBe(0);

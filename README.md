@@ -51,6 +51,22 @@ Universal, multi-tenant, offline-first Point-of-Sale (POS) and inventory platfor
    npm test
    ```
 
+## Database Roles Architecture & Security
+The database uses a three-tier role security model:
+1. **Migration / Owner User (`pos_admin`)**: Used strictly by Prisma CLI for executing migrations (`MIGRATION_DATABASE_URL` / `directUrl`). Table owner with full schema rights. Never used at runtime.
+2. **Runtime Login User (`pos_runtime`)**: Non-superuser with `NOINHERIT` and zero direct table privileges. Used by the application at runtime (`DATABASE_URL`) and in tests (`TEST_DATABASE_URL`). Member of `pos_app` and `pos_system`.
+3. **NOLOGIN Group Roles**:
+   - `pos_app`: Used for tenant-scoped operations (`runWithTenant`). Protected by `FORCE ROW LEVEL SECURITY` and `tenant_isolation_policy`.
+   - `pos_system`: Used for system operations in `SystemDbService` (`SET LOCAL ROLE pos_system`). Holds minimal grants for tenant lookup, atomic signup inserts, and refresh tokens.
+
+### Bootstrap Script
+Login users and passwords are created outside migration files using environment variables:
+- In Docker: `docker/init-db.sh` runs automatically on container initialization.
+- In CI / Shell: `scripts/bootstrap-db.sh` can be executed to create `pos_runtime` and `universal_pos_test`.
+
+### Test Database Isolation
+Tests run against a dedicated test database (`universal_pos_test`). The test suite (`test-db-helper.ts`) strictly refuses to run destructive operations (such as truncate) unless the database name ends in `_test`, completely protecting the development database.
+
 ## Database Migration & Tenant Isolation (RLS) Rule
 > **IMPORTANT FOR NEW TABLES**: Every new table created with `tenant_id` MUST have `ENABLE` and `FORCE ROW LEVEL SECURITY` turned on, grants given to `pos_app`, and the tenant isolation policy defined in its own migration:
 > ```sql

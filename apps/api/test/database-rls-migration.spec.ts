@@ -1,17 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PrismaClient } from '@prisma/client';
+import { createTestAdminPrismaClient } from './test-db-helper.js';
 
 describe('Fix 1: Real Database Migrations & RLS Verification', () => {
   let prisma: PrismaClient;
 
   beforeAll(async () => {
-    prisma = new PrismaClient({
-      datasources: {
-        db: {
-          url: process.env.DATABASE_URL || 'postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public',
-        },
-      },
-    });
+    prisma = createTestAdminPrismaClient();
     await prisma.$connect();
   });
 

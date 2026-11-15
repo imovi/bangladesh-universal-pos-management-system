@@ -8,7 +8,9 @@ import { TransformInterceptor } from '../src/common/interceptors/transform.inter
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter.js';
 import { AuthService } from '../src/modules/auth/auth.service.js';
 import { TenantsService } from '../src/modules/tenants/tenants.service.js';
+import { TenantContextService } from '../src/common/database/tenant-context.service.js';
 import { PrismaService } from '../src/common/database/prisma.service.js';
+import { truncateTestDatabase } from './test-db-helper.js';
 
 describe('Fix 4: HTTP Endpoint Cross-Tenant Isolation (Supertest)', () => {
   let app: INestApplication;
@@ -38,8 +40,8 @@ describe('Fix 4: HTTP Endpoint Cross-Tenant Isolation (Supertest)', () => {
     tenantsService = app.get(TenantsService);
     prisma = app.get(PrismaService);
 
-    // Clean slate
-    await prisma.$executeRawUnsafe(`TRUNCATE TABLE tenants CASCADE;`);
+    // Clean slate in dedicated test database
+    await truncateTestDatabase();
 
     // Signup Tenant Alpha
     await tenantsService.signup({
@@ -95,8 +97,11 @@ describe('Fix 4: HTTP Endpoint Cross-Tenant Isolation (Supertest)', () => {
     });
     tokenB = loginB.accessToken;
 
-    // Fetch Tenant B custom role
-    const rolesB = await prisma.role.findMany({ where: { tenantId: beta.tenantId } });
+    // Fetch Tenant B custom role via tenant context
+    const tenantContext = app.get(TenantContextService);
+    const rolesB = await tenantContext.runWithTenant(beta.tenantId, async (tx) => {
+      return tx.role.findMany({ where: { tenantId: beta.tenantId } });
+    });
     tenantBRoleId = rolesB[0].id;
   });
 
@@ -207,7 +212,11 @@ describe('Fix 4: HTTP Endpoint Cross-Tenant Isolation (Supertest)', () => {
     });
 
     it('POST /users creates new user in Tenant A', async () => {
-      const rolesA = await prisma.role.findMany();
+      const rolesRes = await request(app.getHttpServer())
+        .get('/api/v1/roles')
+        .set('Authorization', `Bearer ${tokenA}`);
+      const roleId = rolesRes.body.data[0].id;
+
       const res = await request(app.getHttpServer())
         .post('/api/v1/users')
         .set('Authorization', `Bearer ${tokenA}`)
@@ -215,7 +224,7 @@ describe('Fix 4: HTTP Endpoint Cross-Tenant Isolation (Supertest)', () => {
           name: 'Alpha Staff',
           email: 'staff@alpha.com',
           password: 'Password123!',
-          roleIds: [rolesA[0].id],
+          roleIds: [roleId],
         });
 
       expect(res.status).toBe(201);

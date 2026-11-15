@@ -12,6 +12,7 @@ import { BranchesModule } from "./modules/branches/branches.module.js";
 import { UsersModule } from "./modules/users/users.module.js";
 import { RolesModule } from "./modules/roles/roles.module.js";
 import { AuditModule } from "./modules/audit/audit.module.js";
+import { CatalogModule } from "./modules/catalog/catalog.module.js";
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { AuditModule } from "./modules/audit/audit.module.js";
     UsersModule,
     RolesModule,
     AuditModule,
+    CatalogModule,
   ],
   controllers: [HealthController],
   providers: [

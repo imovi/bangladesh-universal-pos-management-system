@@ -123,3 +123,98 @@ export const UpdateRoleSchema = z.object({
 });
 
 export type UpdateRoleDto = z.infer<typeof UpdateRoleSchema>;
+
+// --- M2 Catalog Schemas ---
+
+export const CreateCategorySchema = z.object({
+  name: z.string().trim().min(2).max(100),
+  parentId: z.string().uuid().optional().nullable(),
+});
+export type CreateCategoryDto = z.infer<typeof CreateCategorySchema>;
+
+export const UpdateCategorySchema = CreateCategorySchema.partial();
+export type UpdateCategoryDto = z.infer<typeof UpdateCategorySchema>;
+
+export const CreateBrandSchema = z.object({
+  name: z.string().trim().min(2).max(100),
+});
+export type CreateBrandDto = z.infer<typeof CreateBrandSchema>;
+
+export const UpdateBrandSchema = CreateBrandSchema.partial();
+export type UpdateBrandDto = z.infer<typeof UpdateBrandSchema>;
+
+export const CreateCollectionSchema = z.object({
+  name: z.string().trim().min(2).max(100),
+});
+export type CreateCollectionDto = z.infer<typeof CreateCollectionSchema>;
+
+export const UpdateCollectionSchema = CreateCollectionSchema.partial();
+export type UpdateCollectionDto = z.infer<typeof UpdateCollectionSchema>;
+
+export const CreateTaxClassSchema = z.object({
+  name: z.string().trim().min(2).max(100),
+  rateBp: z.number().int().min(0).max(10000), // 0% to 100%
+  isDefault: z.boolean().optional(),
+});
+export type CreateTaxClassDto = z.infer<typeof CreateTaxClassSchema>;
+
+export const UpdateTaxClassSchema = CreateTaxClassSchema.partial();
+export type UpdateTaxClassDto = z.infer<typeof UpdateTaxClassSchema>;
+
+export const ProductOptionInputSchema = z.object({
+  name: z.string().trim().min(1).max(50),
+  values: z.array(z.string().trim().min(1).max(50)).min(1),
+});
+export type ProductOptionInputDto = z.infer<typeof ProductOptionInputSchema>;
+
+export const CreateProductSchema = z.object({
+  name: z.string().trim().min(2).max(150),
+  description: z.string().trim().max(1000).optional().nullable(),
+  categoryId: z.string().uuid().optional().nullable(),
+  brandId: z.string().uuid().optional().nullable(),
+  collectionId: z.string().uuid().optional().nullable(),
+  taxClassId: z.string().uuid().optional().nullable(),
+  sku: z.string().trim().min(2).max(50),
+  priceMinor: z.coerce.number().int().min(0),
+  costMinor: z.coerce.number().int().min(0).optional(),
+  reorderLevel: z.coerce.number().min(0).optional(),
+  trackingMode: z.enum(["none", "batch", "serial"]).default("none"),
+  customFields: z.record(z.unknown()).optional(),
+  options: z.array(ProductOptionInputSchema).max(3).optional(),
+});
+export type CreateProductDto = z.infer<typeof CreateProductSchema>;
+
+export const UpdateProductSchema = z.object({
+  name: z.string().trim().min(2).max(150).optional(),
+  description: z.string().trim().max(1000).optional().nullable(),
+  categoryId: z.string().uuid().optional().nullable(),
+  brandId: z.string().uuid().optional().nullable(),
+  collectionId: z.string().uuid().optional().nullable(),
+  taxClassId: z.string().uuid().optional().nullable(),
+  isActive: z.boolean().optional(),
+  customFields: z.record(z.unknown()).optional(),
+  options: z.array(ProductOptionInputSchema).max(3).optional(),
+});
+export type UpdateProductDto = z.infer<typeof UpdateProductSchema>;
+
+export const BulkPriceUpdateSchema = z.object({
+  variants: z
+    .array(
+      z.object({
+        variantId: z.string().uuid(),
+        priceMinor: z.coerce.number().int().min(0),
+      }),
+    )
+    .min(1),
+});
+export type BulkPriceUpdateDto = z.infer<typeof BulkPriceUpdateSchema>;
+
+export const CreateBarcodeSchema = z.object({
+  barcode: z
+    .string()
+    .trim()
+    .min(3)
+    .max(50)
+    .optional(),
+});
+export type CreateBarcodeDto = z.infer<typeof CreateBarcodeSchema>;

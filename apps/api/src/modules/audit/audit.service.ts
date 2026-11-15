@@ -17,7 +17,21 @@ export interface CreateAuditLogParams {
 export class AuditService {
   constructor(private readonly tenantContext: TenantContextService) {}
 
-  async log(params: CreateAuditLogParams, tx?: Prisma.TransactionClient) {
+  async log(
+    a: CreateAuditLogParams | Prisma.TransactionClient,
+    b?: Prisma.TransactionClient | CreateAuditLogParams,
+  ) {
+    let params: CreateAuditLogParams;
+    let tx: Prisma.TransactionClient | undefined;
+
+    if (a && "tenantId" in a) {
+      params = a as CreateAuditLogParams;
+      tx = b as Prisma.TransactionClient | undefined;
+    } else {
+      tx = a as Prisma.TransactionClient;
+      params = b as CreateAuditLogParams;
+    }
+
     const execute = (client: Prisma.TransactionClient) =>
       client.auditLog.create({
         data: {

@@ -1,0 +1,137 @@
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from "@nestjs/common";
+import { TenantContextService } from "../../common/database/tenant-context.service.js";
+import { AuditService } from "../audit/audit.service.js";
+import { CreateBarcodeDto } from "@universal-pos/shared";
+
+@Injectable()
+export class VariantsService {
+  constructor(
+    private readonly tenantContext: TenantContextService,
+    private readonly auditService: AuditService,
+  ) {}
+
+  /**
+   * Generates a 13-digit EAN-like internal barcode.
+   */
+  private generateInternalBarcode(): string {
+    const randomDigits = Math.floor(1000000000 + Math.random() * 9000000000).toString();
+    return `200${randomDigits}`;
+  }
+
+  /**
+   * Resolves a barcode or SKU to a variant in one indexed query.
+   */
+  async lookup(tenantId: string, code: string) {
+    if (!code || !code.trim()) {
+      throw new NotFoundException("Lookup code is required");
+    }
+    const cleanCode = code.trim();
+
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      // 1. Try SKU match
+      let variant = await tx.productVariant.findFirst({
+        where: { tenantId, sku: cleanCode, isActive: true },
+        include: {
+          product: true,
+          barcodes: true,
+          optionValues: { include: { optionValue: true } },
+        },
+      });
+
+      // 2. Try Barcode match if not found by SKU
+      if (!variant) {
+        const barcodeMatch = await tx.variantBarcode.findFirst({
+          where: { tenantId, barcode: cleanCode },
+          include: {
+            variant: {
+              include: {
+                product: true,
+                barcodes: true,
+                optionValues: { include: { optionValue: true } },
+              },
+            },
+          },
+        });
+
+        if (barcodeMatch && barcodeMatch.variant.isActive) {
+          variant = barcodeMatch.variant;
+        }
+      }
+
+      if (!variant) {
+        throw new NotFoundException(`No active variant found matching code '${cleanCode}'`);
+      }
+
+      return {
+        id: variant.id,
+        productId: variant.productId,
+        productName: variant.product.name,
+        sku: variant.sku,
+        priceMinor: variant.priceMinor,
+        costMinor: variant.costMinor,
+        reorderLevel: variant.reorderLevel,
+        barcodes: variant.barcodes.map((b: any) => b.barcode),
+        options: variant.optionValues.map((ov: any) => ({
+          optionId: ov.optionId,
+          value: ov.optionValue.value,
+        })),
+      };
+    });
+  }
+
+  /**
+   * Adds a barcode to a variant (or auto-generates if omitted).
+   */
+  async addBarcode(tenantId: string, variantId: string, dto: CreateBarcodeDto, userId?: string, ip?: string) {
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const variant = await tx.productVariant.findUnique({
+        where: { id: variantId, tenantId },
+      });
+      if (!variant) {
+        throw new NotFoundException(`Variant with ID ${variantId} not found`);
+      }
+
+      const barcodeValue = dto.barcode && dto.barcode.trim()
+        ? dto.barcode.trim()
+        : this.generateInternalBarcode();
+
+      // Check if barcode already exists in this tenant
+      const existing = await tx.variantBarcode.findUnique({
+        where: {
+          tenantId_barcode: {
+            tenantId,
+            barcode: barcodeValue,
+          },
+        },
+      });
+
+      if (existing) {
+        throw new ConflictException(`Barcode '${barcodeValue}' already assigned in this tenant`);
+      }
+
+      const created = await tx.variantBarcode.create({
+        data: {
+          tenantId,
+          variantId,
+          barcode: barcodeValue,
+        },
+      });
+
+      await this.auditService.log(tx, {
+        tenantId,
+        actorUserId: userId,
+        action: "variant.barcode_add",
+        entityType: "VariantBarcode",
+        entityId: created.id,
+        after: { variantId, barcode: barcodeValue },
+        ip,
+      });
+
+      return created;
+    });
+  }
+}

@@ -7,6 +7,9 @@ node_modules/
 dist/
 build/
 coverage/
+.next/
+**/.next/
+**/out/
 
 # Environment files
 .env

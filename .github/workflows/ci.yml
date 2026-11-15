@@ -76,6 +76,9 @@ jobs:
       - name: Build packages
         run: npm run build
 
+      - name: Lint all workspaces
+        run: npm run lint
+
       - name: Run tests with coverage as non-superuser pos_runtime
         run: npm run test:cov
         env:

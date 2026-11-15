@@ -80,6 +80,22 @@ Follow these exact steps in order to start services, bootstrap unprivileged data
    npm run seed:demo
    ```
 
+10. **Running API and Admin Dashboard Together Locally:**
+    - Seed the demo tenant data:
+      ```bash
+      npm run seed:demo
+      ```
+      This provisions tenant `artisan-apparel` with owner `owner@artisan.com` (password: `Password123!`), Gulshan Flagship store, categories, products, inventory, shifts, and historical sales.
+    - Start the backend REST API (port 4000):
+      ```bash
+      npm run start:dev --workspace=@universal-pos/api
+      ```
+    - In a separate terminal, start the Next.js Admin Dashboard (port 3000):
+      ```bash
+      npm run dev --workspace=@universal-pos/admin
+      ```
+    - Open `http://localhost:3000` in your browser.
+
 ## Database Roles Architecture & Security
 The database uses a three-tier role security model:
 1. **Migration / Owner User (`pos_admin`)**: Used strictly by Prisma CLI for executing migrations (`MIGRATION_DATABASE_URL` / `directUrl`). Table owner with full schema rights. Never used at runtime.

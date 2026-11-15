@@ -16,6 +16,7 @@ import { CatalogModule } from "./modules/catalog/catalog.module.js";
 import { InventoryModule } from "./modules/inventory/inventory.module.js";
 import { PurchasingModule } from "./modules/purchasing/purchasing.module.js";
 import { ShiftsModule } from "./modules/shifts/shifts.module.js";
+import { SalesModule } from "./modules/sales/sales.module.js";
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { ShiftsModule } from "./modules/shifts/shifts.module.js";
     InventoryModule,
     PurchasingModule,
     ShiftsModule,
+    SalesModule,
   ],
   controllers: [HealthController],
   providers: [

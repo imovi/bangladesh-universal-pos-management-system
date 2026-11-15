@@ -359,4 +359,5 @@ export const CashMovementSchema = z.object({
 });
 export type CashMovementDto = z.infer<typeof CashMovementSchema>;
 
-
+// --- M6 Sales Engine Schemas ---
+export * from "./schemas/sales.schemas.js";

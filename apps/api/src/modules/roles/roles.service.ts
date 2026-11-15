@@ -66,6 +66,7 @@ export class RolesService {
           tenantId,
           name: dto.name,
           isSystem: false,
+          maxDiscountPercent: dto.maxDiscountPercent ?? null,
         },
       });
 
@@ -127,10 +128,19 @@ export class RolesService {
         if (existing) {
           throw new ConflictException(`Role '${dto.name}' already exists`);
         }
+      }
 
+      const updateData: { name?: string; maxDiscountPercent?: number | null } = {};
+      if (dto.name && dto.name !== role.name) {
+        updateData.name = dto.name;
+      }
+      if (dto.maxDiscountPercent !== undefined) {
+        updateData.maxDiscountPercent = dto.maxDiscountPercent;
+      }
+      if (Object.keys(updateData).length > 0) {
         await tx.role.update({
           where: { id, tenantId },
-          data: { name: dto.name },
+          data: updateData,
         });
       }
 

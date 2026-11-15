@@ -9,6 +9,7 @@ import {
   TenantSignupDto,
   TenantSignupSchema,
   SYSTEM_ROLE_PERMISSIONS,
+  DEFAULT_ROLE_MAX_DISCOUNT,
   SystemRole,
 } from "@universal-pos/shared";
 
@@ -51,6 +52,7 @@ export class TenantsService {
       name: roleName,
       isSystem: true,
       permissions,
+      maxDiscountPercent: DEFAULT_ROLE_MAX_DISCOUNT[roleName] ?? null,
     }));
 
     // Atomically provision entire tenant via SystemDbService transaction

@@ -13,6 +13,7 @@
     "test": "npm run test --workspaces --if-present",
     "test:cov": "npm run test:cov --workspaces --if-present",
     "format": "prettier --write \"**/*.{ts,js,json,md}\"",
+    "seed:demo": "tsx scripts/seed-demo.ts",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down"
   },

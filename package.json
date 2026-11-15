@@ -1,0 +1,23 @@
+{
+  "name": "universal-pos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-tenant, offline-first universal POS platform for Bangladesh",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:cov": "npm run test:cov --workspaces --if-present",
+    "format": "prettier --write \"**/*.{ts,js,json,md}\"",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "prettier": "^3.5.0",
+    "typescript": "^5.8.0"
+  }
+}

@@ -310,3 +310,53 @@ export const CreateSupplierPaymentSchema = z.object({
 });
 export type CreateSupplierPaymentDto = z.infer<typeof CreateSupplierPaymentSchema>;
 
+// --- M5 Customers, Registers & Shifts Schemas ---
+
+export const CreateCustomerSchema = z.object({
+  name: z.string().trim().min(1).max(150),
+  phone: z.string().trim().min(6).max(30),
+  email: z.string().email().optional().or(z.literal("")),
+  address: z.string().trim().max(255).optional(),
+  notes: z.string().trim().max(500).optional(),
+});
+export type CreateCustomerDto = z.infer<typeof CreateCustomerSchema>;
+
+export const UpdateCustomerSchema = CreateCustomerSchema.partial();
+export type UpdateCustomerDto = z.infer<typeof UpdateCustomerSchema>;
+
+export const CreateRegisterSchema = z.object({
+  branchId: z.string().uuid(),
+  name: z.string().trim().min(1).max(100),
+  code: z.string().trim().min(1).max(50),
+});
+export type CreateRegisterDto = z.infer<typeof CreateRegisterSchema>;
+
+export const UpdateRegisterSchema = z.object({
+  name: z.string().trim().min(1).max(100).optional(),
+  code: z.string().trim().min(1).max(50).optional(),
+  isActive: z.boolean().optional(),
+});
+export type UpdateRegisterDto = z.infer<typeof UpdateRegisterSchema>;
+
+export const OpenShiftSchema = z.object({
+  registerId: z.string().uuid(),
+  branchId: z.string().uuid(),
+  openingCashMinor: z.coerce.number().int().min(0),
+  notes: z.string().trim().max(500).optional(),
+});
+export type OpenShiftDto = z.infer<typeof OpenShiftSchema>;
+
+export const CloseShiftSchema = z.object({
+  closingCashMinor: z.coerce.number().int().min(0),
+  notes: z.string().trim().max(500).optional(),
+});
+export type CloseShiftDto = z.infer<typeof CloseShiftSchema>;
+
+export const CashMovementSchema = z.object({
+  type: z.enum(["cash_in", "cash_out"]),
+  amountMinor: z.coerce.number().int().positive(),
+  reason: z.string().trim().min(2).max(255),
+});
+export type CashMovementDto = z.infer<typeof CashMovementSchema>;
+
+

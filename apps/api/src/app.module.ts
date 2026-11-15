@@ -15,6 +15,7 @@ import { AuditModule } from "./modules/audit/audit.module.js";
 import { CatalogModule } from "./modules/catalog/catalog.module.js";
 import { InventoryModule } from "./modules/inventory/inventory.module.js";
 import { PurchasingModule } from "./modules/purchasing/purchasing.module.js";
+import { ShiftsModule } from "./modules/shifts/shifts.module.js";
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { PurchasingModule } from "./modules/purchasing/purchasing.module.js";
     CatalogModule,
     InventoryModule,
     PurchasingModule,
+    ShiftsModule,
   ],
   controllers: [HealthController],
   providers: [

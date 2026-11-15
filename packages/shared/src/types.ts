@@ -38,6 +38,9 @@ export interface ApiError {
   code: string;
   message: string;
   details?: ApiErrorDetail[];
+  limitBp?: number;
+  attemptedBp?: number;
+  [key: string]: unknown;
 }
 
 export interface ApiEnvelope<T = unknown> {

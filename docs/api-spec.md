@@ -106,6 +106,11 @@ All responses strictly follow the standardized envelope:
 - `POST /api/v1/sales`:
   - Enforces open shift requirement.
   - Recomputes totals using pure math library; rejects discrepancies with HTTP 422.
+  - Validates user discount limits:
+    - Measures both individual line discounts and overall effective sale discount `(totalDiscountMinor / grossMinor)` in basis points (using integer ceiling math).
+    - Prevents stacking line and bill discounts over user's role limit.
+    - A price override is NOT a discount for this check (it is governed by `sale.price_override`), and the gross for discount calculation is based on the unit price actually charged.
+    - Exceeding limit without `sale.discount_override` returns HTTP 403 with `{ code: "DISCOUNT_LIMIT_EXCEEDED" | "LINE_DISCOUNT_LIMIT_EXCEEDED", limitBp, attemptedBp }`.
   - Generates sequential gap-free invoice number `{REGISTER}-{YYMMDD}-{NNNN}` via PostgreSQL `FOR UPDATE`.
   - Atomically deducts inventory stock ledger (`type: 'sale'`).
   - Increments customer spent and visit counts.

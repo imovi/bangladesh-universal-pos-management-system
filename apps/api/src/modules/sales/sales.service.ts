@@ -192,9 +192,7 @@ export class SalesService {
         changeMinor: meta.change, notes: dto.notes,
         items: { create: this.buildSaleItemsData(tenantId, meta.calc.lines, meta.costMap, meta.originalPrices) },
         payments: {
-          create: dto.payments.map((p) => ({
-            id: uuidv7(), tenantId, paymentMethod: p.paymentMethod, amountMinor: BigInt(p.amountMinor), reference: p.reference,
-          })),
+          create: dto.payments.map((p) => ({ id: uuidv7(), tenantId, paymentMethod: p.paymentMethod, amountMinor: BigInt(p.amountMinor), reference: p.reference })),
         },
       },
       include: { items: true, payments: true },
@@ -202,10 +200,7 @@ export class SalesService {
   }
 
   private async loadShiftAndVariants(tx: Prisma.TransactionClient, tenantId: string, dto: CreateSaleDto) {
-    const shift = await tx.shift.findUnique({
-      where: { id: dto.shiftId },
-      include: { register: true },
-    });
+    const shift = await tx.shift.findUnique({ where: { id: dto.shiftId }, include: { register: true } });
     if (!shift || shift.tenantId !== tenantId || shift.status !== "open") {
       throw new BadRequestException("Active open shift required for sale");
     }
@@ -294,8 +289,11 @@ export class SalesService {
         const { shift, defaultTaxRateBp, variants } = await this.loadShiftAndVariants(tx, tenantId, dto);
         const variantMap = new Map(variants.map((v) => [v.id, v]));
         const { lineInputs, originalPrices } = this.resolveItemPricingAndTaxes(dto.items, variantMap, defaultTaxRateBp, user);
-        const ov = await enforceDiscountAndOverrideLimits(tx, userId, tenantId, dto, lineInputs, user);
         const { calculated, paidMinor, changeMinor } = this.computeAndValidateTotals(dto, lineInputs, pricesIncludeTax);
+        const ov = await enforceDiscountAndOverrideLimits(
+          tx, userId, tenantId, dto, lineInputs, user,
+          { grossMinor: calculated.grossMinor, totalDiscountMinor: calculated.totalDiscountMinor },
+        );
 
         const saleId = dto.id || uuidv7();
         const inv = await this.generateInvoiceNumber(tenantId, shift.registerId, tx, timeZone);

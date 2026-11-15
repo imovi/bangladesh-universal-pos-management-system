@@ -25,6 +25,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     let code = "INTERNAL_SERVER_ERROR";
     let message = "An unexpected error occurred";
     let details: Array<{ field?: string; issue: string }> | undefined;
+    let extraFields: Record<string, unknown> = {};
 
     if (exception instanceof ZodError) {
       status = HttpStatus.BAD_REQUEST;
@@ -50,6 +51,15 @@ export class HttpExceptionFilter implements ExceptionFilter {
           if (Array.isArray(errorObj.details)) {
             details = errorObj.details;
           }
+          const {
+            statusCode: _s,
+            message: _m,
+            error: _e,
+            code: _c,
+            details: _d,
+            ...rest
+          } = errorObj;
+          extraFields = rest;
         }
       }
     } else if (exception instanceof Error) {
@@ -71,6 +81,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         code,
         message,
         ...(details ? { details } : {}),
+        ...extraFields,
       },
       meta: {
         timestamp: new Date().toISOString(),

@@ -24,31 +24,60 @@ Universal, multi-tenant, offline-first Point-of-Sale (POS) and inventory platfor
 └── .github/workflows/ci.yml # Automated linting, RLS isolation & coverage testing
 ```
 
-## Quick Start
+## Running locally
 
-1. **Clone repository:**
+Follow these exact steps in order to start services, bootstrap unprivileged database roles, deploy migrations to both databases, and run the test suite:
 
-   ```bash
-   git clone https://github.com/imovi/bangladesh-universal-pos-management-system.git
-   cd bangladesh-universal-pos-management-system
-   ```
-
-2. **Start Services:**
-
+1. **Start Docker containers (PostgreSQL 17 & Redis 7):**
    ```bash
    docker compose up -d
    ```
 
-3. **Install Dependencies & Build:**
-
+2. **Install dependencies:**
    ```bash
-   npm install
+   npm ci
+   ```
+
+3. **Bootstrap PostgreSQL roles & test database:**
+   ```bash
+   # On Linux/macOS/Git Bash:
+   bash scripts/bootstrap-db.sh
+
+   # Or via Docker if the container is already running:
+   docker exec -i universal_pos_postgres psql -U pos_admin -d universal_pos -c "CREATE DATABASE universal_pos_test;"
+   docker exec -i universal_pos_postgres psql -U pos_admin -d universal_pos -f docker/init-db.sh
+   ```
+
+4. **Generate Prisma Client:**
+   ```bash
+   npm run prisma:generate --workspace=@universal-pos/api
+   ```
+
+5. **Run Prisma migrations as owner on development DB (`universal_pos`):**
+   ```bash
+   MIGRATION_DATABASE_URL="postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public" \
+   npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
+   ```
+
+6. **Run Prisma migrations as owner on test DB (`universal_pos_test`):**
+   ```bash
+   MIGRATION_DATABASE_URL="postgresql://pos_admin:pos_secret@localhost:5432/universal_pos_test?schema=public" \
+   npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
+   ```
+
+7. **Build packages:**
+   ```bash
    npm run build
    ```
 
-4. **Run Migrations & Tests:**
+8. **Run tests with coverage as non-superuser `pos_runtime`:**
    ```bash
-   npm test
+   npm run test:cov
+   ```
+
+9. **(Optional) Seed fashion outlet demo data:**
+   ```bash
+   npm run seed:demo
    ```
 
 ## Database Roles Architecture & Security

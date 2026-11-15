@@ -36,15 +36,20 @@ export class HttpExceptionFilter implements ExceptionFilter {
       }));
     } else if (exception instanceof HttpException) {
       status = exception.getStatus();
-      const res = exception.getResponse();
-      if (typeof res === "string") {
-        message = res;
-      } else if (typeof res === "object" && res !== null) {
-        const errorObj = res as Record<string, unknown>;
-        message = (errorObj.message as string) || exception.message;
-        code = (errorObj.code as string) || HttpStatus[status] || code;
-        if (Array.isArray(errorObj.details)) {
-          details = errorObj.details;
+      if (status === HttpStatus.TOO_MANY_REQUESTS) {
+        code = "TOO_MANY_REQUESTS";
+        message = "Too many requests. Please try again later.";
+      } else {
+        const res = exception.getResponse();
+        if (typeof res === "string") {
+          message = res;
+        } else if (typeof res === "object" && res !== null) {
+          const errorObj = res as Record<string, unknown>;
+          message = (errorObj.message as string) || exception.message;
+          code = (errorObj.code as string) || HttpStatus[status] || code;
+          if (Array.isArray(errorObj.details)) {
+            details = errorObj.details;
+          }
         }
       }
     } else if (exception instanceof Error) {

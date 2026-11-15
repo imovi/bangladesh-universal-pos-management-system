@@ -1,4 +1,6 @@
 import { Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
+import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { ConfigService } from "./common/config/config.service.js";
 import { PrismaService } from "./common/database/prisma.service.js";
 import { TenantContextService } from "./common/database/tenant-context.service.js";
@@ -13,6 +15,12 @@ import { AuditModule } from "./modules/audit/audit.module.js";
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot([
+      {
+        ttl: (Number(process.env.RATE_LIMIT_TTL) || 60) * 1000,
+        limit: Number(process.env.RATE_LIMIT_LIMIT) || 100,
+      },
+    ]),
     TenantsModule,
     AuthModule,
     BranchesModule,
@@ -26,6 +34,10 @@ import { AuditModule } from "./modules/audit/audit.module.js";
     PrismaService,
     TenantContextService,
     SystemDbService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
   exports: [
     ConfigService,

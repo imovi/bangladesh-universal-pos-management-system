@@ -58,7 +58,7 @@ export class TenantsService {
       name: roleName,
       isSystem: true,
       permissions,
-      maxDiscountPercent: DEFAULT_ROLE_MAX_DISCOUNT[roleName] ?? null,
+      maxDiscountPercent: DEFAULT_ROLE_MAX_DISCOUNT[roleName] ?? 0,
     }));
 
     // Atomically provision entire tenant via SystemDbService transaction

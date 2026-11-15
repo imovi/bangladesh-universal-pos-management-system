@@ -16,7 +16,7 @@ export interface CreateTenantSignupData {
     name: string;
     isSystem: boolean;
     permissions: string[];
-    maxDiscountPercent?: number | null;
+    maxDiscountPercent?: number;
   }>;
   owner: {
     name: string;
@@ -147,7 +147,7 @@ export class SystemDbService {
             tenantId: tenant.id,
             name: roleDef.name,
             isSystem: roleDef.isSystem,
-            maxDiscountPercent: roleDef.maxDiscountPercent ?? null,
+            maxDiscountPercent: roleDef.maxDiscountPercent ?? 0,
           },
         });
 

@@ -107,7 +107,7 @@ model Role {
   tenantId           String   @map("tenant_id") @db.Uuid
   name               String
   isSystem           Boolean  @default(false) @map("is_system")
-  maxDiscountPercent Int?     @map("max_discount_percent")
+  maxDiscountPercent Int      @default(0) @map("max_discount_percent")
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

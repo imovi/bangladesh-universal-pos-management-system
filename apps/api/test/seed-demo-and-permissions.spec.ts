@@ -62,7 +62,7 @@ describe("M8: Permissions, Seed & Final Verification Integration Tests", () => {
     const cashier = roles.find((r: any) => r.name === "Cashier");
     const keeper = roles.find((r: any) => r.name === "Store Keeper");
 
-    expect(owner.maxDiscountPercent).toBeNull();
+    expect(owner.maxDiscountPercent).toBe(100);
     expect(manager.maxDiscountPercent).toBe(20);
     expect(cashier.maxDiscountPercent).toBe(5);
     expect(keeper.maxDiscountPercent).toBe(0);

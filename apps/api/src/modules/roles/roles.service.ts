@@ -66,7 +66,7 @@ export class RolesService {
           tenantId,
           name: dto.name,
           isSystem: false,
-          maxDiscountPercent: dto.maxDiscountPercent ?? null,
+          maxDiscountPercent: dto.maxDiscountPercent ?? 0,
         },
       });
 
@@ -130,7 +130,7 @@ export class RolesService {
         }
       }
 
-      const updateData: { name?: string; maxDiscountPercent?: number | null } = {};
+      const updateData: { name?: string; maxDiscountPercent?: number } = {};
       if (dto.name && dto.name !== role.name) {
         updateData.name = dto.name;
       }

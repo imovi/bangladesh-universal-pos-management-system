@@ -20,7 +20,6 @@ export async function resolveUserMaxDiscountBp(
     where: { userId, tenantId },
     include: { role: true },
   });
-  if (userRoles.some((ur: any) => ur.role.maxDiscountPercent === null)) return null;
   const maxPercent = userRoles.reduce(
     (max: number, ur: any) => Math.max(max, ur.role.maxDiscountPercent ?? 0),
     0,

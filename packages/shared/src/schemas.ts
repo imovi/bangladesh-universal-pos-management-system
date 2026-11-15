@@ -113,7 +113,7 @@ export const CreateRoleSchema = z.object({
   permissionKeys: z
     .array(z.string())
     .min(1, "At least one permission required"),
-  maxDiscountPercent: z.coerce.number().int().min(0).max(100).optional().nullable(),
+  maxDiscountPercent: z.coerce.number().int().min(0).max(100).default(0),
 });
 
 export type CreateRoleDto = z.infer<typeof CreateRoleSchema>;
@@ -121,7 +121,7 @@ export type CreateRoleDto = z.infer<typeof CreateRoleSchema>;
 export const UpdateRoleSchema = z.object({
   name: z.string().trim().min(2).max(50).optional(),
   permissionKeys: z.array(z.string()).min(1).optional(),
-  maxDiscountPercent: z.coerce.number().int().min(0).max(100).optional().nullable(),
+  maxDiscountPercent: z.coerce.number().int().min(0).max(100).optional(),
 });
 
 export type UpdateRoleDto = z.infer<typeof UpdateRoleSchema>;

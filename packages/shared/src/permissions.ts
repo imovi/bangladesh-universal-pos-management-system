@@ -119,8 +119,8 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
   ],
 };
 
-export const DEFAULT_ROLE_MAX_DISCOUNT: Record<SystemRole, number | null> = {
-  [SYSTEM_ROLES.OWNER]: null,
+export const DEFAULT_ROLE_MAX_DISCOUNT: Record<SystemRole, number> = {
+  [SYSTEM_ROLES.OWNER]: 100,
   [SYSTEM_ROLES.MANAGER]: 20,
   [SYSTEM_ROLES.CASHIER]: 5,
   [SYSTEM_ROLES.STORE_KEEPER]: 0,

@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { TenantContextService } from "../../common/database/tenant-context.service.js";
-import { calculateShiftCashTotals } from "@universal-pos/shared";
+import { SystemDbService } from "../../common/database/system-db.service.js";
+import { calculateShiftCashTotals, parseDateFilterRange } from "@universal-pos/shared";
 
 export interface ReportDateFilter {
   branchId?: string;
@@ -11,23 +12,34 @@ export interface ReportDateFilter {
 
 @Injectable()
 export class ReportsService {
-  constructor(private readonly tenantContext: TenantContextService) {}
+  constructor(
+    private readonly tenantContext: TenantContextService,
+    private readonly systemDb: SystemDbService,
+  ) {}
 
-  private buildDateFilter(filter: ReportDateFilter): Prisma.SaleWhereInput {
+  private async getTimeZone(tenantId: string): Promise<string> {
+    const tenant = await this.systemDb.findTenantById(tenantId);
+    const settings = (tenant?.settings as Record<string, unknown>) || {};
+    return (settings.timezone as string) || "Asia/Dhaka";
+  }
+
+  private buildDateFilter(filter: ReportDateFilter, timeZone = "Asia/Dhaka"): Prisma.SaleWhereInput {
     const where: Prisma.SaleWhereInput = { status: "completed" };
     if (filter.branchId) where.branchId = filter.branchId;
     if (filter.startDate || filter.endDate) {
+      const { gte, lte } = parseDateFilterRange(filter.startDate, filter.endDate, timeZone);
       where.createdAt = {};
-      if (filter.startDate) where.createdAt.gte = new Date(filter.startDate);
-      if (filter.endDate) where.createdAt.lte = new Date(filter.endDate);
+      if (gte) where.createdAt.gte = gte;
+      if (lte) where.createdAt.lte = lte;
     }
     return where;
   }
 
   async getSalesSummary(tenantId: string, filter: ReportDateFilter) {
+    const tz = await this.getTimeZone(tenantId);
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const sales = await tx.sale.findMany({
-        where: { tenantId, ...this.buildDateFilter(filter) },
+        where: { tenantId, ...this.buildDateFilter(filter, tz) },
         include: { payments: true },
       });
 
@@ -59,9 +71,10 @@ export class ReportsService {
   }
 
   async getSalesByVariant(tenantId: string, filter: ReportDateFilter) {
+    const tz = await this.getTimeZone(tenantId);
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const items = await tx.saleItem.findMany({
-        where: { tenantId, sale: { tenantId, ...this.buildDateFilter(filter) } },
+        where: { tenantId, sale: { tenantId, ...this.buildDateFilter(filter, tz) } },
         include: { variant: { include: { product: true } } },
       });
 
@@ -84,9 +97,10 @@ export class ReportsService {
   }
 
   async getSalesByCategory(tenantId: string, filter: ReportDateFilter) {
+    const tz = await this.getTimeZone(tenantId);
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const items = await tx.saleItem.findMany({
-        where: { tenantId, sale: { tenantId, ...this.buildDateFilter(filter) } },
+        where: { tenantId, sale: { tenantId, ...this.buildDateFilter(filter, tz) } },
         include: { variant: { include: { product: { include: { category: true } } } } },
       });
 
@@ -105,9 +119,10 @@ export class ReportsService {
   }
 
   async getSalesByBrand(tenantId: string, filter: ReportDateFilter) {
+    const tz = await this.getTimeZone(tenantId);
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const items = await tx.saleItem.findMany({
-        where: { tenantId, sale: { tenantId, ...this.buildDateFilter(filter) } },
+        where: { tenantId, sale: { tenantId, ...this.buildDateFilter(filter, tz) } },
         include: { variant: { include: { product: { include: { brand: true } } } } },
       });
 
@@ -126,9 +141,10 @@ export class ReportsService {
   }
 
   async getSalesByCollection(tenantId: string, filter: ReportDateFilter) {
+    const tz = await this.getTimeZone(tenantId);
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const items = await tx.saleItem.findMany({
-        where: { tenantId, sale: { tenantId, ...this.buildDateFilter(filter) } },
+        where: { tenantId, sale: { tenantId, ...this.buildDateFilter(filter, tz) } },
         include: { variant: { include: { product: { include: { collection: true } } } } },
       });
 
@@ -180,9 +196,10 @@ export class ReportsService {
   }
 
   async getProfitReport(tenantId: string, filter: ReportDateFilter) {
+    const tz = await this.getTimeZone(tenantId);
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const items = await tx.saleItem.findMany({
-        where: { tenantId, sale: { tenantId, ...this.buildDateFilter(filter) } },
+        where: { tenantId, sale: { tenantId, ...this.buildDateFilter(filter, tz) } },
       });
 
       let revenueMinor = 0n;

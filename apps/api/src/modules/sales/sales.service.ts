@@ -8,7 +8,7 @@ import { TenantContextService } from "../../common/database/tenant-context.servi
 import { SystemDbService } from "../../common/database/system-db.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { InventoryService } from "../inventory/inventory.service.js";
-import { CreateSaleDto, VoidSaleDto, calculateSaleTotals } from "@universal-pos/shared";
+import { CreateSaleDto, VoidSaleDto, calculateSaleTotals, formatDateKey } from "@universal-pos/shared";
 import { validateDiscountsNonNegative, enforceDiscountAndOverrideLimits } from "./sales-discount.helper.js";
 
 @Injectable()
@@ -21,17 +21,11 @@ export class SalesService {
   ) {}
 
   private async generateInvoiceNumber(
-    tenantId: string,
-    registerId: string,
-    tx: Prisma.TransactionClient,
+    tenantId: string, registerId: string, tx: Prisma.TransactionClient, timeZone = "Asia/Dhaka",
   ): Promise<string> {
     const reg = await tx.register.findUnique({ where: { id: registerId } });
     const regCode = reg?.code || "REG";
-    const now = new Date();
-    const yy = String(now.getFullYear()).slice(-2);
-    const mm = String(now.getMonth() + 1).padStart(2, "0");
-    const dd = String(now.getDate()).padStart(2, "0");
-    const dateKey = `${yy}${mm}${dd}`;
+    const dateKey = formatDateKey(new Date(), timeZone);
 
     await tx.$executeRaw`
       INSERT INTO receipt_counters (id, tenant_id, register_id, date_key, last_seq, updated_at)
@@ -251,6 +245,7 @@ export class SalesService {
     const tenant = await this.systemDb.findTenantById(tenantId);
     const tenantSettings = (tenant?.settings as Record<string, unknown>) || {};
     const pricesIncludeTax = (tenantSettings.prices_include_tax as boolean) ?? true;
+    const timeZone = (tenantSettings.timezone as string) || "Asia/Dhaka";
 
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const duplicate = await this.checkIdempotency(tx, dto.id, tenantId);
@@ -267,7 +262,7 @@ export class SalesService {
       const { calculated, paidMinor, changeMinor } = this.computeAndValidateTotals(dto, lineInputs, pricesIncludeTax);
 
       const saleId = dto.id || uuidv7();
-      const invoiceNumber = await this.generateInvoiceNumber(tenantId, shift.registerId, tx);
+      const invoiceNumber = await this.generateInvoiceNumber(tenantId, shift.registerId, tx, timeZone);
       const costMap = new Map(variants.map((v) => [v.id, v.costMinor]));
 
       const sale = await this.executeSaleInsert(tx, tenantId, dto, {

@@ -270,11 +270,15 @@ export class AuthService {
   }
 
   async getMe(userId: string, tenantId: string) {
+    const tenant = await this.systemDb.findTenantById(tenantId);
+    if (!tenant) {
+      throw new UnauthorizedException("Tenant not found");
+    }
+
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const user = await tx.user.findFirst({
         where: { id: userId, tenantId },
         include: {
-          tenant: true,
           userRoles: {
             include: {
               role: {
@@ -316,8 +320,8 @@ export class AuthService {
         email: user.email,
         phone: user.phone,
         tenantId: user.tenantId,
-        tenantName: user.tenant.name,
-        tenantSlug: user.tenant.slug,
+        tenantName: tenant.name,
+        tenantSlug: tenant.slug,
         roles: roleNames,
         permissions: Array.from(permissionSet),
         branches: user.userBranches.map((ub) => ({

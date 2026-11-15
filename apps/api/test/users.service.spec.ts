@@ -2,12 +2,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { UsersService } from "../src/modules/users/users.service.js";
 import { ConflictException, NotFoundException } from "@nestjs/common";
 
-describe("UsersService", () => {
+describe("UsersService Unit Tests", () => {
   let service: UsersService;
   let mockPrisma: any;
   let mockAudit: any;
+  let mockTenantContext: any;
 
-  const tenantId = "tenant-uuid-1";
+  const tenantId = "0193309a-6b21-7000-8000-000000000001";
 
   beforeEach(() => {
     mockPrisma = {
@@ -27,12 +28,14 @@ describe("UsersService", () => {
         createMany: vi.fn(),
         deleteMany: vi.fn(),
       },
-      $transaction: vi
-        .fn()
-        .mockImplementation((fn: (tx: any) => any) => fn(mockPrisma)),
     };
     mockAudit = { log: vi.fn().mockResolvedValue(true) };
-    service = new UsersService(mockPrisma, mockAudit);
+    mockTenantContext = {
+      runWithTenant: vi
+        .fn()
+        .mockImplementation((_id, fn) => fn(mockPrisma)),
+    };
+    service = new UsersService(mockTenantContext, mockAudit);
   });
 
   it("lists users with pagination", async () => {
@@ -42,6 +45,10 @@ describe("UsersService", () => {
     const res = await service.findMany(tenantId, 1, 10);
     expect(res.items).toHaveLength(1);
     expect(res.pagination.total).toBe(1);
+    expect(mockTenantContext.runWithTenant).toHaveBeenCalledWith(
+      tenantId,
+      expect.any(Function),
+    );
   });
 
   it("throws NotFoundException when user not found", async () => {

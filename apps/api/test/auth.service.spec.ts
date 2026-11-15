@@ -6,20 +6,35 @@ import argon2 from "argon2";
 describe("AuthService Unit Tests", () => {
   let authService: AuthService;
   let mockPrisma: any;
+  let mockSystemDb: any;
+  let mockTenantContext: any;
   let mockJwtService: any;
   let mockConfigService: any;
-  let mockAuditService: any;
 
   beforeEach(() => {
     mockPrisma = {
-      tenant: { findUnique: vi.fn() },
       user: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
       refreshToken: {
         create: vi.fn(),
-        findFirst: vi.fn(),
         update: vi.fn(),
         updateMany: vi.fn(),
       },
+      auditLog: {
+        create: vi.fn(),
+      },
+    };
+
+    mockSystemDb = {
+      findTenantBySlug: vi.fn(),
+      findTenantById: vi.fn(),
+      findRefreshTokenByHash: vi.fn(),
+      revokeAllUserRefreshTokens: vi.fn(),
+    };
+
+    mockTenantContext = {
+      runWithTenant: vi
+        .fn()
+        .mockImplementation((_id, fn) => fn(mockPrisma)),
     };
 
     mockJwtService = {
@@ -34,20 +49,16 @@ describe("AuthService Unit Tests", () => {
       }),
     };
 
-    mockAuditService = {
-      log: vi.fn().mockResolvedValue(true),
-    };
-
     authService = new AuthService(
-      mockPrisma,
+      mockSystemDb,
+      mockTenantContext,
       mockJwtService,
       mockConfigService,
-      mockAuditService,
     );
   });
 
   it("fails login if tenant does not exist or is inactive", async () => {
-    mockPrisma.tenant.findUnique.mockResolvedValue(null);
+    mockSystemDb.findTenantBySlug.mockResolvedValue(null);
 
     await expect(
       authService.login({
@@ -59,8 +70,8 @@ describe("AuthService Unit Tests", () => {
   });
 
   it("fails login on incorrect password", async () => {
-    mockPrisma.tenant.findUnique.mockResolvedValue({
-      id: "tenant-1",
+    mockSystemDb.findTenantBySlug.mockResolvedValue({
+      id: "0193309a-6b21-7000-8000-000000000001",
       slug: "my-store",
       status: "active",
     });
@@ -68,7 +79,7 @@ describe("AuthService Unit Tests", () => {
     const realHash = await argon2.hash("CorrectPassword123!");
     mockPrisma.user.findUnique.mockResolvedValue({
       id: "user-1",
-      tenantId: "tenant-1",
+      tenantId: "0193309a-6b21-7000-8000-000000000001",
       email: "user@test.com",
       passwordHash: realHash,
       isActive: true,
@@ -85,8 +96,9 @@ describe("AuthService Unit Tests", () => {
   });
 
   it("successfully logs in with valid credentials and issues tokens", async () => {
-    mockPrisma.tenant.findUnique.mockResolvedValue({
-      id: "tenant-1",
+    const tenantId = "0193309a-6b21-7000-8000-000000000001";
+    mockSystemDb.findTenantBySlug.mockResolvedValue({
+      id: tenantId,
       slug: "my-store",
       status: "active",
     });
@@ -94,7 +106,7 @@ describe("AuthService Unit Tests", () => {
     const realHash = await argon2.hash("ValidPassword123!");
     mockPrisma.user.findUnique.mockResolvedValue({
       id: "user-1",
-      tenantId: "tenant-1",
+      tenantId,
       name: "Habib",
       email: "user@test.com",
       passwordHash: realHash,
@@ -123,10 +135,10 @@ describe("AuthService Unit Tests", () => {
   });
 
   it("revokes all user tokens if a revoked token is reused (Compromised Token Reuse Detection)", async () => {
-    mockPrisma.refreshToken.findFirst.mockResolvedValue({
+    mockSystemDb.findRefreshTokenByHash.mockResolvedValue({
       id: "token-old",
       userId: "user-1",
-      tenantId: "tenant-1",
+      tenantId: "0193309a-6b21-7000-8000-000000000001",
       revokedAt: new Date(Date.now() - 10000), // already revoked!
       expiresAt: new Date(Date.now() + 100000),
       user: {
@@ -140,22 +152,20 @@ describe("AuthService Unit Tests", () => {
       authService.refresh({ refreshToken: "rt_compromised_token" }),
     ).rejects.toThrow(/Revoked refresh token reused/);
 
-    expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith({
-      where: { userId: "user-1" },
-      data: { revokedAt: expect.any(Date) },
-    });
+    expect(mockSystemDb.revokeAllUserRefreshTokens).toHaveBeenCalledWith("user-1");
   });
 
   it("rotates refresh token and returns new token pair", async () => {
-    mockPrisma.refreshToken.findFirst.mockResolvedValue({
+    const tenantId = "0193309a-6b21-7000-8000-000000000001";
+    mockSystemDb.findRefreshTokenByHash.mockResolvedValue({
       id: "token-valid-id",
       userId: "user-1",
-      tenantId: "tenant-1",
+      tenantId,
       revokedAt: null,
       expiresAt: new Date(Date.now() + 1000000),
       user: {
         id: "user-1",
-        tenantId: "tenant-1",
+        tenantId,
         email: "user@test.com",
         isActive: true,
         tenant: { status: "active", slug: "my-store" },
@@ -178,24 +188,34 @@ describe("AuthService Unit Tests", () => {
   });
 
   it("revokes token on logout", async () => {
+    const tenantId = "0193309a-6b21-7000-8000-000000000001";
+    mockSystemDb.findRefreshTokenByHash.mockResolvedValue({
+      tenantId,
+    });
     const res = await authService.logout({ refreshToken: "rt_logout_token" });
     expect(res.loggedOut).toBe(true);
     expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalled();
   });
 
   it("retrieves user profile via getMe", async () => {
+    const tenantId = "0193309a-6b21-7000-8000-000000000001";
+    mockSystemDb.findTenantById.mockResolvedValue({
+      id: tenantId,
+      name: "My Store",
+      slug: "my-store",
+    });
     mockPrisma.user.findFirst.mockResolvedValue({
       id: "user-1",
       name: "Habib",
       email: "habib@pos.com",
       phone: "01700000000",
-      tenantId: "tenant-1",
+      tenantId,
       tenant: { name: "My Store", slug: "my-store" },
       userRoles: [{ role: { name: "Owner", rolePermissions: [] } }],
       userBranches: [{ branch: { id: "b1", name: "Main", code: "MAIN-01" } }],
     });
 
-    const me = await authService.getMe("user-1", "tenant-1");
+    const me = await authService.getMe("user-1", tenantId);
     expect(me.name).toBe("Habib");
     expect(me.isOwner).toBe(true);
     expect(me.permissions).toContain("*");

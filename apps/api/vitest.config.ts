@@ -1,6 +1,8 @@
 import { defineConfig } from "vitest/config";
+import swc from "unplugin-swc";
 
 export default defineConfig({
+  plugins: [swc.vite()],
   test: {
     globals: true,
     environment: "node",
@@ -12,9 +14,7 @@ export default defineConfig({
         "dist/**",
         "src/main.ts",
         "src/**/*.module.ts",
-        "src/**/*.controller.ts",
         "src/common/database/prisma.service.ts",
-        "src/common/database/tenant-context.service.ts",
         "src/types/**",
         "**/*.d.ts",
       ],

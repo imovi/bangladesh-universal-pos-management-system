@@ -2,12 +2,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { BranchesService } from "../src/modules/branches/branches.service.js";
 import { ConflictException, NotFoundException } from "@nestjs/common";
 
-describe("BranchesService", () => {
+describe("BranchesService Unit Tests", () => {
   let service: BranchesService;
   let mockPrisma: any;
   let mockAudit: any;
+  let mockTenantContext: any;
 
-  const tenantId = "tenant-1";
+  const tenantId = "0193309a-6b21-7000-8000-000000000001";
 
   beforeEach(() => {
     mockPrisma = {
@@ -21,7 +22,12 @@ describe("BranchesService", () => {
       },
     };
     mockAudit = { log: vi.fn().mockResolvedValue(true) };
-    service = new BranchesService(mockPrisma, mockAudit);
+    mockTenantContext = {
+      runWithTenant: vi
+        .fn()
+        .mockImplementation((_id, fn) => fn(mockPrisma)),
+    };
+    service = new BranchesService(mockTenantContext, mockAudit);
   });
 
   it("lists branches with pagination", async () => {
@@ -31,6 +37,10 @@ describe("BranchesService", () => {
     const res = await service.findMany(tenantId, 1, 20);
     expect(res.items).toHaveLength(1);
     expect(res.pagination.total).toBe(1);
+    expect(mockTenantContext.runWithTenant).toHaveBeenCalledWith(
+      tenantId,
+      expect.any(Function),
+    );
   });
 
   it("throws NotFoundException when branch not found", async () => {

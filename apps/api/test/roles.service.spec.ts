@@ -6,12 +6,13 @@ import {
   ForbiddenException,
 } from "@nestjs/common";
 
-describe("RolesService", () => {
+describe("RolesService Unit Tests", () => {
   let service: RolesService;
   let mockPrisma: any;
   let mockAudit: any;
+  let mockTenantContext: any;
 
-  const tenantId = "tenant-1";
+  const tenantId = "0193309a-6b21-7000-8000-000000000001";
 
   beforeEach(() => {
     mockPrisma = {
@@ -27,18 +28,24 @@ describe("RolesService", () => {
         createMany: vi.fn(),
         deleteMany: vi.fn(),
       },
-      $transaction: vi
-        .fn()
-        .mockImplementation((fn: (tx: any) => any) => fn(mockPrisma)),
     };
     mockAudit = { log: vi.fn().mockResolvedValue(true) };
-    service = new RolesService(mockPrisma, mockAudit);
+    mockTenantContext = {
+      runWithTenant: vi
+        .fn()
+        .mockImplementation((_id, fn) => fn(mockPrisma)),
+    };
+    service = new RolesService(mockTenantContext, mockAudit);
   });
 
   it("lists all roles for tenant", async () => {
     mockPrisma.role.findMany.mockResolvedValue([{ id: "r1", name: "Cashier" }]);
     const res = await service.findMany(tenantId);
     expect(res).toHaveLength(1);
+    expect(mockTenantContext.runWithTenant).toHaveBeenCalledWith(
+      tenantId,
+      expect.any(Function),
+    );
   });
 
   it("creates custom role with permission assignments", async () => {
@@ -91,7 +98,7 @@ describe("RolesService", () => {
       name: "Updated Role",
     });
 
-    const updated = await service.update(tenantId, "r-custom", {
+    await service.update(tenantId, "r-custom", {
       name: "Updated Role",
       permissionKeys: ["sale.create"],
     });

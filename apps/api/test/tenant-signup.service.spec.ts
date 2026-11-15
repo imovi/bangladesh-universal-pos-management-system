@@ -1,44 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { TenantsService } from "../src/modules/tenants/tenants.service.js";
 import { ConflictException, BadRequestException } from "@nestjs/common";
-import { SYSTEM_ROLES } from "@universal-pos/shared";
 
-describe("TenantsService Signup & Role Seeding", () => {
+describe("TenantsService Signup Unit Tests", () => {
   let tenantsService: TenantsService;
-  let mockPrisma: any;
-  let mockAudit: any;
+  let mockSystemDb: any;
 
   beforeEach(() => {
-    mockPrisma = {
-      tenant: {
-        findUnique: vi.fn(),
-        create: vi.fn(),
-      },
-      branch: {
-        create: vi.fn(),
-      },
-      role: {
-        create: vi.fn(),
-      },
-      rolePermission: {
-        createMany: vi.fn(),
-      },
-      user: {
-        create: vi.fn(),
-      },
-      userRole: {
-        create: vi.fn(),
-      },
-      userBranch: {
-        create: vi.fn(),
-      },
-      $transaction: vi
-        .fn()
-        .mockImplementation((fn: (tx: any) => any) => fn(mockPrisma)),
+    mockSystemDb = {
+      findTenantBySlug: vi.fn(),
+      createTenantWithInitialData: vi.fn(),
     };
-
-    mockAudit = { log: vi.fn().mockResolvedValue(true) };
-    tenantsService = new TenantsService(mockPrisma, mockAudit);
+    tenantsService = new TenantsService(mockSystemDb);
   });
 
   it("rejects invalid payload format", async () => {
@@ -54,7 +27,7 @@ describe("TenantsService Signup & Role Seeding", () => {
   });
 
   it("rejects signup if tenant slug already taken", async () => {
-    mockPrisma.tenant.findUnique.mockResolvedValue({
+    mockSystemDb.findTenantBySlug.mockResolvedValue({
       id: "existing-tenant-id",
     });
 
@@ -77,27 +50,15 @@ describe("TenantsService Signup & Role Seeding", () => {
     ).rejects.toThrow(ConflictException);
   });
 
-  it("creates tenant, branch, owner user, and seeds all 4 system roles", async () => {
-    mockPrisma.tenant.findUnique.mockResolvedValue(null);
-    mockPrisma.tenant.create.mockResolvedValue({
-      id: "tenant-new-1",
-      name: "Deshi Fashion",
+  it("creates tenant via SystemDbService transaction", async () => {
+    mockSystemDb.findTenantBySlug.mockResolvedValue(null);
+    mockSystemDb.createTenantWithInitialData.mockResolvedValue({
+      tenantId: "tenant-new-1",
       slug: "deshi-fashion",
-      businessType: "fashion",
-    });
-    mockPrisma.branch.create.mockResolvedValue({
-      id: "branch-new-1",
-      name: "Dhanmondi",
-      code: "DHD-01",
-    });
-    mockPrisma.role.create.mockImplementation(({ data }: any) => ({
-      id: `role-${data.name.toLowerCase()}`,
-      name: data.name,
-    }));
-    mockPrisma.user.create.mockResolvedValue({
-      id: "user-owner-1",
-      email: "habib@deshifashion.com",
-      name: "Habibur Rahman",
+      companyName: "Deshi Fashion",
+      branchId: "branch-new-1",
+      ownerId: "user-owner-1",
+      ownerEmail: "habib@deshifashion.com",
     });
 
     const result = await tenantsService.signup({
@@ -118,8 +79,12 @@ describe("TenantsService Signup & Role Seeding", () => {
 
     expect(result.slug).toBe("deshi-fashion");
     expect(result.ownerEmail).toBe("habib@deshifashion.com");
-    // Ensure 4 system roles were created (Owner, Manager, Cashier, Store Keeper)
-    expect(mockPrisma.role.create).toHaveBeenCalledTimes(4);
-    expect(mockAudit.log).toHaveBeenCalled();
+    expect(mockSystemDb.createTenantWithInitialData).toHaveBeenCalledWith(
+      expect.objectContaining({
+        companyName: "Deshi Fashion",
+        slug: "deshi-fashion",
+        businessType: "fashion",
+      }),
+    );
   });
 });

@@ -8,7 +8,6 @@ import argon2 from "argon2";
 import {
   TenantSignupDto,
   TenantSignupSchema,
-  SYSTEM_ROLES,
   SYSTEM_ROLE_PERMISSIONS,
   SystemRole,
 } from "@universal-pos/shared";

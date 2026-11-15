@@ -10,6 +10,7 @@ import { AuditService } from "../audit/audit.service.js";
 import { InventoryService } from "../inventory/inventory.service.js";
 import { CreateSaleDto, VoidSaleDto, calculateSaleTotals, formatDateKey } from "@universal-pos/shared";
 import { validateDiscountsNonNegative, enforceDiscountAndOverrideLimits } from "./sales-discount.helper.js";
+import { computeSalePayloadHash, matchesSalePayload } from "./sales-hash.helper.js";
 
 @Injectable()
 export class SalesService {
@@ -146,24 +147,14 @@ export class SalesService {
     return { calculated, paidMinor, changeMinor };
   }
 
-  private isSameSalePayload(existing: any, dto: CreateSaleDto): boolean {
-    if (BigInt(dto.expectedTotalMinor) !== existing.totalMinor) return false;
-    if (dto.items.length !== existing.items.length) return false;
-    return dto.items.every((incoming) => {
-      const match = existing.items.find((it: any) => it.variantId === incoming.variantId);
-      return match && Number(match.quantity) === incoming.quantity;
-    });
-  }
-
   private async checkIdempotency(
-    tx: Prisma.TransactionClient, id: string | undefined, tenantId: string, dto: CreateSaleDto,
+    tx: Prisma.TransactionClient, id: string, tenantId: string, dto: CreateSaleDto, payloadHash: string,
   ) {
-    if (!id) return null;
     const existing = await tx.sale.findUnique({ where: { id }, include: { items: true, payments: true } });
     if (!existing || existing.tenantId !== tenantId) return null;
-    if (this.isSameSalePayload(existing, dto)) return { ...existing, isDuplicate: true };
+    if (matchesSalePayload(existing, payloadHash, dto)) return { ...existing, isDuplicate: true };
     throw new ConflictException({
-      code: "IDEMPOTENCY_CONFLICT", message: "A sale with this ID already exists with a different payload",
+      code: "IDEMPOTENCY_CONFLICT", message: `Sale ${dto.id} already exists with different payload`,
     });
   }
 
@@ -181,7 +172,7 @@ export class SalesService {
 
   private async executeSaleInsert(
     tx: Prisma.TransactionClient, tenantId: string, dto: CreateSaleDto,
-    meta: { saleId: string; inv: string; calc: any; paid: bigint; change: bigint; userId: string; costMap: Map<string, bigint>; originalPrices: (bigint | null)[] },
+    meta: { saleId: string; inv: string; calc: any; paid: bigint; change: bigint; userId: string; costMap: Map<string, bigint>; originalPrices: (bigint | null)[]; payloadHash: string },
   ) {
     return tx.sale.create({
       data: {
@@ -189,7 +180,7 @@ export class SalesService {
         branchId: dto.branchId, cashierUserId: meta.userId, customerId: dto.customerId,
         status: "completed", subtotalMinor: meta.calc.grossMinor, discountMinor: meta.calc.totalDiscountMinor,
         taxMinor: meta.calc.taxMinor, totalMinor: meta.calc.totalMinor, paidMinor: meta.paid,
-        changeMinor: meta.change, notes: dto.notes,
+        changeMinor: meta.change, notes: dto.notes, requestPayloadHash: meta.payloadHash,
         items: { create: this.buildSaleItemsData(tenantId, meta.calc.lines, meta.costMap, meta.originalPrices) },
         payments: {
           create: dto.payments.map((p) => ({ id: uuidv7(), tenantId, paymentMethod: p.paymentMethod, amountMinor: BigInt(p.amountMinor), reference: p.reference })),
@@ -261,15 +252,13 @@ export class SalesService {
     }, tx);
   }
 
-  private async handleSaleCreationConflict(tenantId: string, dto: CreateSaleDto): Promise<any> {
-    if (dto.id) {
-      const existing = await this.findById(tenantId, dto.id).catch(() => null);
-      if (existing) {
-        if (this.isSameSalePayload(existing, dto)) return { ...existing, isDuplicate: true };
-        throw new ConflictException({
-          code: "IDEMPOTENCY_CONFLICT", message: "A sale with this ID already exists with a different payload",
-        });
-      }
+  private async handleSaleCreationConflict(tenantId: string, dto: CreateSaleDto, payloadHash: string): Promise<any> {
+    const existing = await this.findById(tenantId, dto.id).catch(() => null);
+    if (existing) {
+      if (matchesSalePayload(existing, payloadHash, dto)) return { ...existing, isDuplicate: true };
+      throw new ConflictException({
+        code: "IDEMPOTENCY_CONFLICT", message: `Sale ${dto.id} already exists with different payload`,
+      });
     }
     throw new ConflictException({
       code: "CONCURRENT_REQUEST", message: "A concurrent request with the same identifier is in progress",
@@ -280,10 +269,11 @@ export class SalesService {
     tenantId: string, dto: CreateSaleDto, userId: string, ip?: string,
     user?: { isOwner?: boolean; permissions?: string[] },
   ) {
+    const payloadHash = computeSalePayloadHash(dto);
     const { pricesIncludeTax, timeZone } = await this.getTenantSettings(tenantId);
     try {
       return await this.tenantContext.runWithTenant(tenantId, async (tx) => {
-        const duplicate = await this.checkIdempotency(tx, dto.id, tenantId, dto);
+        const duplicate = await this.checkIdempotency(tx, dto.id, tenantId, dto, payloadHash);
         if (duplicate) return duplicate;
 
         const { shift, defaultTaxRateBp, variants } = await this.loadShiftAndVariants(tx, tenantId, dto);
@@ -295,13 +285,13 @@ export class SalesService {
           { grossMinor: calculated.grossMinor, totalDiscountMinor: calculated.totalDiscountMinor },
         );
 
-        const saleId = dto.id || uuidv7();
+        const saleId = dto.id;
         const inv = await this.generateInvoiceNumber(tenantId, shift.registerId, tx, timeZone);
         const costMap = new Map(variants.map((v) => [v.id, v.costMinor]));
 
         const sale = await this.executeSaleInsert(tx, tenantId, dto, {
           saleId, inv, calc: calculated, paid: paidMinor, change: changeMinor,
-          userId, costMap, originalPrices,
+          userId, costMap, originalPrices, payloadHash,
         });
 
         await this.finalizeSaleOperations(tx, tenantId, {
@@ -312,7 +302,7 @@ export class SalesService {
       });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-        return this.handleSaleCreationConflict(tenantId, dto);
+        return this.handleSaleCreationConflict(tenantId, dto, payloadHash);
       }
       throw err;
     }

@@ -21,7 +21,7 @@ export const SalePaymentInputSchema = z.object({
 });
 
 export const CreateSaleSchema = z.object({
-  id: z.string().uuid().optional(),
+  id: z.string().uuid(),
   shiftId: z.string().uuid(),
   branchId: z.string().uuid(),
   customerId: z.string().uuid().optional(),

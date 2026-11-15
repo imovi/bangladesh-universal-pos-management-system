@@ -47,15 +47,18 @@ export class SalesController {
       });
     }
 
-    if (idempotencyKey && parse.data.id && parse.data.id !== idempotencyKey) {
+    if (!idempotencyKey) {
       throw new BadRequestException({
-        code: "IDEMPOTENCY_KEY_MISMATCH",
-        message: "Idempotency-Key header must match body id when provided",
+        code: "IDEMPOTENCY_KEY_REQUIRED",
+        message: "Idempotency-Key header is required",
       });
     }
 
-    if (idempotencyKey && !parse.data.id) {
-      parse.data.id = idempotencyKey;
+    if (parse.data.id !== idempotencyKey) {
+      throw new BadRequestException({
+        code: "IDEMPOTENCY_KEY_MISMATCH",
+        message: "Idempotency-Key header must match body id",
+      });
     }
 
     const sale = await this.salesService.create(

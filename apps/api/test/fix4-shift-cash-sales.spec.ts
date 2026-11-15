@@ -3,6 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Test, TestingModule } from "@nestjs/testing";
 import { INestApplication } from "@nestjs/common";
 import request from "supertest";
+import { v7 as uuidv7 } from "uuid";
 import { AppModule } from "../src/app.module.js";
 import { TransformInterceptor } from "../src/common/interceptors/transform.interceptor.js";
 import { HttpExceptionFilter } from "../src/common/filters/http-exception.filter.js";
@@ -99,10 +100,13 @@ describe("Fix 4: Shift Cash Sales, Non-Cash Overpayment & Closed Shift Void", ()
     const shiftId = shiftRes.body.data.id;
 
     // Item total is 100,000. Customer pays 120,000 via card (non-cash overpayment).
+    const s1Id = uuidv7();
     const res = await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", s1Id)
       .send({
+        id: s1Id,
         shiftId,
         branchId,
         items: [{ variantId, quantity: 1 }],
@@ -128,10 +132,13 @@ describe("Fix 4: Shift Cash Sales, Non-Cash Overpayment & Closed Shift Void", ()
     const shiftId = openRes.body.data.id;
 
     // Sale 1: Total 100,000. Cash tendered: 120,000 -> Change: 20,000 (Net cash into drawer = 100,000)
+    const sale1Id = uuidv7();
     await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", sale1Id)
       .send({
+        id: sale1Id,
         shiftId,
         branchId,
         items: [{ variantId, quantity: 1 }],
@@ -140,10 +147,13 @@ describe("Fix 4: Shift Cash Sales, Non-Cash Overpayment & Closed Shift Void", ()
       });
 
     // Sale 2: Mixed payment: Total 200,000 (2 items). 150,000 bKash + 50,000 cash.
+    const sale2Id = uuidv7();
     await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", sale2Id)
       .send({
+        id: sale2Id,
         shiftId,
         branchId,
         items: [{ variantId, quantity: 2 }],
@@ -155,10 +165,13 @@ describe("Fix 4: Shift Cash Sales, Non-Cash Overpayment & Closed Shift Void", ()
       });
 
     // Sale 3: Pure card payment: Total 100,000 (no cash impact).
+    const sale3Id = uuidv7();
     await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", sale3Id)
       .send({
+        id: sale3Id,
         shiftId,
         branchId,
         items: [{ variantId, quantity: 1 }],
@@ -167,10 +180,13 @@ describe("Fix 4: Shift Cash Sales, Non-Cash Overpayment & Closed Shift Void", ()
       });
 
     // Sale 4: Voided sale: Total 100,000 cash. Should NOT be counted in expected cash.
+    const sale4Id = uuidv7();
     const voidSaleRes = await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", sale4Id)
       .send({
+        id: sale4Id,
         shiftId,
         branchId,
         items: [{ variantId, quantity: 1 }],
@@ -232,10 +248,13 @@ describe("Fix 4: Shift Cash Sales, Non-Cash Overpayment & Closed Shift Void", ()
     const shiftId = openRes.body.data.id;
 
     // Make a sale
+    const sId = uuidv7();
     const saleRes = await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", sId)
       .send({
+        id: sId,
         shiftId,
         branchId,
         items: [{ variantId, quantity: 1 }],

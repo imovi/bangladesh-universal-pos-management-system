@@ -3,6 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Test, TestingModule } from "@nestjs/testing";
 import { INestApplication } from "@nestjs/common";
 import request from "supertest";
+import { v7 as uuidv7 } from "uuid";
 import { AppModule } from "../src/app.module.js";
 import { TransformInterceptor } from "../src/common/interceptors/transform.interceptor.js";
 import { HttpExceptionFilter } from "../src/common/filters/http-exception.filter.js";
@@ -107,10 +108,13 @@ describe("Fix 3: Enforce Discount Limits Integration Tests", () => {
   });
 
   it("(a) Cashier cannot give 6% discount (exceeds role limit of 5% -> 403 Forbidden)", async () => {
+    const saleId = uuidv7();
     const res = await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", saleId)
       .send({
+        id: saleId,
         shiftId: openShiftId,
         branchId,
         items: [{ variantId, quantity: 1, discount: { type: "percent", percentBp: 600 } }],
@@ -122,10 +126,13 @@ describe("Fix 3: Enforce Discount Limits Integration Tests", () => {
   });
 
   it("(b) Cashier can give 5% discount (at role limit of 5% -> 201 Created)", async () => {
+    const saleId = uuidv7();
     const res = await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", saleId)
       .send({
+        id: saleId,
         shiftId: openShiftId,
         branchId,
         items: [{ variantId, quantity: 1, discount: { type: "percent", percentBp: 500 } }],
@@ -139,10 +146,13 @@ describe("Fix 3: Enforce Discount Limits Integration Tests", () => {
   });
 
   it("(c) Manager can give 15% discount (within role limit of 20% -> 201 Created)", async () => {
+    const saleId = uuidv7();
     const res = await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${managerToken}`)
+      .set("Idempotency-Key", saleId)
       .send({
+        id: saleId,
         shiftId: openShiftId,
         branchId,
         items: [{ variantId, quantity: 1, discount: { type: "percent", percentBp: 1500 } }],
@@ -156,10 +166,13 @@ describe("Fix 3: Enforce Discount Limits Integration Tests", () => {
   });
 
   it("(d) Manager with sale.discount_override can approve 25% discount (exceeds role limit of 20% -> 201 Created)", async () => {
+    const saleId = uuidv7();
     const res = await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${managerToken}`)
+      .set("Idempotency-Key", saleId)
       .send({
+        id: saleId,
         shiftId: openShiftId,
         branchId,
         items: [{ variantId, quantity: 1, discount: { type: "percent", percentBp: 2500 } }],
@@ -173,10 +186,13 @@ describe("Fix 3: Enforce Discount Limits Integration Tests", () => {
   });
 
   it("(e) Fixed discount larger than item price is rejected with 422 Unprocessable Entity", async () => {
+    const saleId = uuidv7();
     const res = await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${ownerToken}`)
+      .set("Idempotency-Key", saleId)
       .send({
+        id: saleId,
         shiftId: openShiftId,
         branchId,
         items: [{ variantId, quantity: 1, discount: { type: "fixed", amountMinor: 150000 } }], // item price 100,000
@@ -201,10 +217,13 @@ describe("Fix 3: Enforce Discount Limits Integration Tests", () => {
   });
 
   it("(g) Audit log contains override record when price override is used", async () => {
+    const saleId = uuidv7();
     await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${managerToken}`)
+      .set("Idempotency-Key", saleId)
       .send({
+        id: saleId,
         shiftId: openShiftId,
         branchId,
         items: [{ variantId, quantity: 1, overrideUnitPriceMinor: 90000 }],

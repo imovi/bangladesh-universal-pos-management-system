@@ -3,6 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Test, TestingModule } from "@nestjs/testing";
 import { INestApplication } from "@nestjs/common";
 import request from "supertest";
+import { v7 as uuidv7 } from "uuid";
 import { AppModule } from "../src/app.module.js";
 import { TransformInterceptor } from "../src/common/interceptors/transform.interceptor.js";
 import { HttpExceptionFilter } from "../src/common/filters/http-exception.filter.js";
@@ -128,10 +129,13 @@ describe("Fix 2: Server Decides Price & Overrides Integration Tests", () => {
   });
 
   it("(a) Cashier without sale.price_override cannot override unit price (403 Forbidden)", async () => {
+    const saleId = uuidv7();
     const res = await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", saleId)
       .send({
+        id: saleId,
         shiftId: openShiftId,
         branchId,
         items: [{ variantId: activeVariantId, quantity: 1, overrideUnitPriceMinor: 150000 }],
@@ -145,10 +149,13 @@ describe("Fix 2: Server Decides Price & Overrides Integration Tests", () => {
   it("(b) Request with no override uses database price even if expectedTotalMinor differs (422 Unprocessable Entity)", async () => {
     // Catalogue price is 200,000 + 7.5% VAT (15,000) = 215,000 poisha.
     // Client sends expectedTotalMinor: 100,000 (trying to sell cheap without override).
+    const saleId = uuidv7();
     const res = await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", saleId)
       .send({
+        id: saleId,
         shiftId: openShiftId,
         branchId,
         items: [{ variantId: activeVariantId, quantity: 1 }],
@@ -163,10 +170,13 @@ describe("Fix 2: Server Decides Price & Overrides Integration Tests", () => {
   });
 
   it("(c) Inactive variant is rejected with 422 Unprocessable Entity", async () => {
+    const saleId = uuidv7();
     const res = await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", saleId)
       .send({
+        id: saleId,
         shiftId: openShiftId,
         branchId,
         items: [{ variantId: inactiveVariantId, quantity: 1 }],
@@ -197,10 +207,13 @@ describe("Fix 2: Server Decides Price & Overrides Integration Tests", () => {
       .set("Authorization", `Bearer ${ownerToken}`)
       .send({ isActive: false });
 
+    const saleId = uuidv7();
     const res = await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", saleId)
       .send({
+        id: saleId,
         shiftId: openShiftId,
         branchId,
         items: [{ variantId: inactVarId, quantity: 1 }],
@@ -213,10 +226,13 @@ describe("Fix 2: Server Decides Price & Overrides Integration Tests", () => {
 
   it("(d) Tax rate automatically comes from the product tax class (7.5% = 750 bp)", async () => {
     // 1 item @ 200,000 catalogue price + 7.5% tax (15,000) = 215,000 poisha
+    const saleId = uuidv7();
     const res = await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", saleId)
       .send({
+        id: saleId,
         shiftId: openShiftId,
         branchId,
         items: [{ variantId: activeVariantId, quantity: 1 }],
@@ -232,10 +248,13 @@ describe("Fix 2: Server Decides Price & Overrides Integration Tests", () => {
 
   it("(e) Manager with sale.price_override is accepted and both original and override prices are stored", async () => {
     // Override price: 180,000 poisha + 7.5% tax (13,500) = 193,500 poisha
+    const saleId = uuidv7();
     const res = await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${managerToken}`)
+      .set("Idempotency-Key", saleId)
       .send({
+        id: saleId,
         shiftId: openShiftId,
         branchId,
         items: [{ variantId: activeVariantId, quantity: 1, overrideUnitPriceMinor: 180000 }],
@@ -254,10 +273,13 @@ describe("Fix 2: Server Decides Price & Overrides Integration Tests", () => {
     // Line 1: Normal catalogue price 200,000 + 7.5% tax (15,000) = 215,000 poisha
     // Line 2: Overridden price 150,000 + 7.5% tax (11,250) = 161,250 poisha
     // Total: 376,250 poisha
+    const saleId = uuidv7();
     const res = await request(app.getHttpServer())
       .post("/api/v1/sales")
       .set("Authorization", `Bearer ${managerToken}`)
+      .set("Idempotency-Key", saleId)
       .send({
+        id: saleId,
         shiftId: openShiftId,
         branchId,
         items: [

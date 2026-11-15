@@ -114,7 +114,11 @@ All responses strictly follow the standardized envelope:
   - Generates sequential gap-free invoice number `{REGISTER}-{YYMMDD}-{NNNN}` via PostgreSQL `FOR UPDATE`.
   - Atomically deducts inventory stock ledger (`type: 'sale'`).
   - Increments customer spent and visit counts.
-  - Supports client-supplied `id` for idempotent duplicate prevention.
+  - Requires client-supplied `id` in the request body (UUID v7).
+  - Requires mandatory `Idempotency-Key` header matching the body `id` (rejects missing or mismatched header with HTTP 400).
+  - True idempotency: stores canonical SHA-256 payload hash in `request_payload_hash`.
+    - Identical payload returns HTTP 200 with the existing sale.
+    - Differing payload returns HTTP 409 Conflict (`"Sale <id> already exists with different payload"`).
 - `POST /api/v1/sales/:id/void`:
   - Requires `sale.void` permission.
   - Generates reversing stock movements (`type: 'sale_void'`).

@@ -122,13 +122,19 @@ describe("M6: Sales Engine Integration Tests", () => {
   });
 
   it("POST /sales creates sale, updates stock, customer metrics, and formats invoice number", async () => {
+    const saleId = uuidv7();
     const salePayload = {
+      id: saleId,
       shiftId: openShiftId, branchId, customerId,
       items: [{ variantId, quantity: 2, discount: { type: "percent", percentBp: 1000 } }],
       payments: [{ paymentMethod: "cash", amountMinor: 100000 }, { paymentMethod: "bkash", amountMinor: 89000, reference: "TRX-123456" }],
       expectedTotalMinor: 189000,
     };
-    const res = await request(app.getHttpServer()).post("/api/v1/sales").set("Authorization", `Bearer ${ownerToken}`).send(salePayload);
+    const res = await request(app.getHttpServer())
+      .post("/api/v1/sales")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .set("Idempotency-Key", saleId)
+      .send(salePayload);
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
@@ -154,11 +160,19 @@ describe("M6: Sales Engine Integration Tests", () => {
       items: [{ variantId, quantity: 1 }],
       payments: [{ paymentMethod: "cash", amountMinor: 105000 }], expectedTotalMinor: 105000,
     };
-    const res1 = await request(app.getHttpServer()).post("/api/v1/sales").set("Authorization", `Bearer ${cashierToken}`).send(payload);
+    const res1 = await request(app.getHttpServer())
+      .post("/api/v1/sales")
+      .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", clientId)
+      .send(payload);
     expect(res1.status).toBe(201);
     expect(res1.body.data.id).toBe(clientId);
 
-    const res2 = await request(app.getHttpServer()).post("/api/v1/sales").set("Authorization", `Bearer ${cashierToken}`).send(payload);
+    const res2 = await request(app.getHttpServer())
+      .post("/api/v1/sales")
+      .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", clientId)
+      .send(payload);
     expect(res2.status).toBe(200);
     expect(res2.body.data.id).toBe(clientId);
 
@@ -167,18 +181,30 @@ describe("M6: Sales Engine Integration Tests", () => {
   });
 
   it("POST /sales rejects calculation mismatch with 422 Unprocessable Entity", async () => {
-    const res = await request(app.getHttpServer()).post("/api/v1/sales").set("Authorization", `Bearer ${cashierToken}`).send({
-      shiftId: openShiftId, branchId, items: [{ variantId, quantity: 1 }],
-      payments: [{ paymentMethod: "cash", amountMinor: 105000 }], expectedTotalMinor: 999999,
-    });
+    const saleId = uuidv7();
+    const res = await request(app.getHttpServer())
+      .post("/api/v1/sales")
+      .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", saleId)
+      .send({
+        id: saleId,
+        shiftId: openShiftId, branchId, items: [{ variantId, quantity: 1 }],
+        payments: [{ paymentMethod: "cash", amountMinor: 105000 }], expectedTotalMinor: 999999,
+      });
     expect(res.status).toBe(422);
   });
 
   it("POST /sales rejects sale on a closed shift", async () => {
-    const res = await request(app.getHttpServer()).post("/api/v1/sales").set("Authorization", `Bearer ${cashierToken}`).send({
-      shiftId: closedShiftId, branchId, items: [{ variantId, quantity: 1 }],
-      payments: [{ paymentMethod: "cash", amountMinor: 105000 }], expectedTotalMinor: 105000,
-    });
+    const saleId = uuidv7();
+    const res = await request(app.getHttpServer())
+      .post("/api/v1/sales")
+      .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", saleId)
+      .send({
+        id: saleId,
+        shiftId: closedShiftId, branchId, items: [{ variantId, quantity: 1 }],
+        payments: [{ paymentMethod: "cash", amountMinor: 105000 }], expectedTotalMinor: 105000,
+      });
     expect(res.status).toBe(400);
   });
 

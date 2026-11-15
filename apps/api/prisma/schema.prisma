@@ -701,6 +701,7 @@ model Sale {
   paidMinor        BigInt    @map("paid_minor")
   changeMinor      BigInt    @default(0) @map("change_minor")
   notes            String?
+  requestPayloadHash String? @map("request_payload_hash") @db.VarChar(64)
   voidReason       String?   @map("void_reason")
   voidedAt         DateTime? @map("voided_at")
   voidedByUserId   String?   @map("voided_by_user_id") @db.Uuid

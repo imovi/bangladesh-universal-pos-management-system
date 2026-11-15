@@ -3,6 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Test } from "@nestjs/testing";
 import { INestApplication } from "@nestjs/common";
 import request from "supertest";
+import { v7 as uuidv7 } from "uuid";
 import { AppModule } from "../src/app.module.js";
 import { TransformInterceptor } from "../src/common/interceptors/transform.interceptor.js";
 import { HttpExceptionFilter } from "../src/common/filters/http-exception.filter.js";
@@ -123,10 +124,13 @@ describe("Fix 5: Timezone-Aware Business Dates and Reports", () => {
           items: [{ variantId, quantity: 10, unitCostMinor: 25000 }],
         });
 
+      const sId = uuidv7();
       const saleRes = await request(app.getHttpServer())
         .post("/api/v1/sales")
         .set("Authorization", `Bearer ${ownerToken}`)
+        .set("Idempotency-Key", sId)
         .send({
+          id: sId,
           branchId,
           shiftId,
           expectedTotalMinor: 50000,

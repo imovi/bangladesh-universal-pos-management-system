@@ -3,6 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Test, TestingModule } from "@nestjs/testing";
 import { INestApplication } from "@nestjs/common";
 import request from "supertest";
+import { v7 as uuidv7 } from "uuid";
 import { AppModule } from "../src/app.module.js";
 import { TransformInterceptor } from "../src/common/interceptors/transform.interceptor.js";
 import { HttpExceptionFilter } from "../src/common/filters/http-exception.filter.js";
@@ -94,28 +95,46 @@ describe("M7: Fashion Analytics & Financial Reports Integration Tests", () => {
     });
 
     // Sale 1: 2x M-Blue @ 250,000 = 500,000; discount 50,000 (10% discount, requires Manager/Owner); total = 450,000 (300,000 cash, 150,000 bkash)
-    await request(app.getHttpServer()).post("/api/v1/sales").set("Authorization", `Bearer ${ownerToken}`).send({
-      shiftId, branchId,
-      items: [{ variantId: variantMBlueId, quantity: 2, discount: { type: "fixed", amountMinor: 50000 } }],
-      payments: [{ paymentMethod: "cash", amountMinor: 300000 }, { paymentMethod: "bkash", amountMinor: 150000 }],
-      expectedTotalMinor: 450000,
-    });
+    const sale1Id = uuidv7();
+    await request(app.getHttpServer())
+      .post("/api/v1/sales")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .set("Idempotency-Key", sale1Id)
+      .send({
+        id: sale1Id,
+        shiftId, branchId,
+        items: [{ variantId: variantMBlueId, quantity: 2, discount: { type: "fixed", amountMinor: 50000 } }],
+        payments: [{ paymentMethod: "cash", amountMinor: 300000 }, { paymentMethod: "bkash", amountMinor: 150000 }],
+        expectedTotalMinor: 450000,
+      });
 
     // Sale 2: 1x L-Black @ 250,000 = 250,000 (card payment)
-    await request(app.getHttpServer()).post("/api/v1/sales").set("Authorization", `Bearer ${cashierToken}`).send({
-      shiftId, branchId,
-      items: [{ variantId: variantLBlackId, quantity: 1 }],
-      payments: [{ paymentMethod: "card", amountMinor: 250000 }],
-      expectedTotalMinor: 250000,
-    });
+    const sale2Id = uuidv7();
+    await request(app.getHttpServer())
+      .post("/api/v1/sales")
+      .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", sale2Id)
+      .send({
+        id: sale2Id,
+        shiftId, branchId,
+        items: [{ variantId: variantLBlackId, quantity: 1 }],
+        payments: [{ paymentMethod: "card", amountMinor: 250000 }],
+        expectedTotalMinor: 250000,
+      });
 
     // Sale 3: Voided sale to ensure exclusion
-    const voidSaleRes = await request(app.getHttpServer()).post("/api/v1/sales").set("Authorization", `Bearer ${cashierToken}`).send({
-      shiftId, branchId,
-      items: [{ variantId: variantMBlueId, quantity: 1 }],
-      payments: [{ paymentMethod: "cash", amountMinor: 250000 }],
-      expectedTotalMinor: 250000,
-    });
+    const sale3Id = uuidv7();
+    const voidSaleRes = await request(app.getHttpServer())
+      .post("/api/v1/sales")
+      .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", sale3Id)
+      .send({
+        id: sale3Id,
+        shiftId, branchId,
+        items: [{ variantId: variantMBlueId, quantity: 1 }],
+        payments: [{ paymentMethod: "cash", amountMinor: 250000 }],
+        expectedTotalMinor: 250000,
+      });
     await request(app.getHttpServer()).post(`/api/v1/sales/${voidSaleRes.body.data.id}/void`).set("Authorization", `Bearer ${ownerToken}`).send({
       reason: "Mistake entry",
     });

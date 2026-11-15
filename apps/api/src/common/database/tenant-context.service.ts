@@ -20,15 +20,21 @@ export class TenantContextService {
       throw new BadRequestException('Invalid tenantId: must be a valid UUID');
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      // 1. Switch to unprivileged role pos_app (strictly fail-closed, no try/catch)
-      await tx.$executeRaw`SET LOCAL ROLE pos_app;`;
+    return this.prisma.$transaction(
+      async (tx) => {
+        // 1. Switch to unprivileged role pos_app (strictly fail-closed, no try/catch)
+        await tx.$executeRaw`SET LOCAL ROLE pos_app;`;
 
-      // 2. Set parameterised session variable for tenant_id (is_local = true)
-      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true);`;
+        // 2. Set parameterised session variable for tenant_id (is_local = true)
+        await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true);`;
 
-      // 3. Execute business logic within isolation boundary
-      return operation(tx);
-    });
+        // 3. Execute business logic within isolation boundary
+        return operation(tx);
+      },
+      {
+        maxWait: 10000,
+        timeout: 15000,
+      },
+    );
   }
 }

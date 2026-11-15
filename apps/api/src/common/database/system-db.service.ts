@@ -56,6 +56,21 @@ export class SystemDbService {
   }
 
   /**
+   * Updates tenant settings via pos_system role.
+   */
+  async updateTenantSettings(id: string, settings: Record<string, unknown>) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SET LOCAL ROLE pos_system;`;
+      return tx.tenant.update({
+        where: { id },
+        data: {
+          settings: settings as Prisma.InputJsonValue,
+        },
+      });
+    });
+  }
+
+  /**
    * Looks up a refresh token by its SHA-256 hash without tenant context
    * (since client presents only the opaque token string).
    */

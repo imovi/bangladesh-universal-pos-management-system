@@ -13,6 +13,7 @@ import { UsersModule } from "./modules/users/users.module.js";
 import { RolesModule } from "./modules/roles/roles.module.js";
 import { AuditModule } from "./modules/audit/audit.module.js";
 import { CatalogModule } from "./modules/catalog/catalog.module.js";
+import { InventoryModule } from "./modules/inventory/inventory.module.js";
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { CatalogModule } from "./modules/catalog/catalog.module.js";
     RolesModule,
     AuditModule,
     CatalogModule,
+    InventoryModule,
   ],
   controllers: [HealthController],
   providers: [

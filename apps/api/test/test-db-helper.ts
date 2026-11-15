@@ -7,7 +7,7 @@ import { PrismaClient } from "@prisma/client";
 export function getTestDatabaseUrl(): string {
   return (
     process.env.TEST_DATABASE_URL ||
-    "postgresql://pos_runtime:pos_runtime_secret@localhost:5432/universal_pos_test?schema=public"
+    "postgresql://pos_runtime:pos_runtime_secret@localhost:5432/universal_pos_test?schema=public&connection_limit=30"
   );
 }
 

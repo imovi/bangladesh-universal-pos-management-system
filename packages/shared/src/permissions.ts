@@ -29,6 +29,7 @@ export const PERMISSIONS = {
   CATALOG_MANAGE: "catalog.manage",
   INVENTORY_READ: "inventory.read",
   INVENTORY_MANAGE: "inventory.manage",
+  STOCK_ADJUST: "stock.adjust",
 
   // Shifts
   SHIFT_MANAGE: "shift.manage",
@@ -36,10 +37,12 @@ export const PERMISSIONS = {
   // Purchase
   PURCHASE_READ: "purchase.read",
   PURCHASE_MANAGE: "purchase.manage",
+  PURCHASE_RECEIVE: "purchase.receive",
 
   // Reports
   REPORT_SALES: "report.sales",
   REPORT_FINANCIAL: "report.financial",
+  REPORT_PROFIT: "report.profit",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -71,10 +74,13 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     PERMISSIONS.CATALOG_MANAGE,
     PERMISSIONS.INVENTORY_READ,
     PERMISSIONS.INVENTORY_MANAGE,
+    PERMISSIONS.STOCK_ADJUST,
     PERMISSIONS.SHIFT_MANAGE,
     PERMISSIONS.PURCHASE_READ,
     PERMISSIONS.PURCHASE_MANAGE,
+    PERMISSIONS.PURCHASE_RECEIVE,
     PERMISSIONS.REPORT_SALES,
+    PERMISSIONS.REPORT_PROFIT,
   ],
   [SYSTEM_ROLES.CASHIER]: [
     PERMISSIONS.BRANCH_READ,
@@ -88,7 +94,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     PERMISSIONS.CATALOG_READ,
     PERMISSIONS.INVENTORY_READ,
     PERMISSIONS.INVENTORY_MANAGE,
+    PERMISSIONS.STOCK_ADJUST,
     PERMISSIONS.PURCHASE_READ,
     PERMISSIONS.PURCHASE_MANAGE,
+    PERMISSIONS.PURCHASE_RECEIVE,
   ],
 };

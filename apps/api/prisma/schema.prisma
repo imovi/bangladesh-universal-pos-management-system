@@ -29,6 +29,8 @@ model Tenant {
   taxClasses   TaxClass[]
   products     Product[]
   variants     ProductVariant[]
+  stockMovements StockMovement[]
+  stockLevels    StockLevel[]
 
   @@map("tenants")
 }
@@ -44,7 +46,9 @@ model Branch {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  userBranches UserBranch[]
+  userBranches   UserBranch[]
+  stockMovements StockMovement[]
+  stockLevels    StockLevel[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -331,8 +335,10 @@ model ProductVariant {
 
   tenant       Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   product      Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
-  optionValues VariantOptionValue[]
-  barcodes     VariantBarcode[]
+  optionValues   VariantOptionValue[]
+  barcodes       VariantBarcode[]
+  stockMovements StockMovement[]
+  stockLevels    StockLevel[]
 
   @@unique([tenantId, sku])
   @@index([tenantId])
@@ -371,4 +377,50 @@ model VariantBarcode {
   @@index([variantId])
   @@index([barcode])
   @@map("variant_barcodes")
+}
+
+model StockMovement {
+  id            String         @id @default(uuid(7)) @db.Uuid
+  tenantId      String         @map("tenant_id") @db.Uuid
+  branchId      String         @map("branch_id") @db.Uuid
+  variantId     String         @map("variant_id") @db.Uuid
+  qtyDelta      Decimal        @map("qty_delta") @db.Decimal(14, 3)
+  type          String
+  unitCostMinor BigInt         @default(0) @map("unit_cost_minor")
+  refType       String?        @map("ref_type")
+  refId         String?        @map("ref_id")
+  reason        String?
+  actorUserId   String?        @map("actor_user_id") @db.Uuid
+  occurredAt    DateTime       @default(now()) @map("occurred_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+
+  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch  Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([branchId])
+  @@index([variantId])
+  @@index([type])
+  @@index([occurredAt])
+  @@map("stock_movements")
+}
+
+model StockLevel {
+  id        String         @id @default(uuid(7)) @db.Uuid
+  tenantId  String         @map("tenant_id") @db.Uuid
+  branchId  String         @map("branch_id") @db.Uuid
+  variantId String         @map("variant_id") @db.Uuid
+  qty       Decimal        @default(0) @db.Decimal(14, 3)
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch  Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, branchId, variantId])
+  @@index([tenantId])
+  @@index([branchId])
+  @@index([variantId])
+  @@map("stock_levels")
 }

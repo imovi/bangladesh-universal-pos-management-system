@@ -218,3 +218,37 @@ export const CreateBarcodeSchema = z.object({
     .optional(),
 });
 export type CreateBarcodeDto = z.infer<typeof CreateBarcodeSchema>;
+
+// --- M3 Inventory Ledger Schemas ---
+
+export const STOCK_MOVEMENT_TYPES = [
+  "opening",
+  "purchase",
+  "sale",
+  "sale_void",
+  "adjustment",
+] as const;
+
+export type StockMovementType = (typeof STOCK_MOVEMENT_TYPES)[number];
+
+export const OpeningStockItemSchema = z.object({
+  variantId: z.string().uuid(),
+  quantity: z.coerce.number().positive("Quantity must be greater than 0"),
+  unitCostMinor: z.coerce.number().int().min(0).optional(),
+});
+
+export const BulkOpeningStockSchema = z.object({
+  branchId: z.string().uuid(),
+  items: z.array(OpeningStockItemSchema).min(1, "At least one item required"),
+});
+export type BulkOpeningStockDto = z.infer<typeof BulkOpeningStockSchema>;
+
+export const StockAdjustmentSchema = z.object({
+  branchId: z.string().uuid(),
+  variantId: z.string().uuid(),
+  qtyDelta: z.coerce.number().refine((val) => val !== 0, {
+    message: "Adjustment quantity delta cannot be zero",
+  }),
+  reason: z.string().trim().min(3).max(255),
+});
+export type StockAdjustmentDto = z.infer<typeof StockAdjustmentSchema>;

@@ -19,9 +19,9 @@ async function bootstrap() {
   app.useGlobalInterceptors(new TransformInterceptor());
   app.useGlobalFilters(new HttpExceptionFilter());
 
-  // Enable CORS
+  // Enable CORS with restricted origin list
   app.enableCors({
-    origin: "*",
+    origin: configService.corsOrigins,
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
     credentials: true,
   });
@@ -30,7 +30,9 @@ async function bootstrap() {
   logger.log(`Universal POS API is running on port: ${port}`);
 }
 
-bootstrap().catch((err) => {
-  console.error("Fatal bootstrap failure:", err);
+const bootstrapLogger = new Logger("Bootstrap");
+
+bootstrap().catch((err: Error) => {
+  bootstrapLogger.error(`Fatal bootstrap failure: ${err.message}`, err.stack);
   process.exit(1);
 });

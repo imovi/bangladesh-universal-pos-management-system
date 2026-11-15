@@ -3,7 +3,7 @@ import {
   ConflictException,
   NotFoundException,
 } from "@nestjs/common";
-import { PrismaService } from "../../common/database/prisma.service.js";
+import { TenantContextService } from "../../common/database/tenant-context.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import argon2 from "argon2";
 import { CreateUserDto, UpdateUserDto } from "@universal-pos/shared";
@@ -11,16 +11,59 @@ import { CreateUserDto, UpdateUserDto } from "@universal-pos/shared";
 @Injectable()
 export class UsersService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly tenantContext: TenantContextService,
     private readonly auditService: AuditService,
   ) {}
 
   async findMany(tenantId: string, page = 1, limit = 20) {
     const skip = (page - 1) * limit;
 
-    const [items, total] = await Promise.all([
-      this.prisma.user.findMany({
-        where: { tenantId },
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const [items, total] = await Promise.all([
+        tx.user.findMany({
+          where: { tenantId },
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+            name: true,
+            isActive: true,
+            lastLoginAt: true,
+            createdAt: true,
+            userRoles: {
+              include: {
+                role: true,
+              },
+            },
+            userBranches: {
+              include: {
+                branch: true,
+              },
+            },
+          },
+          skip,
+          take: limit,
+          orderBy: { createdAt: "desc" },
+        }),
+        tx.user.count({ where: { tenantId } }),
+      ]);
+
+      return {
+        items,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    });
+  }
+
+  async findById(tenantId: string, id: string) {
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const user = await tx.user.findFirst({
+        where: { id, tenantId },
         select: {
           id: true,
           email: true,
@@ -40,75 +83,36 @@ export class UsersService {
             },
           },
         },
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-      }),
-      this.prisma.user.count({ where: { tenantId } }),
-    ]);
+      });
 
-    return {
-      items,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  }
+      if (!user) {
+        throw new NotFoundException("User not found");
+      }
 
-  async findById(tenantId: string, id: string) {
-    const user = await this.prisma.user.findFirst({
-      where: { id, tenantId },
-      select: {
-        id: true,
-        email: true,
-        phone: true,
-        name: true,
-        isActive: true,
-        lastLoginAt: true,
-        createdAt: true,
-        userRoles: {
-          include: {
-            role: true,
-          },
-        },
-        userBranches: {
-          include: {
-            branch: true,
-          },
-        },
-      },
+      return user;
     });
-
-    if (!user) {
-      throw new NotFoundException("User not found");
-    }
-
-    return user;
   }
 
   async create(tenantId: string, dto: CreateUserDto, actorUserId?: string) {
-    const existing = await this.prisma.user.findUnique({
-      where: {
-        tenantId_email: {
-          tenantId,
-          email: dto.email,
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const existing = await tx.user.findUnique({
+        where: {
+          tenantId_email: {
+            tenantId,
+            email: dto.email,
+          },
         },
-      },
-    });
+      });
 
-    if (existing) {
-      throw new ConflictException(
-        `User with email '${dto.email}' already exists in this tenant`,
-      );
-    }
+      if (existing) {
+        throw new ConflictException(
+          `User with email '${dto.email}' already exists in this tenant`,
+        );
+      }
 
-    const passwordHash = await argon2.hash(dto.password);
-    const pinHash = dto.pin ? await argon2.hash(dto.pin) : null;
+      const passwordHash = await argon2.hash(dto.password);
+      const pinHash = dto.pin ? await argon2.hash(dto.pin) : null;
 
-    return this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
           tenantId,
@@ -153,7 +157,20 @@ export class UsersService {
         tx,
       );
 
-      return this.findById(tenantId, user.id);
+      return tx.user.findFirst({
+        where: { id: user.id, tenantId },
+        select: {
+          id: true,
+          email: true,
+          phone: true,
+          name: true,
+          isActive: true,
+          lastLoginAt: true,
+          createdAt: true,
+          userRoles: { include: { role: true } },
+          userBranches: { include: { branch: true } },
+        },
+      });
     });
   }
 
@@ -163,11 +180,17 @@ export class UsersService {
     dto: UpdateUserDto,
     actorUserId?: string,
   ) {
-    const current = await this.findById(tenantId, id);
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const current = await tx.user.findFirst({
+        where: { id, tenantId },
+      });
 
-    return this.prisma.$transaction(async (tx) => {
+      if (!current) {
+        throw new NotFoundException("User not found");
+      }
+
       const updated = await tx.user.update({
-        where: { id },
+        where: { id, tenantId },
         data: {
           ...(dto.name ? { name: dto.name } : {}),
           ...(dto.phone !== undefined ? { phone: dto.phone } : {}),
@@ -177,7 +200,7 @@ export class UsersService {
 
       if (dto.roleIds) {
         await tx.userRole.deleteMany({
-          where: { userId: id },
+          where: { userId: id, tenantId },
         });
         await tx.userRole.createMany({
           data: dto.roleIds.map((roleId) => ({
@@ -190,7 +213,7 @@ export class UsersService {
 
       if (dto.branchIds) {
         await tx.userBranch.deleteMany({
-          where: { userId: id },
+          where: { userId: id, tenantId },
         });
         await tx.userBranch.createMany({
           data: dto.branchIds.map((branchId) => ({
@@ -214,7 +237,20 @@ export class UsersService {
         tx,
       );
 
-      return this.findById(tenantId, id);
+      return tx.user.findFirst({
+        where: { id, tenantId },
+        select: {
+          id: true,
+          email: true,
+          phone: true,
+          name: true,
+          isActive: true,
+          lastLoginAt: true,
+          createdAt: true,
+          userRoles: { include: { role: true } },
+          userBranches: { include: { branch: true } },
+        },
+      });
     });
   }
 }

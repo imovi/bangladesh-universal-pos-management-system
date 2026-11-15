@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { PrismaService } from "../../common/database/prisma.service.js";
+import { TenantContextService } from "../../common/database/tenant-context.service.js";
 import { Prisma } from "@prisma/client";
 
 export interface CreateAuditLogParams {
@@ -15,25 +15,33 @@ export interface CreateAuditLogParams {
 
 @Injectable()
 export class AuditService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly tenantContext: TenantContextService) {}
 
   async log(params: CreateAuditLogParams, tx?: Prisma.TransactionClient) {
-    const client = tx || this.prisma;
-    return client.auditLog.create({
-      data: {
-        tenantId: params.tenantId,
-        actorUserId: params.actorUserId,
-        action: params.action,
-        entityType: params.entityType,
-        entityId: params.entityId,
-        before: params.before
-          ? (params.before as Prisma.InputJsonValue)
-          : Prisma.JsonNull,
-        after: params.after
-          ? (params.after as Prisma.InputJsonValue)
-          : Prisma.JsonNull,
-        ip: params.ip,
-      },
+    const execute = (client: Prisma.TransactionClient) =>
+      client.auditLog.create({
+        data: {
+          tenantId: params.tenantId,
+          actorUserId: params.actorUserId,
+          action: params.action,
+          entityType: params.entityType,
+          entityId: params.entityId,
+          before: params.before
+            ? (params.before as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+          after: params.after
+            ? (params.after as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+          ip: params.ip,
+        },
+      });
+
+    if (tx) {
+      return execute(tx);
+    }
+
+    return this.tenantContext.runWithTenant(params.tenantId, async (ctxTx) => {
+      return execute(ctxTx);
     });
   }
 
@@ -56,24 +64,26 @@ export class AuditService {
       ...(query.actorUserId ? { actorUserId: query.actorUserId } : {}),
     };
 
-    const [items, total] = await Promise.all([
-      this.prisma.auditLog.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-      }),
-      this.prisma.auditLog.count({ where }),
-    ]);
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const [items, total] = await Promise.all([
+        tx.auditLog.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { createdAt: "desc" },
+        }),
+        tx.auditLog.count({ where }),
+      ]);
 
-    return {
-      items,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+      return {
+        items,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    });
   }
 }

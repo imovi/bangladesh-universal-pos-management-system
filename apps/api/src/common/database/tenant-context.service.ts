@@ -1,37 +1,31 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { PrismaService } from "./prisma.service.js";
-import { Prisma } from "@prisma/client";
+import { Injectable, BadRequestException } from '@nestjs/common';
+import { PrismaService } from './prisma.service.js';
+import { Prisma } from '@prisma/client';
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class TenantContextService {
-  private readonly logger = new Logger(TenantContextService.name);
-
   constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Runs an operation with PostgreSQL Row Level Security (RLS) configured for the tenant.
-   * Uses SET LOCAL so that settings reset automatically at the end of the transaction.
+   * Fails closed: if SET LOCAL ROLE pos_app fails or tenantId is invalid, transaction fails immediately.
    */
   async runWithTenant<T>(
     tenantId: string,
     operation: (tx: Prisma.TransactionClient) => Promise<T>,
   ): Promise<T> {
-    return this.prisma.$transaction(async (tx) => {
-      // 1. Switch to unprivileged role pos_app if running on PostgreSQL with RLS
-      try {
-        await tx.$executeRawUnsafe(`SET LOCAL ROLE pos_app;`);
-      } catch (e: unknown) {
-        // Fallback for non-RLS / test environments
-        this.logger.debug(
-          `Could not set role pos_app (likely testing or admin setup): ${(e as Error).message}`,
-        );
-      }
+    if (!tenantId || !UUID_REGEX.test(tenantId)) {
+      throw new BadRequestException('Invalid tenantId: must be a valid UUID');
+    }
 
-      // 2. Set session variable for tenant_id (is_local = true)
-      await tx.$executeRawUnsafe(
-        `SELECT set_config('app.tenant_id', $1, true);`,
-        tenantId,
-      );
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Switch to unprivileged role pos_app (strictly fail-closed, no try/catch)
+      await tx.$executeRaw`SET LOCAL ROLE pos_app;`;
+
+      // 2. Set parameterised session variable for tenant_id (is_local = true)
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true);`;
 
       // 3. Execute business logic within isolation boundary
       return operation(tx);

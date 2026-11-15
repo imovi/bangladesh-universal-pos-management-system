@@ -4,9 +4,9 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { PrismaService } from "../../common/database/prisma.service.js";
+import { SystemDbService } from "../../common/database/system-db.service.js";
+import { TenantContextService } from "../../common/database/tenant-context.service.js";
 import { ConfigService } from "../../common/config/config.service.js";
-import { AuditService } from "../audit/audit.service.js";
 import argon2 from "argon2";
 import crypto from "crypto";
 import {
@@ -21,10 +21,10 @@ import {
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly systemDb: SystemDbService,
+    private readonly tenantContext: TenantContextService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-    private readonly auditService: AuditService,
   ) {}
 
   async login(payload: LoginDto, ip?: string) {
@@ -35,128 +35,124 @@ export class AuthService {
 
     const { tenantSlug, email, password } = parseResult.data;
 
-    // 1. Locate Tenant
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { slug: tenantSlug },
-    });
-
+    // 1. Locate Tenant via SystemDbService (outside tenant boundary)
+    const tenant = await this.systemDb.findTenantBySlug(tenantSlug);
     if (!tenant || tenant.status !== "active") {
       throw new UnauthorizedException("Invalid tenant or account credentials");
     }
 
-    // 2. Locate User
-    const user = await this.prisma.user.findUnique({
-      where: {
-        tenantId_email: {
-          tenantId: tenant.id,
-          email,
+    // 2. Execute user verification, token generation, and audit logging inside Tenant Context (RLS enforced)
+    return this.tenantContext.runWithTenant(tenant.id, async (tx) => {
+      const user = await tx.user.findUnique({
+        where: {
+          tenantId_email: {
+            tenantId: tenant.id,
+            email,
+          },
         },
-      },
-      include: {
-        userRoles: {
-          include: {
-            role: {
-              include: {
-                rolePermissions: true,
+        include: {
+          userRoles: {
+            include: {
+              role: {
+                include: {
+                  rolePermissions: true,
+                },
               },
             },
           },
         },
-      },
-    });
-
-    if (!user || !user.isActive) {
-      throw new UnauthorizedException("Invalid tenant or account credentials");
-    }
-
-    // 3. Verify Argon2 password
-    const isPasswordValid = await argon2.verify(user.passwordHash, password);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException("Invalid tenant or account credentials");
-    }
-
-    // 4. Compile Roles & Permissions
-    const roleNames = user.userRoles.map((ur) => ur.role.name);
-    const isOwner = roleNames.includes(SYSTEM_ROLES.OWNER);
-
-    let permissionSet = new Set<string>();
-    if (isOwner) {
-      permissionSet.add("*");
-    } else {
-      user.userRoles.forEach((ur) => {
-        ur.role.rolePermissions.forEach((rp) => {
-          permissionSet.add(rp.permissionKey);
-        });
       });
-    }
 
-    const permissions = Array.from(permissionSet);
+      if (!user || !user.isActive) {
+        throw new UnauthorizedException("Invalid tenant or account credentials");
+      }
 
-    // 5. Generate Access & Refresh Tokens
-    const jwtPayload: JwtPayload = {
-      sub: user.id,
-      tenantId: tenant.id,
-      tenantSlug: tenant.slug,
-      email: user.email,
-      roles: roleNames,
-      permissions,
-      isOwner,
-    };
+      const isPasswordValid = await argon2.verify(user.passwordHash, password);
+      if (!isPasswordValid) {
+        throw new UnauthorizedException("Invalid tenant or account credentials");
+      }
 
-    const accessToken = await this.jwtService.signAsync(jwtPayload, {
-      secret: this.configService.get("JWT_ACCESS_SECRET"),
-      expiresIn: 900,
-    });
+      const roleNames = user.userRoles.map((ur) => ur.role.name);
+      const isOwner = roleNames.includes(SYSTEM_ROLES.OWNER);
 
-    const rawRefreshToken = `rt_${crypto.randomBytes(32).toString("hex")}`;
-    const tokenHash = crypto
-      .createHash("sha256")
-      .update(rawRefreshToken)
-      .digest("hex");
+      const permissionSet = new Set<string>();
+      if (isOwner) {
+        permissionSet.add("*");
+      } else {
+        user.userRoles.forEach((ur) => {
+          ur.role.rolePermissions.forEach((rp) => {
+            permissionSet.add(rp.permissionKey);
+          });
+        });
+      }
 
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30); // 30 days
+      const permissions = Array.from(permissionSet);
 
-    await this.prisma.refreshToken.create({
-      data: {
-        tenantId: tenant.id,
-        userId: user.id,
-        tokenHash,
-        expiresAt,
-      },
-    });
-
-    // 6. Update last login
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    });
-
-    // 7. Audit log
-    await this.auditService.log({
-      tenantId: tenant.id,
-      actorUserId: user.id,
-      action: "auth.login",
-      entityType: "User",
-      entityId: user.id,
-      ip,
-    });
-
-    return {
-      accessToken,
-      refreshToken: rawRefreshToken,
-      expiresIn: 900,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
+      const jwtPayload: JwtPayload = {
+        sub: user.id,
         tenantId: tenant.id,
         tenantSlug: tenant.slug,
+        email: user.email,
         roles: roleNames,
         permissions,
         isOwner,
-      },
-    };
+      };
+
+      const accessToken = await this.jwtService.signAsync(jwtPayload, {
+        secret: this.configService.get("JWT_ACCESS_SECRET"),
+        expiresIn: 900,
+      });
+
+      const rawRefreshToken = `rt_${crypto.randomBytes(32).toString("hex")}`;
+      const tokenHash = crypto
+        .createHash("sha256")
+        .update(rawRefreshToken)
+        .digest("hex");
+
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30);
+
+      await tx.refreshToken.create({
+        data: {
+          tenantId: tenant.id,
+          userId: user.id,
+          tokenHash,
+          expiresAt,
+        },
+      });
+
+      await tx.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          tenantId: tenant.id,
+          actorUserId: user.id,
+          action: "auth.login",
+          entityType: "User",
+          entityId: user.id,
+          ip,
+        },
+      });
+
+      return {
+        accessToken,
+        refreshToken: rawRefreshToken,
+        expiresIn: 900,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          tenantId: tenant.id,
+          tenantSlug: tenant.slug,
+          roles: roleNames,
+          permissions,
+          isOwner,
+        },
+      };
+    });
   }
 
   async refresh(payload: RefreshTokenDto) {
@@ -166,42 +162,17 @@ export class AuthService {
     }
 
     const rawToken = parseResult.data.refreshToken;
-    const tokenHash = crypto
-      .createHash("sha256")
-      .update(rawToken)
-      .digest("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
 
-    const tokenRecord = await this.prisma.refreshToken.findFirst({
-      where: { tokenHash },
-      include: {
-        user: {
-          include: {
-            tenant: true,
-            userRoles: {
-              include: {
-                role: {
-                  include: {
-                    rolePermissions: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-
+    // Look up token via system service
+    const tokenRecord = await this.systemDb.findRefreshTokenByHash(tokenHash);
     if (!tokenRecord) {
       throw new UnauthorizedException("Invalid refresh token");
     }
 
-    // Refresh Token Reuse Detection
+    // Reuse detection
     if (tokenRecord.revokedAt !== null) {
-      // Invalidate all tokens for this user!
-      await this.prisma.refreshToken.updateMany({
-        where: { userId: tokenRecord.userId },
-        data: { revokedAt: new Date() },
-      });
+      await this.systemDb.revokeAllUserRefreshTokens(tokenRecord.userId);
       throw new UnauthorizedException(
         "Security alert: Revoked refresh token reused. All sessions invalidated.",
       );
@@ -216,65 +187,66 @@ export class AuthService {
       throw new UnauthorizedException("User or tenant account is inactive");
     }
 
-    // Rotate: Revoke old token
-    await this.prisma.refreshToken.update({
-      where: { id: tokenRecord.id },
-      data: { revokedAt: new Date() },
-    });
-
-    // Issue new pair
-    const roleNames = user.userRoles.map((ur) => ur.role.name);
-    const isOwner = roleNames.includes(SYSTEM_ROLES.OWNER);
-
-    let permissionSet = new Set<string>();
-    if (isOwner) {
-      permissionSet.add("*");
-    } else {
-      user.userRoles.forEach((ur) => {
-        ur.role.rolePermissions.forEach((rp) => {
-          permissionSet.add(rp.permissionKey);
-        });
+    // Execute token rotation inside Tenant Context
+    return this.tenantContext.runWithTenant(tokenRecord.tenantId, async (tx) => {
+      await tx.refreshToken.update({
+        where: { id: tokenRecord.id },
+        data: { revokedAt: new Date() },
       });
-    }
 
-    const jwtPayload: JwtPayload = {
-      sub: user.id,
-      tenantId: user.tenantId,
-      tenantSlug: user.tenant.slug,
-      email: user.email,
-      roles: roleNames,
-      permissions: Array.from(permissionSet),
-      isOwner,
-    };
+      const roleNames = user.userRoles.map((ur) => ur.role.name);
+      const isOwner = roleNames.includes(SYSTEM_ROLES.OWNER);
 
-    const newAccessToken = await this.jwtService.signAsync(jwtPayload, {
-      secret: this.configService.get("JWT_ACCESS_SECRET"),
-      expiresIn: 900,
-    });
+      const permissionSet = new Set<string>();
+      if (isOwner) {
+        permissionSet.add("*");
+      } else {
+        user.userRoles.forEach((ur) => {
+          ur.role.rolePermissions.forEach((rp) => {
+            permissionSet.add(rp.permissionKey);
+          });
+        });
+      }
 
-    const newRawRefreshToken = `rt_${crypto.randomBytes(32).toString("hex")}`;
-    const newTokenHash = crypto
-      .createHash("sha256")
-      .update(newRawRefreshToken)
-      .digest("hex");
-
-    const newExpiresAt = new Date();
-    newExpiresAt.setDate(newExpiresAt.getDate() + 30);
-
-    await this.prisma.refreshToken.create({
-      data: {
+      const jwtPayload: JwtPayload = {
+        sub: user.id,
         tenantId: user.tenantId,
-        userId: user.id,
-        tokenHash: newTokenHash,
-        expiresAt: newExpiresAt,
-      },
-    });
+        tenantSlug: user.tenant.slug,
+        email: user.email,
+        roles: roleNames,
+        permissions: Array.from(permissionSet),
+        isOwner,
+      };
 
-    return {
-      accessToken: newAccessToken,
-      refreshToken: newRawRefreshToken,
-      expiresIn: 900,
-    };
+      const newAccessToken = await this.jwtService.signAsync(jwtPayload, {
+        secret: this.configService.get("JWT_ACCESS_SECRET"),
+        expiresIn: 900,
+      });
+
+      const newRawRefreshToken = `rt_${crypto.randomBytes(32).toString("hex")}`;
+      const newTokenHash = crypto
+        .createHash("sha256")
+        .update(newRawRefreshToken)
+        .digest("hex");
+
+      const newExpiresAt = new Date();
+      newExpiresAt.setDate(newExpiresAt.getDate() + 30);
+
+      await tx.refreshToken.create({
+        data: {
+          tenantId: user.tenantId,
+          userId: user.id,
+          tokenHash: newTokenHash,
+          expiresAt: newExpiresAt,
+        },
+      });
+
+      return {
+        accessToken: newAccessToken,
+        refreshToken: newRawRefreshToken,
+        expiresIn: 900,
+      };
+    });
   }
 
   async logout(payload: RefreshTokenDto) {
@@ -283,69 +255,78 @@ export class AuthService {
       .createHash("sha256")
       .update(payload.refreshToken)
       .digest("hex");
-    await this.prisma.refreshToken.updateMany({
-      where: { tokenHash },
-      data: { revokedAt: new Date() },
-    });
-    return { loggedOut: true };
-  }
 
-  async getMe(userId: string, tenantId: string) {
-    const user = await this.prisma.user.findFirst({
-      where: { id: userId, tenantId },
-      include: {
-        tenant: true,
-        userRoles: {
-          include: {
-            role: {
-              include: {
-                rolePermissions: true,
-              },
-            },
-          },
-        },
-        userBranches: {
-          include: {
-            branch: true,
-          },
-        },
-      },
-    });
-
-    if (!user) {
-      throw new UnauthorizedException("User profile not found");
-    }
-
-    const roleNames = user.userRoles.map((ur) => ur.role.name);
-    const isOwner = roleNames.includes(SYSTEM_ROLES.OWNER);
-
-    let permissionSet = new Set<string>();
-    if (isOwner) {
-      permissionSet.add("*");
-    } else {
-      user.userRoles.forEach((ur) => {
-        ur.role.rolePermissions.forEach((rp) => {
-          permissionSet.add(rp.permissionKey);
+    const record = await this.systemDb.findRefreshTokenByHash(tokenHash);
+    if (record) {
+      await this.tenantContext.runWithTenant(record.tenantId, async (tx) => {
+        await tx.refreshToken.updateMany({
+          where: { tokenHash, tenantId: record.tenantId },
+          data: { revokedAt: new Date() },
         });
       });
     }
 
-    return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      tenantId: user.tenantId,
-      tenantName: user.tenant.name,
-      tenantSlug: user.tenant.slug,
-      roles: roleNames,
-      permissions: Array.from(permissionSet),
-      branches: user.userBranches.map((ub) => ({
-        id: ub.branch.id,
-        name: ub.branch.name,
-        code: ub.branch.code,
-      })),
-      isOwner,
-    };
+    return { loggedOut: true };
+  }
+
+  async getMe(userId: string, tenantId: string) {
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const user = await tx.user.findFirst({
+        where: { id: userId, tenantId },
+        include: {
+          tenant: true,
+          userRoles: {
+            include: {
+              role: {
+                include: {
+                  rolePermissions: true,
+                },
+              },
+            },
+          },
+          userBranches: {
+            include: {
+              branch: true,
+            },
+          },
+        },
+      });
+
+      if (!user) {
+        throw new UnauthorizedException("User profile not found");
+      }
+
+      const roleNames = user.userRoles.map((ur) => ur.role.name);
+      const isOwner = roleNames.includes(SYSTEM_ROLES.OWNER);
+
+      const permissionSet = new Set<string>();
+      if (isOwner) {
+        permissionSet.add("*");
+      } else {
+        user.userRoles.forEach((ur) => {
+          ur.role.rolePermissions.forEach((rp) => {
+            permissionSet.add(rp.permissionKey);
+          });
+        });
+      }
+
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        tenantId: user.tenantId,
+        tenantName: user.tenant.name,
+        tenantSlug: user.tenant.slug,
+        roles: roleNames,
+        permissions: Array.from(permissionSet),
+        branches: user.userBranches.map((ub) => ({
+          id: ub.branch.id,
+          name: ub.branch.name,
+          code: ub.branch.code,
+        })),
+        isOwner,
+      };
+    });
   }
 }

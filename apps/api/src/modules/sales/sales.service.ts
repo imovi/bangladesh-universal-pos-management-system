@@ -2,11 +2,13 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { v7 as uuidv7 } from "uuid";
 import { TenantContextService } from "../../common/database/tenant-context.service.js";
+import { SystemDbService } from "../../common/database/system-db.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { InventoryService } from "../inventory/inventory.service.js";
 import {
@@ -21,6 +23,7 @@ export class SalesService {
     private readonly tenantContext: TenantContextService,
     private readonly auditService: AuditService,
     private readonly inventoryService: InventoryService,
+    private readonly systemDb: SystemDbService,
   ) {}
 
   private async generateInvoiceNumber(
@@ -70,24 +73,77 @@ export class SalesService {
     });
   }
 
-  private computeAndValidateTotals(dto: CreateSaleDto) {
-    const calculated = calculateSaleTotals(
-      dto.items.map((it) => ({
-        variantId: it.variantId,
-        unitPriceMinor: BigInt(it.unitPriceMinor),
-        quantity: it.quantity,
-        discount: it.discount,
-        taxRateBp: it.taxRateBp,
-      })),
-      { pricesIncludeTax: dto.pricesIncludeTax, billDiscount: dto.billDiscount },
+  private resolveItemPricingAndTaxes(
+    items: CreateSaleDto["items"],
+    variantMap: Map<string, any>,
+    defaultTaxRateBp: number,
+    user?: { isOwner?: boolean; permissions?: string[] },
+  ) {
+    const canOverride = Boolean(
+      user?.isOwner ||
+        user?.permissions?.includes("sale.price_override") ||
+        user?.permissions?.includes("*"),
     );
 
-    if (dto.expectedTotalMinor !== undefined && BigInt(dto.expectedTotalMinor) !== calculated.totalMinor) {
+    const originalPrices: (bigint | null)[] = [];
+
+    const lineInputs = items.map((it) => {
+      const v = variantMap.get(it.variantId);
+      if (!v || !v.isActive || !v.product || !v.product.isActive) {
+        throw new UnprocessableEntityException({
+          code: "INACTIVE_PRODUCT_OR_VARIANT",
+          message: `Variant ${it.variantId} or its product is inactive or not found`,
+        });
+      }
+
+      let unitPriceMinor = v.priceMinor;
+      if (it.overrideUnitPriceMinor !== undefined) {
+        if (!canOverride) {
+          throw new ForbiddenException("Price override requires sale.price_override permission");
+        }
+        originalPrices.push(v.priceMinor);
+        unitPriceMinor = BigInt(it.overrideUnitPriceMinor);
+      } else {
+        originalPrices.push(null);
+      }
+
+      const taxRateBp = v.product.taxClass ? v.product.taxClass.rateBp : defaultTaxRateBp;
+      return { variantId: it.variantId, unitPriceMinor, quantity: it.quantity, discount: it.discount, taxRateBp };
+    });
+
+    return { lineInputs, originalPrices };
+  }
+
+  private computeAndValidateTotals(
+    dto: CreateSaleDto,
+    lineInputs: any[],
+    pricesIncludeTax: boolean,
+  ) {
+    const calculated = calculateSaleTotals(lineInputs, { pricesIncludeTax, billDiscount: dto.billDiscount });
+
+    if (BigInt(dto.expectedTotalMinor) !== calculated.totalMinor) {
       throw new UnprocessableEntityException({
         code: "CALCULATION_MISMATCH",
         message: "Calculation mismatch: client total differs from server recomputation",
-        serverTotalMinor: Number(calculated.totalMinor),
-        clientTotalMinor: dto.expectedTotalMinor,
+        details: [
+          {
+            field: "expectedTotalMinor",
+            issue: `Expected total ${dto.expectedTotalMinor} does not match computed total ${calculated.totalMinor}`,
+            serverTotalMinor: Number(calculated.totalMinor),
+            clientTotalMinor: dto.expectedTotalMinor,
+            breakdown: {
+              grossMinor: Number(calculated.grossMinor),
+              discountMinor: Number(calculated.totalDiscountMinor),
+              taxMinor: Number(calculated.taxMinor),
+              totalMinor: Number(calculated.totalMinor),
+              lines: calculated.lines.map((l) => ({
+                variantId: l.variantId, unitPriceMinor: Number(l.unitPriceMinor), quantity: l.quantity,
+                grossMinor: Number(l.grossMinor), discountMinor: Number(l.lineDiscountMinor + l.allocatedBillDiscountMinor),
+                taxMinor: Number(l.taxMinor), totalMinor: Number(l.totalMinor),
+              })),
+            },
+          },
+        ],
       });
     }
 
@@ -107,11 +163,36 @@ export class SalesService {
     return existing && existing.tenantId === tenantId ? { ...existing, isDuplicate: true } : null;
   }
 
+  private buildSaleItemsData(
+    tenantId: string,
+    lines: any[],
+    costMap: Map<string, bigint>,
+    originalPrices: (bigint | null)[],
+  ) {
+    return lines.map((l: any, idx: number) => ({
+      id: uuidv7(),
+      tenantId,
+      variantId: l.variantId,
+      unitPriceMinor: l.unitPriceMinor,
+      originalUnitPriceMinor: originalPrices[idx] ?? null,
+      unitCostMinor: costMap.get(l.variantId) ?? 0n,
+      quantity: new Prisma.Decimal(l.quantity),
+      subtotalMinor: l.grossMinor,
+      discountMinor: l.lineDiscountMinor + l.allocatedBillDiscountMinor,
+      taxRateBp: l.taxRateBp,
+      taxMinor: l.taxMinor,
+      totalMinor: l.totalMinor,
+    }));
+  }
+
   private async executeSaleInsert(
     tx: Prisma.TransactionClient,
     tenantId: string,
     dto: CreateSaleDto,
-    meta: { saleId: string; inv: string; calc: any; paid: bigint; change: bigint; userId: string; costMap: Map<string, bigint> },
+    meta: {
+      saleId: string; inv: string; calc: any; paid: bigint; change: bigint;
+      userId: string; costMap: Map<string, bigint>; originalPrices: (bigint | null)[];
+    },
   ) {
     return tx.sale.create({
       data: {
@@ -131,19 +212,7 @@ export class SalesService {
         changeMinor: meta.change,
         notes: dto.notes,
         items: {
-          create: meta.calc.lines.map((l: any) => ({
-            id: uuidv7(),
-            tenantId,
-            variantId: l.variantId,
-            unitPriceMinor: l.unitPriceMinor,
-            unitCostMinor: meta.costMap.get(l.variantId) ?? 0n,
-            quantity: new Prisma.Decimal(l.quantity),
-            subtotalMinor: l.grossMinor,
-            discountMinor: l.lineDiscountMinor + l.allocatedBillDiscountMinor,
-            taxRateBp: l.taxRateBp,
-            taxMinor: l.taxMinor,
-            totalMinor: l.totalMinor,
-          })),
+          create: this.buildSaleItemsData(tenantId, meta.calc.lines, meta.costMap, meta.originalPrices),
         },
         payments: {
           create: dto.payments.map((p) => ({
@@ -159,46 +228,74 @@ export class SalesService {
     });
   }
 
-  async create(tenantId: string, dto: CreateSaleDto, userId: string, ip?: string) {
+  private async loadShiftAndVariants(tx: Prisma.TransactionClient, tenantId: string, dto: CreateSaleDto) {
+    const shift = await tx.shift.findUnique({ where: { id: dto.shiftId } });
+    if (!shift || shift.tenantId !== tenantId || shift.status !== "open") {
+      throw new BadRequestException("Active open shift required for sale");
+    }
+    const defaultTax = await tx.taxClass.findFirst({ where: { tenantId, isDefault: true } });
+    const variants = await tx.productVariant.findMany({
+      where: { id: { in: dto.items.map((i) => i.variantId) }, tenantId },
+      include: { product: { include: { taxClass: true } } },
+    });
+    return { shift, defaultTaxRateBp: defaultTax?.rateBp ?? 0, variants };
+  }
+
+  private async finalizeSaleOperations(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    meta: { saleId: string; inv: string; calc: any; branchId: string; customerId?: string; userId: string; ip?: string },
+  ) {
+    await this.inventoryService.applyMovements(
+      tenantId, tx,
+      meta.calc.lines.map((l: any) => ({
+        branchId: meta.branchId, variantId: l.variantId, qtyDelta: -Number(l.quantity),
+        type: "sale", refType: "sale", refId: meta.saleId, reason: `Sale ${meta.inv}`, actorUserId: meta.userId,
+      })),
+    );
+    await this.updateCustomerMetrics(tx, meta.customerId, meta.calc.totalMinor, false);
+    await this.auditService.log(
+      {
+        tenantId, actorUserId: meta.userId, action: "sale.create", entityType: "sale", entityId: meta.saleId,
+        after: { invoiceNumber: meta.inv, totalMinor: Number(meta.calc.totalMinor), itemsCount: meta.calc.lines.length }, ip: meta.ip,
+      },
+      tx,
+    );
+  }
+
+  async create(
+    tenantId: string,
+    dto: CreateSaleDto,
+    userId: string,
+    ip?: string,
+    user?: { isOwner?: boolean; permissions?: string[] },
+  ) {
+    const tenant = await this.systemDb.findTenantById(tenantId);
+    const tenantSettings = (tenant?.settings as Record<string, unknown>) || {};
+    const pricesIncludeTax = (tenantSettings.prices_include_tax as boolean) ?? true;
+
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const duplicate = await this.checkIdempotency(tx, dto.id, tenantId);
       if (duplicate) return duplicate;
 
-      const shift = await tx.shift.findUnique({ where: { id: dto.shiftId } });
-      if (!shift || shift.tenantId !== tenantId || shift.status !== "open") {
-        throw new BadRequestException("Active open shift required for sale");
-      }
+      const { shift, defaultTaxRateBp, variants } = await this.loadShiftAndVariants(tx, tenantId, dto);
+      const variantMap = new Map(variants.map((v) => [v.id, v]));
+      const { lineInputs, originalPrices } = this.resolveItemPricingAndTaxes(dto.items, variantMap, defaultTaxRateBp, user);
+      const { calculated, paidMinor, changeMinor } = this.computeAndValidateTotals(dto, lineInputs, pricesIncludeTax);
 
-      const { calculated, paidMinor, changeMinor } = this.computeAndValidateTotals(dto);
       const saleId = dto.id || uuidv7();
       const invoiceNumber = await this.generateInvoiceNumber(tenantId, shift.registerId, tx);
-
-      const variants = await tx.productVariant.findMany({
-        where: { id: { in: dto.items.map((i) => i.variantId) } },
-        select: { id: true, costMinor: true },
-      });
       const costMap = new Map(variants.map((v) => [v.id, v.costMinor]));
 
       const sale = await this.executeSaleInsert(tx, tenantId, dto, {
-        saleId, inv: invoiceNumber, calc: calculated, paid: paidMinor, change: changeMinor, userId, costMap,
+        saleId, inv: invoiceNumber, calc: calculated, paid: paidMinor, change: changeMinor,
+        userId, costMap, originalPrices,
       });
 
-      await this.inventoryService.applyMovements(
-        tenantId, tx,
-        calculated.lines.map((l) => ({
-          branchId: dto.branchId, variantId: l.variantId, qtyDelta: -Number(l.quantity),
-          type: "sale", refType: "sale", refId: saleId, reason: `Sale ${invoiceNumber}`, actorUserId: userId,
-        })),
-      );
+      await this.finalizeSaleOperations(tx, tenantId, {
+        saleId, inv: invoiceNumber, calc: calculated, branchId: dto.branchId, customerId: dto.customerId, userId, ip,
+      });
 
-      await this.updateCustomerMetrics(tx, dto.customerId, calculated.totalMinor, false);
-      await this.auditService.log(
-        {
-          tenantId, actorUserId: userId, action: "sale.create", entityType: "sale", entityId: saleId,
-          after: { invoiceNumber, totalMinor: Number(calculated.totalMinor), itemsCount: calculated.lines.length }, ip,
-        },
-        tx,
-      );
       return sale;
     });
   }

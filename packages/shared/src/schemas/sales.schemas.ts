@@ -10,9 +10,8 @@ export const SaleItemInputSchema = z.object({
   lineId: z.string().optional(),
   variantId: z.string().uuid(),
   quantity: z.coerce.number().positive(),
-  unitPriceMinor: z.coerce.number().int().min(0),
+  overrideUnitPriceMinor: z.coerce.number().int().min(0).optional(),
   discount: LineDiscountInputSchema.optional(),
-  taxRateBp: z.coerce.number().int().min(0).default(0),
 });
 
 export const SalePaymentInputSchema = z.object({
@@ -27,11 +26,10 @@ export const CreateSaleSchema = z.object({
   branchId: z.string().uuid(),
   customerId: z.string().uuid().optional(),
   billDiscount: LineDiscountInputSchema.optional(),
-  pricesIncludeTax: z.boolean().default(false),
   items: z.array(SaleItemInputSchema).min(1, "Sale must have at least one line item"),
   payments: z.array(SalePaymentInputSchema).min(1, "At least one payment is required"),
   notes: z.string().trim().max(500).optional(),
-  expectedTotalMinor: z.coerce.number().int().min(0).optional(),
+  expectedTotalMinor: z.coerce.number().int().min(0),
 });
 export type CreateSaleDto = z.infer<typeof CreateSaleSchema>;
 

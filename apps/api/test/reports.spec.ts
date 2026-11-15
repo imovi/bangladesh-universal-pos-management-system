@@ -95,23 +95,26 @@ describe("M7: Fashion Analytics & Financial Reports Integration Tests", () => {
 
     // Sale 1: 2x M-Blue @ 250,000 = 500,000; discount 50,000; total = 450,000 (300,000 cash, 150,000 bkash)
     await request(app.getHttpServer()).post("/api/v1/sales").set("Authorization", `Bearer ${cashierToken}`).send({
-      shiftId, branchId, pricesIncludeTax: true,
-      items: [{ variantId: variantMBlueId, quantity: 2, unitPriceMinor: 250000, discount: { type: "fixed", amountMinor: 50000 } }],
+      shiftId, branchId,
+      items: [{ variantId: variantMBlueId, quantity: 2, discount: { type: "fixed", amountMinor: 50000 } }],
       payments: [{ paymentMethod: "cash", amountMinor: 300000 }, { paymentMethod: "bkash", amountMinor: 150000 }],
+      expectedTotalMinor: 450000,
     });
 
     // Sale 2: 1x L-Black @ 250,000 = 250,000 (card payment)
     await request(app.getHttpServer()).post("/api/v1/sales").set("Authorization", `Bearer ${cashierToken}`).send({
-      shiftId, branchId, pricesIncludeTax: true,
-      items: [{ variantId: variantLBlackId, quantity: 1, unitPriceMinor: 250000 }],
+      shiftId, branchId,
+      items: [{ variantId: variantLBlackId, quantity: 1 }],
       payments: [{ paymentMethod: "card", amountMinor: 250000 }],
+      expectedTotalMinor: 250000,
     });
 
     // Sale 3: Voided sale to ensure exclusion
     const voidSaleRes = await request(app.getHttpServer()).post("/api/v1/sales").set("Authorization", `Bearer ${cashierToken}`).send({
-      shiftId, branchId, pricesIncludeTax: true,
-      items: [{ variantId: variantMBlueId, quantity: 1, unitPriceMinor: 250000 }],
+      shiftId, branchId,
+      items: [{ variantId: variantMBlueId, quantity: 1 }],
       payments: [{ paymentMethod: "cash", amountMinor: 250000 }],
+      expectedTotalMinor: 250000,
     });
     await request(app.getHttpServer()).post(`/api/v1/sales/${voidSaleRes.body.data.id}/void`).set("Authorization", `Bearer ${ownerToken}`).send({
       reason: "Mistake entry",

@@ -726,11 +726,12 @@ model Sale {
 }
 
 model SaleItem {
-  id             String         @id @default(uuid(7)) @db.Uuid
-  tenantId       String         @map("tenant_id") @db.Uuid
-  saleId         String         @map("sale_id") @db.Uuid
-  variantId      String         @map("variant_id") @db.Uuid
-  unitPriceMinor BigInt         @map("unit_price_minor")
+  id                     String         @id @default(uuid(7)) @db.Uuid
+  tenantId               String         @map("tenant_id") @db.Uuid
+  saleId                 String         @map("sale_id") @db.Uuid
+  variantId              String         @map("variant_id") @db.Uuid
+  originalUnitPriceMinor BigInt?        @map("original_unit_price_minor")
+  unitPriceMinor         BigInt         @map("unit_price_minor")
   unitCostMinor  BigInt         @map("unit_cost_minor")
   quantity       Decimal        @db.Decimal(14, 3)
   subtotalMinor  BigInt         @map("subtotal_minor")

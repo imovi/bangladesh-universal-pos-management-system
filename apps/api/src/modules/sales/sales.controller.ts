@@ -50,6 +50,7 @@ export class SalesController {
       parse.data,
       req.user.sub || req.user.userId || req.user.id,
       ip,
+      req.user,
     );
 
     if ((sale as any).isDuplicate) {

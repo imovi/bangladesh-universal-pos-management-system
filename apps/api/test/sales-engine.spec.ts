@@ -10,6 +10,7 @@ import { HttpExceptionFilter } from "../src/common/filters/http-exception.filter
 import { AuthService } from "../src/modules/auth/auth.service.js";
 import { TenantsService } from "../src/modules/tenants/tenants.service.js";
 import { TenantContextService } from "../src/common/database/tenant-context.service.js";
+import { SystemDbService } from "../src/common/database/system-db.service.js";
 import { truncateTestDatabase } from "./test-db-helper.js";
 
 describe("M6: Sales Engine Integration Tests", () => {
@@ -51,8 +52,19 @@ describe("M6: Sales Engine Integration Tests", () => {
   }
 
   async function setupCatalogAndStock() {
+    const taxRes = await request(app.getHttpServer()).post("/api/v1/tax-classes").set("Authorization", `Bearer ${ownerToken}`).send({
+      name: "Standard 5% VAT", rateBp: 500, isDefault: true,
+    });
+    const taxClassId = taxRes.body.data.id;
+
+    await app.get(SystemDbService).updateTenantSettings(tenantId, {
+      currency: "BDT",
+      language: "bn",
+      prices_include_tax: false,
+    });
+
     const prodRes = await request(app.getHttpServer()).post("/api/v1/products").set("Authorization", `Bearer ${ownerToken}`).send({
-      name: "Silk Scarf", sku: "SCARF", priceMinor: 100000, costMinor: 40000, options: [{ name: "Color", values: ["Red"] }],
+      name: "Silk Scarf", sku: "SCARF", priceMinor: 100000, costMinor: 40000, taxClassId, options: [{ name: "Color", values: ["Red"] }],
     });
     variantId = prodRes.body.data.variants[0].id;
 
@@ -111,8 +123,8 @@ describe("M6: Sales Engine Integration Tests", () => {
 
   it("POST /sales creates sale, updates stock, customer metrics, and formats invoice number", async () => {
     const salePayload = {
-      shiftId: openShiftId, branchId, customerId, pricesIncludeTax: false,
-      items: [{ variantId, quantity: 2, unitPriceMinor: 100000, discount: { type: "percent", percentBp: 1000 }, taxRateBp: 500 }],
+      shiftId: openShiftId, branchId, customerId,
+      items: [{ variantId, quantity: 2, discount: { type: "percent", percentBp: 1000 } }],
       payments: [{ paymentMethod: "cash", amountMinor: 100000 }, { paymentMethod: "bkash", amountMinor: 89000, reference: "TRX-123456" }],
       expectedTotalMinor: 189000,
     };
@@ -138,9 +150,9 @@ describe("M6: Sales Engine Integration Tests", () => {
   it("Idempotent sale creation: supplying same client id returns existing sale without double stock deduction", async () => {
     const clientId = uuidv7();
     const payload = {
-      id: clientId, shiftId: openShiftId, branchId, pricesIncludeTax: false,
-      items: [{ variantId, quantity: 1, unitPriceMinor: 100000, taxRateBp: 0 }],
-      payments: [{ paymentMethod: "cash", amountMinor: 100000 }], expectedTotalMinor: 100000,
+      id: clientId, shiftId: openShiftId, branchId,
+      items: [{ variantId, quantity: 1 }],
+      payments: [{ paymentMethod: "cash", amountMinor: 105000 }], expectedTotalMinor: 105000,
     };
     const res1 = await request(app.getHttpServer()).post("/api/v1/sales").set("Authorization", `Bearer ${cashierToken}`).send(payload);
     expect(res1.status).toBe(201);
@@ -156,16 +168,16 @@ describe("M6: Sales Engine Integration Tests", () => {
 
   it("POST /sales rejects calculation mismatch with 422 Unprocessable Entity", async () => {
     const res = await request(app.getHttpServer()).post("/api/v1/sales").set("Authorization", `Bearer ${cashierToken}`).send({
-      shiftId: openShiftId, branchId, items: [{ variantId, quantity: 1, unitPriceMinor: 100000, taxRateBp: 0 }],
-      payments: [{ paymentMethod: "cash", amountMinor: 100000 }], expectedTotalMinor: 999999,
+      shiftId: openShiftId, branchId, items: [{ variantId, quantity: 1 }],
+      payments: [{ paymentMethod: "cash", amountMinor: 105000 }], expectedTotalMinor: 999999,
     });
     expect(res.status).toBe(422);
   });
 
   it("POST /sales rejects sale on a closed shift", async () => {
     const res = await request(app.getHttpServer()).post("/api/v1/sales").set("Authorization", `Bearer ${cashierToken}`).send({
-      shiftId: closedShiftId, branchId, items: [{ variantId, quantity: 1, unitPriceMinor: 100000, taxRateBp: 0 }],
-      payments: [{ paymentMethod: "cash", amountMinor: 100000 }],
+      shiftId: closedShiftId, branchId, items: [{ variantId, quantity: 1 }],
+      payments: [{ paymentMethod: "cash", amountMinor: 105000 }], expectedTotalMinor: 105000,
     });
     expect(res.status).toBe(400);
   });

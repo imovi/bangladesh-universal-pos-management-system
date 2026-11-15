@@ -23,6 +23,7 @@ export const PERMISSIONS = {
   SALE_CREATE: "sale.create",
   SALE_VOID: "sale.void",
   SALE_DISCOUNT_OVERRIDE: "sale.discount_override",
+  SALE_PRICE_OVERRIDE: "sale.price_override",
 
   // Inventory & Catalog
   CATALOG_READ: "catalog.read",
@@ -77,6 +78,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     PERMISSIONS.SALE_CREATE,
     PERMISSIONS.SALE_VOID,
     PERMISSIONS.SALE_DISCOUNT_OVERRIDE,
+    PERMISSIONS.SALE_PRICE_OVERRIDE,
     PERMISSIONS.CATALOG_READ,
     PERMISSIONS.CATALOG_MANAGE,
     PERMISSIONS.INVENTORY_READ,

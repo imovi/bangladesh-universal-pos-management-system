@@ -7,6 +7,7 @@ import { InventoryModule } from "../inventory/inventory.module.js";
 import { PrismaService } from "../../common/database/prisma.service.js";
 import { TenantContextService } from "../../common/database/tenant-context.service.js";
 import { ConfigService } from "../../common/config/config.service.js";
+import { SystemDbService } from "../../common/database/system-db.service.js";
 
 @Module({
   imports: [AuthModule, AuditModule, InventoryModule],
@@ -16,6 +17,7 @@ import { ConfigService } from "../../common/config/config.service.js";
     PrismaService,
     TenantContextService,
     ConfigService,
+    SystemDbService,
   ],
   exports: [SalesService],
 })

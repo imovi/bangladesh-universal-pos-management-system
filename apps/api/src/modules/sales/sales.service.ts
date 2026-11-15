@@ -1,9 +1,6 @@
 import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-  ForbiddenException,
-  UnprocessableEntityException,
+  Injectable, NotFoundException, BadRequestException, ConflictException,
+  ForbiddenException, UnprocessableEntityException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { v7 as uuidv7 } from "uuid";
@@ -11,15 +8,8 @@ import { TenantContextService } from "../../common/database/tenant-context.servi
 import { SystemDbService } from "../../common/database/system-db.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { InventoryService } from "../inventory/inventory.service.js";
-import {
-  CreateSaleDto,
-  VoidSaleDto,
-  calculateSaleTotals,
-} from "@universal-pos/shared";
-import {
-  validateDiscountsNonNegative,
-  enforceDiscountAndOverrideLimits,
-} from "./sales-discount.helper.js";
+import { CreateSaleDto, VoidSaleDto, calculateSaleTotals } from "@universal-pos/shared";
+import { validateDiscountsNonNegative, enforceDiscountAndOverrideLimits } from "./sales-discount.helper.js";
 
 @Injectable()
 export class SalesService {
@@ -130,25 +120,21 @@ export class SalesService {
       throw new UnprocessableEntityException({
         code: "CALCULATION_MISMATCH",
         message: "Calculation mismatch: client total differs from server recomputation",
-        details: [
-          {
-            field: "expectedTotalMinor",
-            issue: `Expected total ${dto.expectedTotalMinor} does not match computed total ${calculated.totalMinor}`,
-            serverTotalMinor: Number(calculated.totalMinor),
-            clientTotalMinor: dto.expectedTotalMinor,
-            breakdown: {
-              grossMinor: Number(calculated.grossMinor),
-              discountMinor: Number(calculated.totalDiscountMinor),
-              taxMinor: Number(calculated.taxMinor),
-              totalMinor: Number(calculated.totalMinor),
-              lines: calculated.lines.map((l) => ({
-                variantId: l.variantId, unitPriceMinor: Number(l.unitPriceMinor), quantity: l.quantity,
-                grossMinor: Number(l.grossMinor), discountMinor: Number(l.lineDiscountMinor + l.allocatedBillDiscountMinor),
-                taxMinor: Number(l.taxMinor), totalMinor: Number(l.totalMinor),
-              })),
-            },
+        details: [{
+          field: "expectedTotalMinor",
+          issue: `Expected total ${dto.expectedTotalMinor} does not match computed total ${calculated.totalMinor}`,
+          serverTotalMinor: Number(calculated.totalMinor),
+          clientTotalMinor: dto.expectedTotalMinor,
+          breakdown: {
+            grossMinor: Number(calculated.grossMinor), discountMinor: Number(calculated.totalDiscountMinor),
+            taxMinor: Number(calculated.taxMinor), totalMinor: Number(calculated.totalMinor),
+            lines: calculated.lines.map((l) => ({
+              variantId: l.variantId, unitPriceMinor: Number(l.unitPriceMinor), quantity: l.quantity,
+              grossMinor: Number(l.grossMinor), discountMinor: Number(l.lineDiscountMinor + l.allocatedBillDiscountMinor),
+              taxMinor: Number(l.taxMinor), totalMinor: Number(l.totalMinor),
+            })),
           },
-        ],
+        }],
       });
     }
 
@@ -156,7 +142,17 @@ export class SalesService {
     if (paidMinor < calculated.totalMinor) {
       throw new BadRequestException(`Insufficient payment: paid ${paidMinor}, required ${calculated.totalMinor}`);
     }
-    return { calculated, paidMinor, changeMinor: paidMinor - calculated.totalMinor };
+
+    const cashPaidMinor = dto.payments.filter((p) => p.paymentMethod === "cash").reduce((s, p) => s + BigInt(p.amountMinor), 0n);
+    const changeMinor = paidMinor - calculated.totalMinor;
+    if (changeMinor > cashPaidMinor) {
+      throw new UnprocessableEntityException({
+        code: "NON_CASH_OVERPAYMENT_PROHIBITED",
+        message: "Non-cash payments cannot generate cash change",
+      });
+    }
+
+    return { calculated, paidMinor, changeMinor };
   }
 
   private async checkIdempotency(tx: Prisma.TransactionClient, id: string | undefined, tenantId: string) {
@@ -191,41 +187,21 @@ export class SalesService {
   }
 
   private async executeSaleInsert(
-    tx: Prisma.TransactionClient,
-    tenantId: string,
-    dto: CreateSaleDto,
-    meta: {
-      saleId: string; inv: string; calc: any; paid: bigint; change: bigint;
-      userId: string; costMap: Map<string, bigint>; originalPrices: (bigint | null)[];
-    },
+    tx: Prisma.TransactionClient, tenantId: string, dto: CreateSaleDto,
+    meta: { saleId: string; inv: string; calc: any; paid: bigint; change: bigint; userId: string; costMap: Map<string, bigint>; originalPrices: (bigint | null)[] },
   ) {
     return tx.sale.create({
       data: {
-        id: meta.saleId,
-        tenantId,
-        invoiceNumber: meta.inv,
-        shiftId: dto.shiftId,
-        branchId: dto.branchId,
-        cashierUserId: meta.userId,
-        customerId: dto.customerId,
-        status: "completed",
-        subtotalMinor: meta.calc.grossMinor,
-        discountMinor: meta.calc.totalDiscountMinor,
-        taxMinor: meta.calc.taxMinor,
-        totalMinor: meta.calc.totalMinor,
-        paidMinor: meta.paid,
-        changeMinor: meta.change,
-        notes: dto.notes,
-        items: {
-          create: this.buildSaleItemsData(tenantId, meta.calc.lines, meta.costMap, meta.originalPrices),
-        },
+        id: meta.saleId, tenantId, invoiceNumber: meta.inv, shiftId: dto.shiftId,
+        branchId: dto.branchId, cashierUserId: meta.userId, customerId: dto.customerId,
+        status: "completed", subtotalMinor: meta.calc.grossMinor, discountMinor: meta.calc.totalDiscountMinor,
+        taxMinor: meta.calc.taxMinor, totalMinor: meta.calc.totalMinor, paidMinor: meta.paid,
+        changeMinor: meta.change, notes: dto.notes,
+        items: { create: this.buildSaleItemsData(tenantId, meta.calc.lines, meta.costMap, meta.originalPrices) },
         payments: {
           create: dto.payments.map((p) => ({
-            id: uuidv7(),
-            tenantId,
-            paymentMethod: p.paymentMethod,
-            amountMinor: BigInt(p.amountMinor),
-            reference: p.reference,
+            id: uuidv7(), tenantId, paymentMethod: p.paymentMethod,
+            amountMinor: BigInt(p.amountMinor), reference: p.reference,
           })),
         },
       },
@@ -319,9 +295,15 @@ export class SalesService {
 
   async voidSale(tenantId: string, saleId: string, dto: VoidSaleDto, userId: string, ip?: string) {
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
-      const sale = await tx.sale.findUnique({ where: { id: saleId }, include: { items: true } });
+      const sale = await tx.sale.findUnique({ where: { id: saleId }, include: { items: true, shift: true } });
       if (!sale || sale.tenantId !== tenantId) throw new NotFoundException("Sale not found");
       if (sale.status === "voided") throw new BadRequestException("Sale is already voided");
+      if (sale.shift && sale.shift.status === "closed") {
+        throw new ConflictException({
+          code: "SHIFT_ALREADY_CLOSED",
+          message: "Cannot void sale: associated shift is already closed",
+        });
+      }
 
       const voided = await tx.sale.update({
         where: { id: saleId },

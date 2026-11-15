@@ -12,6 +12,7 @@ import {
   OpenShiftDto,
   CloseShiftDto,
   CashMovementDto,
+  calculateShiftCashTotals,
 } from "@universal-pos/shared";
 
 @Injectable()
@@ -20,16 +21,6 @@ export class ShiftsService {
     private readonly tenantContext: TenantContextService,
     private readonly auditService: AuditService,
   ) {}
-
-  private calculateNetCashFlow(
-    movements: { type: string; amountMinor: bigint }[],
-  ): bigint {
-    return movements.reduce((net, m) => {
-      if (m.type === "cash_in") return net + m.amountMinor;
-      if (m.type === "cash_out") return net - m.amountMinor;
-      return net;
-    }, 0n);
-  }
 
   async open(
     tenantId: string,
@@ -118,6 +109,55 @@ export class ShiftsService {
     });
   }
 
+  private async executeShiftClose(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    shift: any,
+    dto: CloseShiftDto,
+    userId?: string,
+    ip?: string,
+  ) {
+    const calc = calculateShiftCashTotals({
+      openingCashMinor: shift.openingCashMinor,
+      cashMovements: shift.cashMovements,
+      sales: shift.sales,
+    });
+    const expectedCashMinor = calc.expectedCashMinor;
+    const closingCashMinor = BigInt(dto.closingCashMinor);
+    const cashDifferenceMinor = closingCashMinor - expectedCashMinor;
+
+    const updated = await tx.shift.update({
+      where: { id: shift.id },
+      data: {
+        status: "closed",
+        closingCashMinor,
+        expectedCashMinor,
+        cashDifferenceMinor,
+        closedAt: new Date(),
+        notes: dto.notes,
+      },
+    });
+
+    await this.auditService.log(
+      {
+        tenantId,
+        actorUserId: userId,
+        action: "shift.close",
+        entityType: "shift",
+        entityId: shift.id,
+        after: {
+          closingCashMinor: Number(closingCashMinor),
+          expectedCashMinor: Number(expectedCashMinor),
+          cashDifferenceMinor: Number(cashDifferenceMinor),
+        },
+        ip,
+      },
+      tx,
+    );
+
+    return updated;
+  }
+
   async close(
     tenantId: string,
     shiftId: string,
@@ -128,7 +168,13 @@ export class ShiftsService {
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const shift = await tx.shift.findUnique({
         where: { id: shiftId },
-        include: { cashMovements: true },
+        include: {
+          cashMovements: true,
+          sales: {
+            where: { status: "completed" },
+            include: { payments: true },
+          },
+        },
       });
       if (!shift || shift.tenantId !== tenantId) {
         throw new NotFoundException("Shift not found");
@@ -137,41 +183,7 @@ export class ShiftsService {
         throw new BadRequestException("Shift is already closed");
       }
 
-      const netCashFlow = this.calculateNetCashFlow(shift.cashMovements);
-      const expectedCashMinor = shift.openingCashMinor + netCashFlow;
-      const closingCashMinor = BigInt(dto.closingCashMinor);
-      const cashDifferenceMinor = closingCashMinor - expectedCashMinor;
-
-      const updated = await tx.shift.update({
-        where: { id: shiftId },
-        data: {
-          status: "closed",
-          closingCashMinor,
-          expectedCashMinor,
-          cashDifferenceMinor,
-          closedAt: new Date(),
-          notes: dto.notes,
-        },
-      });
-
-      await this.auditService.log(
-        {
-          tenantId,
-          actorUserId: userId,
-          action: "shift.close",
-          entityType: "shift",
-          entityId: shiftId,
-          after: {
-            closingCashMinor: Number(closingCashMinor),
-            expectedCashMinor: Number(expectedCashMinor),
-            cashDifferenceMinor: Number(cashDifferenceMinor),
-          },
-          ip,
-        },
-        tx,
-      );
-
-      return updated;
+      return this.executeShiftClose(tx, tenantId, shift, dto, userId, ip);
     });
   }
 

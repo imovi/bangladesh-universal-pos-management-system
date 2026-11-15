@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { TenantContextService } from "../../common/database/tenant-context.service.js";
+import { calculateShiftCashTotals } from "@universal-pos/shared";
 
 export interface ReportDateFilter {
   branchId?: string;
@@ -241,20 +242,11 @@ export class ReportsService {
       });
       if (!shift || shift.tenantId !== tenantId) throw new NotFoundException("Shift not found");
 
-      let cashSalesMinor = 0n;
-      let bkashSalesMinor = 0n;
-      let cardSalesMinor = 0n;
-      for (const s of shift.sales) {
-        for (const p of s.payments) {
-          if (p.paymentMethod === "cash") cashSalesMinor += p.amountMinor;
-          else if (p.paymentMethod === "card") cardSalesMinor += p.amountMinor;
-          else if (["bkash", "nagad", "rocket"].includes(p.paymentMethod)) bkashSalesMinor += p.amountMinor;
-        }
-      }
-
-      const cashInMinor = shift.cashMovements.filter((m) => m.type === "cash_in").reduce((s, m) => s + m.amountMinor, 0n);
-      const cashOutMinor = shift.cashMovements.filter((m) => m.type === "cash_out").reduce((s, m) => s + m.amountMinor, 0n);
-      const expectedCashMinor = shift.openingCashMinor + cashSalesMinor + cashInMinor - cashOutMinor;
+      const calc = calculateShiftCashTotals({
+        openingCashMinor: shift.openingCashMinor,
+        cashMovements: shift.cashMovements,
+        sales: shift.sales,
+      });
 
       const transactions = [
         ...shift.sales.map((s) => ({ type: "sale", id: s.id, inv: s.invoiceNumber, totalMinor: Number(s.totalMinor), at: s.createdAt })),
@@ -263,12 +255,12 @@ export class ReportsService {
 
       return {
         shiftId: shift.id, registerName: shift.register.name, cashierName: shift.cashierUser.name, status: shift.status,
-        openingCashMinor: Number(shift.openingCashMinor), cashInMinor: Number(cashInMinor), cashOutMinor: Number(cashOutMinor),
-        cashSalesMinor: Number(cashSalesMinor), expectedCashMinor: Number(expectedCashMinor),
+        openingCashMinor: Number(calc.openingCashMinor), cashInMinor: Number(calc.cashInMinor), cashOutMinor: Number(calc.cashOutMinor),
+        cashSalesMinor: Number(calc.cashPaymentsMinor), expectedCashMinor: Number(calc.expectedCashMinor),
         closingCashMinor: shift.closingCashMinor ? Number(shift.closingCashMinor) : null,
         differenceMinor: shift.cashDifferenceMinor ? Number(shift.cashDifferenceMinor) : null,
-        bkashSalesMinor: Number(bkashSalesMinor), cardSalesMinor: Number(cardSalesMinor),
-        totalSalesCount: shift.sales.length, transactions,
+        bkashSalesMinor: Number(calc.bkashSalesMinor), cardSalesMinor: Number(calc.cardSalesMinor),
+        totalSalesCount: calc.completedSalesCount, transactions,
       };
     });
   }

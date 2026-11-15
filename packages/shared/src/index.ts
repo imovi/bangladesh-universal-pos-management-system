@@ -2,4 +2,5 @@ export * from "./permissions.js";
 export * from "./types.js";
 export * from "./schemas.js";
 export * from "./money.js";
+export * from "./shifts.js";
 export * from "./phone.js";

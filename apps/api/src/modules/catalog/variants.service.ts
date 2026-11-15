@@ -134,4 +134,21 @@ export class VariantsService {
       return created;
     });
   }
+
+  async findById(tenantId: string, id: string) {
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const variant = await tx.productVariant.findUnique({
+        where: { id },
+        include: {
+          product: true,
+          barcodes: true,
+          optionValues: { include: { optionValue: true } },
+        },
+      });
+      if (!variant || variant.tenantId !== tenantId) {
+        throw new NotFoundException("Variant not found");
+      }
+      return variant;
+    });
+  }
 }

@@ -252,3 +252,61 @@ export const StockAdjustmentSchema = z.object({
   reason: z.string().trim().min(3).max(255),
 });
 export type StockAdjustmentDto = z.infer<typeof StockAdjustmentSchema>;
+
+// --- M4 Suppliers & Purchasing Schemas ---
+
+export const CreateSupplierSchema = z.object({
+  name: z.string().trim().min(1).max(150),
+  contactName: z.string().trim().max(100).optional(),
+  phone: z.string().trim().max(50).optional(),
+  email: z.string().email().optional().or(z.literal("")),
+  address: z.string().trim().max(255).optional(),
+  notes: z.string().trim().max(500).optional(),
+});
+export type CreateSupplierDto = z.infer<typeof CreateSupplierSchema>;
+
+export const UpdateSupplierSchema = CreateSupplierSchema.partial();
+export type UpdateSupplierDto = z.infer<typeof UpdateSupplierSchema>;
+
+export const PurchaseOrderItemInputSchema = z.object({
+  variantId: z.string().uuid(),
+  qtyOrdered: z.coerce.number().positive(),
+  unitCostMinor: z.coerce.number().int().min(0),
+});
+
+export const CreatePurchaseOrderSchema = z.object({
+  supplierId: z.string().uuid(),
+  branchId: z.string().uuid(),
+  poNumber: z.string().trim().min(1).max(50).optional(),
+  notes: z.string().trim().max(500).optional(),
+  expectedAt: z.coerce.date().optional(),
+  items: z.array(PurchaseOrderItemInputSchema).min(1),
+});
+export type CreatePurchaseOrderDto = z.infer<typeof CreatePurchaseOrderSchema>;
+
+export const GoodsReceiptItemInputSchema = z.object({
+  purchaseOrderItemId: z.string().uuid().optional(),
+  variantId: z.string().uuid(),
+  qtyReceived: z.coerce.number().positive(),
+  unitCostMinor: z.coerce.number().int().min(0),
+});
+
+export const CreateGoodsReceiptSchema = z.object({
+  purchaseOrderId: z.string().uuid().optional(),
+  branchId: z.string().uuid(),
+  grnNumber: z.string().trim().min(1).max(50).optional(),
+  notes: z.string().trim().max(500).optional(),
+  items: z.array(GoodsReceiptItemInputSchema).min(1),
+});
+export type CreateGoodsReceiptDto = z.infer<typeof CreateGoodsReceiptSchema>;
+
+export const CreateSupplierPaymentSchema = z.object({
+  supplierId: z.string().uuid(),
+  amountMinor: z.coerce.number().int().positive(),
+  paymentMethod: z.enum(["cash", "bank_transfer", "cheque", "mobile_banking"]),
+  reference: z.string().trim().max(100).optional(),
+  notes: z.string().trim().max(500).optional(),
+  paidAt: z.coerce.date().optional(),
+});
+export type CreateSupplierPaymentDto = z.infer<typeof CreateSupplierPaymentSchema>;
+

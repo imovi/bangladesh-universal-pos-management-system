@@ -42,6 +42,27 @@ export class VariantsController {
     return clone;
   }
 
+  @Get(":id")
+  @RequirePermission(PERMISSIONS.CATALOG_READ)
+  async findById(@Req() req: any, @Param("id") id: string) {
+    const tenantId = req.user.tenantId;
+    const variant = await this.variantsService.findById(tenantId, id);
+    const canViewCost =
+      req.user.isOwner ||
+      req.user.permissions.includes(PERMISSIONS.CATALOG_MANAGE);
+
+    const clone = JSON.parse(
+      JSON.stringify(variant, (_key, val) =>
+        typeof val === "bigint" ? Number(val) : val,
+      ),
+    );
+
+    if (!canViewCost) {
+      delete clone.costMinor;
+    }
+    return clone;
+  }
+
   @Post(":id/barcodes")
   @RequirePermission(PERMISSIONS.CATALOG_MANAGE)
   async addBarcode(

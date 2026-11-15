@@ -14,6 +14,7 @@ import { RolesModule } from "./modules/roles/roles.module.js";
 import { AuditModule } from "./modules/audit/audit.module.js";
 import { CatalogModule } from "./modules/catalog/catalog.module.js";
 import { InventoryModule } from "./modules/inventory/inventory.module.js";
+import { PurchasingModule } from "./modules/purchasing/purchasing.module.js";
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { InventoryModule } from "./modules/inventory/inventory.module.js";
     AuditModule,
     CatalogModule,
     InventoryModule,
+    PurchasingModule,
   ],
   controllers: [HealthController],
   providers: [

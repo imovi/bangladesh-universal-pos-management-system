@@ -330,3 +330,35 @@ export function calculateSaleTotals(
     taxBreakdown,
   };
 }
+
+/**
+ * Calculates new weighted average cost upon receiving goods.
+ * Formula:
+ *   new_avg = roundHalfUp((old_qty * old_cost + recv_qty * recv_cost) / (old_qty + recv_qty))
+ * If old_qty <= 0, returns recv_cost.
+ */
+export function calculateWeightedAverageCost(
+  oldQty: number | string,
+  oldCostMinor: bigint | number,
+  recvQty: number | string,
+  recvCostMinor: bigint | number,
+): bigint {
+  const oldQtyThousandths = parseQuantityThousandths(oldQty);
+  const recvQtyThousandths = parseQuantityThousandths(recvQty);
+  const oldCost = BigInt(oldCostMinor);
+  const recvCost = BigInt(recvCostMinor);
+
+  if (oldQtyThousandths <= 0n) {
+    return recvCost;
+  }
+
+  const totalQtyThousandths = oldQtyThousandths + recvQtyThousandths;
+  if (totalQtyThousandths <= 0n) {
+    return recvCost;
+  }
+
+  const numerator =
+    oldQtyThousandths * oldCost + recvQtyThousandths * recvCost;
+  return roundHalfUp(numerator, totalQtyThousandths);
+}
+

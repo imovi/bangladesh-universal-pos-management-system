@@ -50,3 +50,16 @@ Universal, multi-tenant, offline-first Point-of-Sale (POS) and inventory platfor
    ```bash
    npm test
    ```
+
+## Database Migration & Tenant Isolation (RLS) Rule
+> **IMPORTANT FOR NEW TABLES**: Every new table created with `tenant_id` MUST have `ENABLE` and `FORCE ROW LEVEL SECURITY` turned on, grants given to `pos_app`, and the tenant isolation policy defined in its own migration:
+> ```sql
+> GRANT SELECT, INSERT, UPDATE, DELETE ON <new_table> TO pos_app;
+> ALTER TABLE <new_table> ENABLE ROW LEVEL SECURITY;
+> ALTER TABLE <new_table> FORCE ROW LEVEL SECURITY;
+> CREATE POLICY tenant_isolation_policy ON <new_table>
+>   FOR ALL TO pos_app
+>   USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+>   WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+> ```
+

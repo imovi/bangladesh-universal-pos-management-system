@@ -16,6 +16,10 @@ import {
   VoidSaleDto,
   calculateSaleTotals,
 } from "@universal-pos/shared";
+import {
+  validateDiscountsNonNegative,
+  enforceDiscountAndOverrideLimits,
+} from "./sales-discount.helper.js";
 
 @Injectable()
 export class SalesService {
@@ -119,6 +123,7 @@ export class SalesService {
     lineInputs: any[],
     pricesIncludeTax: boolean,
   ) {
+    validateDiscountsNonNegative(dto, lineInputs);
     const calculated = calculateSaleTotals(lineInputs, { pricesIncludeTax, billDiscount: dto.billDiscount });
 
     if (BigInt(dto.expectedTotalMinor) !== calculated.totalMinor) {
@@ -264,10 +269,7 @@ export class SalesService {
   }
 
   async create(
-    tenantId: string,
-    dto: CreateSaleDto,
-    userId: string,
-    ip?: string,
+    tenantId: string, dto: CreateSaleDto, userId: string, ip?: string,
     user?: { isOwner?: boolean; permissions?: string[] },
   ) {
     const tenant = await this.systemDb.findTenantById(tenantId);
@@ -281,6 +283,11 @@ export class SalesService {
       const { shift, defaultTaxRateBp, variants } = await this.loadShiftAndVariants(tx, tenantId, dto);
       const variantMap = new Map(variants.map((v) => [v.id, v]));
       const { lineInputs, originalPrices } = this.resolveItemPricingAndTaxes(dto.items, variantMap, defaultTaxRateBp, user);
+
+      const { discountOverrideUsed, priceOverrideUsed } = await enforceDiscountAndOverrideLimits(
+        tx, userId, tenantId, dto, lineInputs, user,
+      );
+
       const { calculated, paidMinor, changeMinor } = this.computeAndValidateTotals(dto, lineInputs, pricesIncludeTax);
 
       const saleId = dto.id || uuidv7();
@@ -295,6 +302,16 @@ export class SalesService {
       await this.finalizeSaleOperations(tx, tenantId, {
         saleId, inv: invoiceNumber, calc: calculated, branchId: dto.branchId, customerId: dto.customerId, userId, ip,
       });
+
+      if (priceOverrideUsed || discountOverrideUsed) {
+        await this.auditService.log(
+          {
+            tenantId, actorUserId: userId, action: "sale.override", entityType: "sale", entityId: saleId,
+            after: { invoiceNumber, priceOverrideUsed, discountOverrideUsed }, ip,
+          },
+          tx,
+        );
+      }
 
       return sale;
     });
@@ -337,14 +354,8 @@ export class SalesService {
       const sale = await tx.sale.findUnique({
         where: { id },
         include: {
-          items: {
-            include: {
-              variant: { select: { id: true, sku: true, product: { select: { id: true, name: true } } } },
-            },
-          },
-          payments: true,
-          customer: true,
-          cashierUser: { select: { id: true, name: true } },
+          items: { include: { variant: { select: { id: true, sku: true, product: { select: { id: true, name: true } } } } } },
+          payments: true, customer: true, cashierUser: { select: { id: true, name: true } },
         },
       });
       if (!sale || sale.tenantId !== tenantId) throw new NotFoundException("Sale not found");
@@ -374,11 +385,7 @@ export class SalesService {
           orderBy: { createdAt: "desc" },
         }),
       ]);
-
-      return {
-        items,
-        meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
-      };
+      return { items, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
     });
   }
 }

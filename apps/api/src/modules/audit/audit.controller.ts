@@ -18,12 +18,14 @@ export class AuditController {
     @Query("page") page?: number,
     @Query("limit") limit?: number,
     @Query("entityType") entityType?: string,
+    @Query("action") action?: string,
     @Query("actorUserId") actorUserId?: string,
   ) {
     return this.auditService.findMany(user.tenantId, {
       page,
       limit,
       entityType,
+      action,
       actorUserId,
     });
   }

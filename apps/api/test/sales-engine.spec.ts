@@ -128,7 +128,7 @@ describe("M6: Sales Engine Integration Tests", () => {
       payments: [{ paymentMethod: "cash", amountMinor: 100000 }, { paymentMethod: "bkash", amountMinor: 89000, reference: "TRX-123456" }],
       expectedTotalMinor: 189000,
     };
-    const res = await request(app.getHttpServer()).post("/api/v1/sales").set("Authorization", `Bearer ${cashierToken}`).send(salePayload);
+    const res = await request(app.getHttpServer()).post("/api/v1/sales").set("Authorization", `Bearer ${ownerToken}`).send(salePayload);
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);

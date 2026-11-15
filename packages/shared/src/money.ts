@@ -186,6 +186,17 @@ export function distributeBillDiscount(
 }
 
 /**
+ * Calculates effective discount in basis points (10000 = 100.00%) from minor amount and total.
+ */
+export function calculateEffectiveDiscountBp(
+  amountMinor: bigint,
+  totalMinor: bigint,
+): number {
+  if (totalMinor <= 0n || amountMinor <= 0n) return 0;
+  return Number(roundHalfUp(amountMinor * 10000n, totalMinor));
+}
+
+/**
  * Computes line tax given effective net and tax mode.
  */
 function calculateLineTax(

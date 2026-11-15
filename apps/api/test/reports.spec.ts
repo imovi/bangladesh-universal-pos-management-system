@@ -93,8 +93,8 @@ describe("M7: Fashion Analytics & Financial Reports Integration Tests", () => {
       type: "cash_out", amountMinor: 5000, reason: "Store supplies",
     });
 
-    // Sale 1: 2x M-Blue @ 250,000 = 500,000; discount 50,000; total = 450,000 (300,000 cash, 150,000 bkash)
-    await request(app.getHttpServer()).post("/api/v1/sales").set("Authorization", `Bearer ${cashierToken}`).send({
+    // Sale 1: 2x M-Blue @ 250,000 = 500,000; discount 50,000 (10% discount, requires Manager/Owner); total = 450,000 (300,000 cash, 150,000 bkash)
+    await request(app.getHttpServer()).post("/api/v1/sales").set("Authorization", `Bearer ${ownerToken}`).send({
       shiftId, branchId,
       items: [{ variantId: variantMBlueId, quantity: 2, discount: { type: "fixed", amountMinor: 50000 } }],
       payments: [{ paymentMethod: "cash", amountMinor: 300000 }, { paymentMethod: "bkash", amountMinor: 150000 }],

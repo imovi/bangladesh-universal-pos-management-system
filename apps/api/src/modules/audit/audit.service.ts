@@ -65,6 +65,7 @@ export class AuditService {
       page?: number;
       limit?: number;
       entityType?: string;
+      action?: string;
       actorUserId?: string;
     },
   ) {
@@ -75,6 +76,7 @@ export class AuditService {
     const where: Prisma.AuditLogWhereInput = {
       tenantId,
       ...(query.entityType ? { entityType: query.entityType } : {}),
+      ...(query.action ? { action: query.action } : {}),
       ...(query.actorUserId ? { actorUserId: query.actorUserId } : {}),
     };
 

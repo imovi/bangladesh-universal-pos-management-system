@@ -1,3 +1,5 @@
+@import "react-day-picker/style.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -54,7 +56,29 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    @apply bg-background text-foreground text-sm leading-relaxed antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1, "tnum" 1;
   }
+  h1 {
+    @apply text-2xl font-semibold tracking-tight;
+  }
+  h2 {
+    @apply text-base font-semibold tracking-tight;
+  }
+}
+
+/* DayPicker Customization for Theme Harmony */
+.rdp-root {
+  --rdp-accent-color: hsl(var(--primary));
+  --rdp-accent-background-color: hsl(var(--primary) / 0.1);
+  --rdp-day-height: 36px;
+  --rdp-day-width: 36px;
+  margin: 0;
+}
+.rdp-day_button {
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+}
+.dark .rdp-root {
+  --rdp-accent-color: hsl(var(--primary));
 }

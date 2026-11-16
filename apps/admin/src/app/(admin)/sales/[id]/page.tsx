@@ -15,7 +15,8 @@ import {
   RefreshCw,
   CheckCircle2,
 } from "lucide-react";
-import { formatMoney } from "@/lib/utils";
+import { formatMoney, formatDateTime } from "@/lib/utils";
+import { formatPaymentMethod, formatSaleStatus } from "@/i18n/formatters";
 
 interface SalePayment {
   id: string;
@@ -206,18 +207,14 @@ export default function SaleDetailPage({ params }: { params: Promise<{ id: strin
                 {sale.invoiceNumber}
               </h1>
               <Badge
-                variant={isVoided ? "destructive" : "default"}
-                className={`text-xs font-normal ${
-                  isVoided
-                    ? "bg-red-500/10 text-red-600 border-red-200 dark:border-red-800"
-                    : "bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-800"
-                }`}
+                variant={isVoided ? "destructive" : "success"}
+                className="text-xs"
               >
-                {isVoided ? strings.sales.statusVoided : strings.sales.statusCompleted}
+                {formatSaleStatus(sale.status, strings)}
               </Badge>
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {new Date(sale.createdAt).toLocaleString()}
+            <p className="text-xs text-muted-foreground mt-0.5 font-mono tabular-nums">
+              {formatDateTime(sale.createdAt)}
             </p>
           </div>
         </div>
@@ -362,8 +359,8 @@ export default function SaleDetailPage({ params }: { params: Promise<{ id: strin
                   className="flex items-center justify-between p-3 rounded-lg bg-muted/40 border border-border text-sm"
                 >
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="uppercase font-mono text-xs">
-                      {p.paymentMethod}
+                    <Badge variant="outline" className="font-medium text-xs">
+                      {formatPaymentMethod(p.paymentMethod, strings)}
                     </Badge>
                     {p.reference && (
                       <span className="text-xs text-muted-foreground font-mono">
@@ -404,9 +401,9 @@ export default function SaleDetailPage({ params }: { params: Promise<{ id: strin
               </div>
             )}
 
-            <div className="pt-3 border-t border-border flex justify-between text-base font-bold text-foreground">
+            <div className="pt-3 border-t border-border flex justify-between text-base font-semibold text-foreground">
               <span>{strings.sales.netTotal}</span>
-              <span className={isVoided ? "line-through text-muted-foreground" : "text-primary"}>
+              <span className={isVoided ? "line-through text-muted-foreground" : "text-foreground font-semibold tabular-nums"}>
                 {formatMoney(sale.totalMinor)}
               </span>
             </div>

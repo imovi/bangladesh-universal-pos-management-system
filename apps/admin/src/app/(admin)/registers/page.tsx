@@ -5,13 +5,37 @@ import { useAuth } from "@/lib/auth-context";
 import { useTranslation } from "@/i18n/context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Store,
   Plus,
   Edit2,
   RefreshCw,
   CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import { CreateRegisterSchema } from "@universal-pos/shared";
 
@@ -99,14 +123,14 @@ export default function RegistersPage() {
         const items = Array.isArray(json.data) ? json.data : (json.data?.items || []);
         setRegisters(items);
       } else {
-        setErrorMessage("Failed to load registers");
+        setErrorMessage(strings.common.error);
       }
     } catch {
-      setErrorMessage("Network connection error");
+      setErrorMessage(strings.common.error);
     } finally {
       setLoading(false);
     }
-  }, [apiFetch, branchFilter]);
+  }, [apiFetch, branchFilter, strings.common.error]);
 
   useEffect(() => {
     fetchRegisters();
@@ -142,62 +166,42 @@ export default function RegistersPage() {
     e.preventDefault();
     setModalError(null);
 
+    const validation = CreateRegisterSchema.safeParse({
+      name: formData.name.trim(),
+      code: formData.code.trim().toUpperCase(),
+      branchId: formData.branchId,
+      isActive: formData.isActive,
+    });
+
+    if (!validation.success) {
+      const issue = validation.error.issues[0];
+      setModalError(issue.message || "Invalid input data");
+      return;
+    }
+
     try {
       setModalLoading(true);
-      if (!editingId) {
-        const payload = {
-          name: formData.name.trim(),
-          code: formData.code.trim(),
-          branchId: formData.branchId,
-        };
-        const validation = CreateRegisterSchema.safeParse(payload);
-        if (!validation.success) {
-          setModalError(validation.error.errors[0]?.message || "Validation failed");
-          return;
-        }
+      const url = editingId ? `/registers/${editingId}` : "/registers";
+      const method = editingId ? "PATCH" : "POST";
 
-        const res = await apiFetch("/registers", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
+      const res = await apiFetch(url, {
+        method,
+        body: JSON.stringify(validation.data),
+      });
 
-        if (res.ok) {
-          setModalSuccess(true);
-          setTimeout(() => {
-            setShowModal(false);
-            setModalSuccess(false);
-            fetchRegisters();
-          }, 800);
-        } else {
-          const errJson = await res.json().catch(() => ({}));
-          setModalError(errJson.message || errJson.error?.message || "Failed to create register");
-        }
+      if (res.ok) {
+        setModalSuccess(true);
+        setTimeout(() => {
+          setShowModal(false);
+          setModalSuccess(false);
+          fetchRegisters();
+        }, 800);
       } else {
-        const payload = {
-          name: formData.name.trim(),
-          code: formData.code.trim(),
-          isActive: formData.isActive,
-        };
-
-        const res = await apiFetch(`/registers/${editingId}`, {
-          method: "PATCH",
-          body: JSON.stringify(payload),
-        });
-
-        if (res.ok) {
-          setModalSuccess(true);
-          setTimeout(() => {
-            setShowModal(false);
-            setModalSuccess(false);
-            fetchRegisters();
-          }, 800);
-        } else {
-          const errJson = await res.json().catch(() => ({}));
-          setModalError(errJson.message || errJson.error?.message || "Failed to update register");
-        }
+        const errJson = await res.json().catch(() => ({}));
+        setModalError(errJson.message || errJson.error?.message || "Failed to save register");
       }
     } catch {
-      setModalError("Network connection error");
+      setModalError(strings.common.error);
     } finally {
       setModalLoading(false);
     }
@@ -208,225 +212,220 @@ export default function RegistersPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
             <Store className="h-6 w-6 text-primary" />
-            {strings.registers.title}
+            <span>{strings.registers.title}</span>
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
             {strings.registers.subtitle}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => fetchRegisters()} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-            {strings.common.refresh}
-          </Button>
-
           {hasPermission("register.manage") && (
-            <Button size="sm" onClick={openCreateModal}>
+            <Button onClick={openCreateModal} className="h-9">
               <Plus className="h-4 w-4 mr-1.5" />
-              {strings.registers.addRegister}
+              <span>{strings.registers.addRegister}</span>
             </Button>
           )}
         </div>
       </div>
 
       {/* Filter */}
-      <div className="bg-card border border-border p-4 rounded-xl shadow-xs">
+      <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
         <div className="max-w-xs">
-          <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+          <Label className="text-xs font-semibold text-muted-foreground block mb-1.5">
             {strings.registers.branch}
-          </label>
-          <select
+          </Label>
+          <Select
             value={branchFilter}
-            onChange={(e) => setBranchFilter(e.target.value)}
-            className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
+            onValueChange={(val) => setBranchFilter(val)}
           >
-            <option value="all">{strings.sales.allBranches}</option>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name} ({b.code})
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="h-9 text-xs sm:text-sm">
+              <SelectValue placeholder={strings.selectEmpty.allBranches} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs sm:text-sm font-medium">
+                {strings.selectEmpty.allBranches}
+              </SelectItem>
+              {branches.map((b) => (
+                <SelectItem key={b.id} value={b.id} className="text-xs sm:text-sm">
+                  {b.name} ({b.code})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
       {errorMessage && (
-        <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
+        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs sm:text-sm font-medium">
           {errorMessage}
         </div>
       )}
 
       {/* Table */}
-      <div className="bg-card border border-border rounded-xl shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-muted/50 text-muted-foreground font-medium border-b border-border">
-              <tr>
-                <th className="py-3 px-4">{strings.registers.registerName}</th>
-                <th className="py-3 px-4">{strings.registers.registerCode}</th>
-                <th className="py-3 px-4">{strings.registers.branch}</th>
-                <th className="py-3 px-4 text-center">{strings.registers.status}</th>
-                <th className="py-3 px-4 text-center">{strings.common.actions}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {loading ? (
-                <tr>
-                  <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                    <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
-                    {strings.common.loading}
-                  </td>
-                </tr>
-              ) : registers.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                    {strings.common.noData}
-                  </td>
-                </tr>
-              ) : (
-                registers.map((r) => {
-                  const branchObj = branches.find((b) => b.id === r.branchId) || r.branch;
-                  return (
-                    <tr key={r.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="py-3 px-4 font-medium text-foreground">{r.name}</td>
-                      <td className="py-3 px-4 font-mono text-xs text-foreground">{r.code}</td>
-                      <td className="py-3 px-4 text-muted-foreground text-xs">
-                        {branchObj?.name || "-"}
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        <Badge
-                          variant={r.isActive ? "default" : "secondary"}
-                          className={`text-xs font-normal ${
-                            r.isActive
-                              ? "bg-emerald-500/10 text-emerald-600 border-emerald-200"
-                              : "bg-muted text-muted-foreground"
-                          }`}
+      <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{strings.registers.registerName}</TableHead>
+              <TableHead className="w-40">{strings.registers.registerCode}</TableHead>
+              <TableHead className="w-56">{strings.registers.branch}</TableHead>
+              <TableHead className="text-center w-28">{strings.registers.status}</TableHead>
+              <TableHead className="text-right w-20">{strings.common.actions}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={5} className="py-8 text-center text-muted-foreground text-xs sm:text-sm">
+                  <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-primary" />
+                  {strings.common.loading}
+                </TableCell>
+              </TableRow>
+            ) : registers.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="py-8 text-center text-muted-foreground text-xs sm:text-sm">
+                  {strings.common.noData}
+                </TableCell>
+              </TableRow>
+            ) : (
+              registers.map((r) => {
+                const branchObj = branches.find((b) => b.id === r.branchId) || r.branch;
+                return (
+                  <TableRow key={r.id} className="hover:bg-muted/30 h-[56px] transition-colors">
+                    <TableCell className="font-semibold text-foreground text-xs sm:text-sm">{r.name}</TableCell>
+                    <TableCell className="font-mono text-xs text-foreground font-semibold">{r.code}</TableCell>
+                    <TableCell className="text-muted-foreground text-xs">
+                      {branchObj?.name || "—"}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge
+                        variant={r.isActive ? "success" : "secondary"}
+                        className="text-[11px]"
+                      >
+                        {r.isActive ? strings.registers.active : strings.registers.inactive}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {hasPermission("register.manage") && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-xs"
+                          onClick={() => openEditModal(r)}
                         >
-                          {r.isActive ? strings.registers.active : strings.registers.inactive}
-                        </Badge>
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        {hasPermission("register.manage") && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-2 text-xs"
-                            onClick={() => openEditModal(r)}
-                          >
-                            <Edit2 className="h-3.5 w-3.5 mr-1" />
-                            {strings.common.edit}
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                          <Edit2 className="h-3.5 w-3.5 mr-1" />
+                          <span>{strings.common.edit}</span>
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
       </div>
 
-      {/* Register Modal (Create / Edit) */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-xs p-4">
-          <div className="bg-card border border-border rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
-            <h2 className="text-lg font-bold text-foreground">
+      {/* Create / Edit Dialog */}
+      <Dialog open={showModal} onOpenChange={setShowModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">
               {editingId ? strings.registers.editRegister : strings.registers.addRegister}
-            </h2>
+            </DialogTitle>
+          </DialogHeader>
 
-            {modalSuccess ? (
-              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 rounded-lg text-sm flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4" />
-                {strings.registers.registerSaved}
+          <form onSubmit={handleSubmit} className="space-y-4 py-2">
+            {modalSuccess && (
+              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs sm:text-sm flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>{strings.registers.registerSaved}</span>
               </div>
-            ) : (
-              <form onSubmit={handleSubmit} className="space-y-3">
-                {modalError && (
-                  <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive rounded-lg text-xs font-medium">
-                    {modalError}
-                  </div>
-                )}
-
-                <div>
-                  <label className="text-xs font-semibold text-foreground block mb-1">
-                    {strings.registers.registerName} *
-                  </label>
-                  <Input
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g. Counter 1 / Ground Floor"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-foreground block mb-1">
-                    {strings.registers.registerCode} *
-                  </label>
-                  <Input
-                    value={formData.code}
-                    onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                    placeholder="e.g. POS-01"
-                    required
-                  />
-                </div>
-
-                {!editingId && (
-                  <div>
-                    <label className="text-xs font-semibold text-foreground block mb-1">
-                      {strings.registers.branch} *
-                    </label>
-                    <select
-                      value={formData.branchId}
-                      onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
-                      className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
-                      required
-                    >
-                      {branches.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name} ({b.code})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {editingId && (
-                  <div className="pt-2">
-                    <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.isActive}
-                        onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                        className="rounded border-input text-primary focus:ring-primary h-4 w-4"
-                      />
-                      <span>{strings.registers.active}</span>
-                    </label>
-                  </div>
-                )}
-
-                <div className="flex justify-end gap-2 pt-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setShowModal(false)}
-                    disabled={modalLoading}
-                  >
-                    {strings.common.cancel}
-                  </Button>
-                  <Button type="submit" disabled={modalLoading}>
-                    {modalLoading ? strings.common.loading : strings.common.save}
-                  </Button>
-                </div>
-              </form>
             )}
-          </div>
-        </div>
-      )}
+
+            {modalError && (
+              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs sm:text-sm flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{modalError}</span>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="regName" className="text-xs font-semibold">
+                {strings.registers.registerName} <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="regName"
+                value={formData.name}
+                onChange={(e) => setFormData((f) => ({ ...f, name: e.target.value }))}
+                placeholder="e.g. Counter 1"
+                required
+                className="h-9 text-sm"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="regCode" className="text-xs font-semibold">
+                {strings.registers.registerCode} <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="regCode"
+                value={formData.code}
+                onChange={(e) => setFormData((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
+                placeholder="e.g. REG-01"
+                required
+                className="h-9 text-sm font-mono uppercase"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="regBranch" className="text-xs font-semibold">
+                {strings.registers.branch} <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={formData.branchId}
+                onValueChange={(val) => setFormData((f) => ({ ...f, branchId: val }))}
+              >
+                <SelectTrigger id="regBranch" className="h-9 text-xs sm:text-sm">
+                  <SelectValue placeholder={strings.selectEmpty.chooseBranch} />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.map((b) => (
+                    <SelectItem key={b.id} value={b.id} className="text-xs sm:text-sm">
+                      {b.name} ({b.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <input
+                type="checkbox"
+                id="regActive"
+                checked={formData.isActive}
+                onChange={(e) => setFormData((f) => ({ ...f, isActive: e.target.checked }))}
+                className="h-4 w-4 rounded border-input cursor-pointer"
+              />
+              <Label htmlFor="regActive" className="text-xs font-medium cursor-pointer">
+                {strings.common.active}
+              </Label>
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="ghost" onClick={() => setShowModal(false)}>
+                {strings.common.cancel}
+              </Button>
+              <Button type="submit" disabled={modalLoading}>
+                {modalLoading ? strings.common.loading : strings.common.save}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -393,7 +393,7 @@ export default function SuppliersPage() {
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                        <div className="h-8 w-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center font-bold text-xs shrink-0">
                           <Building2 className="h-4 w-4" />
                         </div>
                         <div>

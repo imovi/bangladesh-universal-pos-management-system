@@ -46,7 +46,7 @@ interface PoLineItem {
 export default function NewPurchaseOrderPage() {
   const router = useRouter();
   const { apiFetch, user } = useAuth();
-  const { strings } = useTranslation();
+  const { strings, locale } = useTranslation();
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -239,7 +239,9 @@ export default function NewPurchaseOrderPage() {
             {strings.purchasing.createPO}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            সরবরাহকারীকে নতুন পণ্য সংগ্রহের চাহিদা বা অর্ডার তৈরি করুন
+            {locale === "bn"
+              ? "সরবরাহকারীকে নতুন পণ্য সংগ্রহের চাহিদা বা অর্ডার তৈরি করুন"
+              : "Create a new purchase order for supplier procurement"}
           </p>
         </div>
       </div>
@@ -261,7 +263,7 @@ export default function NewPurchaseOrderPage() {
         <div className="rounded-xl border border-border bg-card p-6 shadow-sm space-y-4">
           <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
             <FileText className="h-4 w-4 text-primary" />
-            <span>অর্ডারের সাধারণ তথ্য</span>
+            <span>{locale === "bn" ? "অর্ডারের সাধারণ তথ্য" : "General Information"}</span>
           </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -278,7 +280,7 @@ export default function NewPurchaseOrderPage() {
                 required
                 className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
               >
-                <option value="">সরবরাহকারী নির্বাচন করুন</option>
+                <option value="">{locale === "bn" ? "সরবরাহকারী নির্বাচন করুন" : "Select supplier"}</option>
                 {suppliers.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -290,7 +292,7 @@ export default function NewPurchaseOrderPage() {
             {/* Branch Selection */}
             <div>
               <label className="text-xs font-semibold text-muted-foreground block mb-1">
-                গ্রহণের শাখা (Destination Branch) *
+                {locale === "bn" ? "গ্রহণের শাখা *" : "Destination Branch *"}
               </label>
               <select
                 id="po-branch-select"
@@ -300,7 +302,7 @@ export default function NewPurchaseOrderPage() {
                 required
                 className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
               >
-                <option value="">শাখা নির্বাচন করুন</option>
+                <option value="">{locale === "bn" ? "শাখা নির্বাচন করুন" : "Select branch"}</option>
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.code} - {b.name}
@@ -341,9 +343,9 @@ export default function NewPurchaseOrderPage() {
         {/* Line Items Builder Card */}
         <div className="rounded-xl border border-border bg-card p-6 shadow-sm space-y-4">
           <h2 className="text-base font-semibold text-foreground flex items-center justify-between">
-            <span>অর্ডারের পণ্যসমূহ (Order Line Items)</span>
+            <span>{locale === "bn" ? "অর্ডারের পণ্যসমূহ" : "Order Line Items"}</span>
             <span className="text-xs text-muted-foreground">
-              {lines.length} টি পণ্য যুক্ত হয়েছে
+              {lines.length} {locale === "bn" ? "টি পণ্য যুক্ত হয়েছে" : "items added"}
             </span>
           </h2>
 
@@ -352,7 +354,7 @@ export default function NewPurchaseOrderPage() {
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
               <div className="sm:col-span-6">
                 <label className="text-xs font-semibold text-muted-foreground block mb-1">
-                  পণ্য / ভ্যারিয়েন্ট নির্বাচন করুন
+                  {locale === "bn" ? "পণ্য / ভ্যারিয়েন্ট নির্বাচন করুন" : "Select Product / Variant"}
                 </label>
                 <select
                   value={selectedVariantId}
@@ -405,7 +407,7 @@ export default function NewPurchaseOrderPage() {
                   className="w-full h-10 flex items-center justify-center gap-1.5"
                 >
                   <Plus className="h-4 w-4" />
-                  <span>যোগ করুন</span>
+                  <span>{locale === "bn" ? "যোগ করুন" : "Add"}</span>
                 </Button>
               </div>
             </div>
@@ -416,18 +418,20 @@ export default function NewPurchaseOrderPage() {
             <table className="w-full text-left text-sm" data-testid="po-items-table">
               <thead className="bg-muted/50 border-b border-border text-xs text-muted-foreground font-semibold uppercase">
                 <tr>
-                  <th className="px-4 py-3">পণ্য বিবরণ</th>
-                  <th className="px-4 py-3 text-center">পরিমাণ</th>
-                  <th className="px-4 py-3 text-right">একক মূল্য</th>
-                  <th className="px-4 py-3 text-right">মোট মূল্য</th>
-                  <th className="px-4 py-3 text-center w-12">মুছুন</th>
+                  <th className="px-4 py-3">{locale === "bn" ? "পণ্য বিবরণ" : "Product Details"}</th>
+                  <th className="px-4 py-3 text-center">{locale === "bn" ? "পরিমাণ" : "Quantity"}</th>
+                  <th className="px-4 py-3 text-right">{locale === "bn" ? "একক মূল্য" : "Unit Cost"}</th>
+                  <th className="px-4 py-3 text-right">{locale === "bn" ? "মোট মূল্য" : "Total"}</th>
+                  <th className="px-4 py-3 text-center w-12">{locale === "bn" ? "মুছুন" : "Remove"}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {lines.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground text-xs">
-                      এখনো কোনো পণ্য যুক্ত করা হয়নি। উপরের ফর্ম থেকে পণ্য যুক্ত করুন।
+                      {locale === "bn"
+                        ? "এখনো কোনো পণ্য যুক্ত করা হয়নি। উপরের ফর্ম থেকে পণ্য যুক্ত করুন।"
+                        : "No items added yet. Use the inputs above to add items."}
                     </td>
                   </tr>
                 ) : (

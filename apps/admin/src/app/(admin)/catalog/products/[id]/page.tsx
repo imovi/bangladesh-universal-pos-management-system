@@ -35,7 +35,7 @@ import Link from "next/link";
 export default function ProductDetailPage() {
   const params = useParams();
   const productId = params.id as string;
-  const { strings } = useTranslation();
+  const { strings, locale } = useTranslation();
   const { apiFetch, hasPermission } = useAuth();
   const queryClient = useQueryClient();
 
@@ -215,7 +215,7 @@ export default function ProductDetailPage() {
     return (
       <PermissionGate permission="catalog.read">
         <div className="p-8 text-center text-sm text-destructive">
-          পণ্যটি খুঁজে পাওয়া যায়নি (Product not found).
+          {locale === "bn" ? "পণ্যটি খুঁজে পাওয়া যায়নি।" : "Product not found."}
         </div>
       </PermissionGate>
     );
@@ -240,7 +240,7 @@ export default function ProductDetailPage() {
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {product.category?.name || "ক্যাটাগরি নেই"} • {product.brand?.name || "ব্র্যান্ড নেই"} • {variants.length} টি ভ্যারিয়েন্ট
+                {product.category?.name || (locale === "bn" ? "ক্যাটাগরি নেই" : "No category")} • {product.brand?.name || (locale === "bn" ? "ব্র্যান্ড নেই" : "No brand")} • {variants.length} {locale === "bn" ? "টি ভ্যারিয়েন্ট" : "variants"}
               </p>
             </div>
           </div>
@@ -253,7 +253,7 @@ export default function ProductDetailPage() {
               className="flex items-center gap-1.5"
             >
               <DollarSign className="h-4 w-4" />
-              <span>একসাথে মূল্য পরিবর্তন (Bulk Price)</span>
+              <span>{locale === "bn" ? "একসাথে মূল্য পরিবর্তন" : "Bulk Price Update"}</span>
             </Button>
           </div>
         </div>
@@ -279,9 +279,9 @@ export default function ProductDetailPage() {
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base font-bold flex items-center justify-between">
-                <span>সাইজ ও কালার ভিত্তিক বর্তমান স্টক (Size & Colour Stock Grid)</span>
+                <span>{locale === "bn" ? "সাইজ ও কালার ভিত্তিক বর্তমান স্টক" : "Size & Colour Stock Matrix"}</span>
                 <span className="text-xs font-normal text-muted-foreground">
-                  সবুজ: পর্যাপ্ত স্টক | হলুদ: কম স্টক | লাল: শূন্য
+                  {locale === "bn" ? "সবুজ: পর্যাপ্ত স্টক | হলুদ: কম স্টক | লাল: শূন্য" : "Green: In stock | Amber: Low stock | Red: Out of stock"}
                 </span>
               </CardTitle>
             </CardHeader>
@@ -309,7 +309,7 @@ export default function ProductDetailPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[180px]">{strings.products.sku}</TableHead>
-                  <TableHead>অপশন (Options)</TableHead>
+                  <TableHead>{locale === "bn" ? "অপশন" : "Options"}</TableHead>
                   <TableHead className="text-right">{strings.products.price}</TableHead>
                   {canSeeCost && <TableHead className="text-right">{strings.products.costPrice}</TableHead>}
                   <TableHead className="w-[240px]">{strings.products.barcode}</TableHead>
@@ -360,7 +360,7 @@ export default function ProductDetailPage() {
                               </span>
                             ))
                           ) : (
-                            <span className="text-[11px] text-muted-foreground">বারকোড নেই</span>
+                            <span className="text-[11px] text-muted-foreground">{locale === "bn" ? "বারকোড নেই" : "No barcode"}</span>
                           )}
                           <Button
                             variant="ghost"
@@ -389,7 +389,7 @@ export default function ProductDetailPage() {
                           }}
                         >
                           <Edit2 className="h-3 w-3" />
-                          <span>মূল্য পরিবর্তন</span>
+                          <span>{locale === "bn" ? "মূল্য পরিবর্তন" : "Edit Price"}</span>
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -407,12 +407,14 @@ export default function ProductDetailPage() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-bold flex items-center gap-2">
                   <Barcode className="h-4 w-4" />
-                  নতুন বারকোড যোগ করুন (Add Barcode)
+                  {locale === "bn" ? "নতুন বারকোড যোগ করুন" : "Add New Barcode"}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="barcodeInput">বারকোড নম্বর (টাইপ বা স্ক্যান করুন)</Label>
+                  <Label htmlFor="barcodeInput">
+                    {locale === "bn" ? "বারকোড নম্বর (টাইপ বা স্ক্যান করুন)" : "Barcode number (type or scan)"}
+                  </Label>
                   <Input
                     id="barcodeInput"
                     value={newBarcode}
@@ -430,7 +432,7 @@ export default function ProductDetailPage() {
                     disabled={!newBarcode.trim() || addBarcodeMutation.isPending}
                     onClick={() => addBarcodeMutation.mutate({ variantId: barcodeVariantId, barcode: newBarcode.trim() })}
                   >
-                    যোগ করুন (Add)
+                    {locale === "bn" ? "যোগ করুন" : "Add"}<span className="sr-only"> (Add)</span>
                   </Button>
                 </div>
               </CardContent>
@@ -444,12 +446,12 @@ export default function ProductDetailPage() {
             <Card className="w-full max-w-sm shadow-xl border">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-bold">
-                  ভ্যারিয়েন্ট মূল্য পরিবর্তন ({editingVariant.sku})
+                  {locale === "bn" ? `ভ্যারিয়েন্ট মূল্য পরিবর্তন (${editingVariant.sku})` : `Edit Variant Price (${editingVariant.sku})`}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="editPriceInput">বিক্রয় মূল্য (BDT ৳)</Label>
+                  <Label htmlFor="editPriceInput">{locale === "bn" ? "বিক্রয় মূল্য (৳)" : "Selling Price (৳)"}</Label>
                   <Input
                     id="editPriceInput"
                     type="number"
@@ -477,7 +479,7 @@ export default function ProductDetailPage() {
                       }
                     }}
                   >
-                    সংরক্ষণ করুন (Save)
+                    {strings.common.save}
                   </Button>
                 </div>
               </CardContent>
@@ -492,15 +494,17 @@ export default function ProductDetailPage() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-bold flex items-center gap-2">
                   <DollarSign className="h-4 w-4" />
-                  একসাথে সকল ভ্যারিয়েন্টের মূল্য পরিবর্তন (Bulk Price Update)
+                  {locale === "bn" ? "একসাথে সকল ভ্যারিয়েন্টের মূল্য পরিবর্তন" : "Bulk Price Update for All Variants"}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-xs text-muted-foreground">
-                  এই পণ্যের সকল {variants.length} টি ভ্যারিয়েন্টের বিক্রয় মূল্য একসাথে পরিবর্তন করা হবে।
+                  {locale === "bn"
+                    ? `এই পণ্যের সকল ${variants.length} টি ভ্যারিয়েন্টের বিক্রয় মূল্য একসাথে পরিবর্তন করা হবে।`
+                    : `Selling price will be updated for all ${variants.length} variants of this product.`}
                 </p>
                 <div className="space-y-1.5">
-                  <Label htmlFor="bulkPriceInput">নতুন সাধারণ বিক্রয় মূল্য (BDT ৳)</Label>
+                  <Label htmlFor="bulkPriceInput">{locale === "bn" ? "নতুন সাধারণ বিক্রয় মূল্য (৳)" : "New Selling Price (৳)"}</Label>
                   <Input
                     id="bulkPriceInput"
                     type="number"
@@ -526,7 +530,7 @@ export default function ProductDetailPage() {
                       }
                     }}
                   >
-                    সকল ভ্যারিয়েন্টে বসান (Apply to All)
+                    {strings.common.save}
                   </Button>
                 </div>
               </CardContent>

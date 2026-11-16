@@ -99,7 +99,52 @@ export class ProductsService {
       const combinations = this.generateCombinations(optionsInput);
       const createdVariants: any[] = [];
 
-      if (combinations.length === 0) {
+      if (dto.variants && dto.variants.length > 0) {
+        for (const vDto of dto.variants) {
+          const variant = await tx.productVariant.create({
+            data: {
+              tenantId,
+              productId: product.id,
+              sku: vDto.sku,
+              priceMinor: BigInt(vDto.priceMinor),
+              costMinor: BigInt(vDto.costMinor || 0),
+              reorderLevel: vDto.reorderLevel ?? dto.reorderLevel ?? 0,
+              isActive: vDto.isActive ?? true,
+            },
+          });
+
+          // Link option values if present
+          if (vDto.optionValues) {
+            for (const [optName, valName] of Object.entries(vDto.optionValues)) {
+              const optDef = createdOptions.find((o) => o.name === optName);
+              const valDef = optDef?.values.find((v: any) => v.value === valName);
+              if (optDef && valDef) {
+                await tx.variantOptionValue.create({
+                  data: {
+                    tenantId,
+                    variantId: variant.id,
+                    optionId: optDef.id,
+                    optionValueId: valDef.id,
+                  },
+                });
+              }
+            }
+          }
+
+          // Link barcode if present
+          if (vDto.barcode && vDto.barcode.trim()) {
+            await tx.variantBarcode.create({
+              data: {
+                tenantId,
+                variantId: variant.id,
+                barcode: vDto.barcode.trim(),
+              },
+            });
+          }
+
+          createdVariants.push(variant);
+        }
+      } else if (combinations.length === 0) {
         // Default single variant
         const defaultVariant = await tx.productVariant.create({
           data: {

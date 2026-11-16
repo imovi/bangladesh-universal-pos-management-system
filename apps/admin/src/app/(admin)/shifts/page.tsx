@@ -2,17 +2,35 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useTranslation } from "@/i18n/context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { DataTablePagination } from "@/components/common/data-table-pagination";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import { formatMoney, formatDateTime } from "@/lib/utils";
+import { formatShiftStatus } from "@/i18n/formatters";
 import {
   Clock,
   Eye,
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
-import { formatMoney } from "@/lib/utils";
 
 interface ShiftRecord {
   id: string;
@@ -53,7 +71,8 @@ interface Branch {
 }
 
 export default function ShiftsPage() {
-  const { apiFetch } = useAuth();
+  const router = useRouter();
+  const { apiFetch, currentBranch } = useAuth();
   const { strings } = useTranslation();
 
   const [shifts, setShifts] = useState<ShiftRecord[]>([]);
@@ -63,7 +82,7 @@ export default function ShiftsPage() {
   const [registerFilter, setRegisterFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -102,11 +121,12 @@ export default function ShiftsPage() {
       setLoading(true);
       setErrorMessage(null);
       const queryParams = new URLSearchParams();
-      if (branchFilter && branchFilter !== "all") queryParams.set("branchId", branchFilter);
+      const effectiveBranchId = branchFilter !== "all" ? branchFilter : (currentBranch?.id || "");
+      if (effectiveBranchId) queryParams.set("branchId", effectiveBranchId);
       if (registerFilter && registerFilter !== "all") queryParams.set("registerId", registerFilter);
       if (statusFilter && statusFilter !== "all") queryParams.set("status", statusFilter);
       queryParams.set("page", page.toString());
-      queryParams.set("limit", "20");
+      queryParams.set("limit", pageSize.toString());
 
       const res = await apiFetch(`/shifts?${queryParams.toString()}`);
       if (res.ok) {
@@ -114,20 +134,19 @@ export default function ShiftsPage() {
         const items = Array.isArray(json.data) ? json.data : (json.data?.items || []);
         setShifts(items);
         if (json.data?.meta) {
-          setTotalPages(json.data.meta.totalPages || 1);
           setTotalCount(json.data.meta.total || 0);
         } else {
           setTotalCount(items.length);
         }
       } else {
-        setErrorMessage("Failed to load shifts");
+        setErrorMessage(strings.common.error);
       }
     } catch {
-      setErrorMessage("Network connection error");
+      setErrorMessage(strings.common.error);
     } finally {
       setLoading(false);
     }
-  }, [apiFetch, branchFilter, registerFilter, statusFilter, page]);
+  }, [apiFetch, branchFilter, currentBranch?.id, registerFilter, statusFilter, page, pageSize, strings.common.error]);
 
   useEffect(() => {
     fetchShifts();
@@ -138,19 +157,19 @@ export default function ShiftsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
             <Clock className="h-6 w-6 text-primary" />
-            {strings.shifts.title}
+            <span>{strings.shifts.title}</span>
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
             {strings.shifts.subtitle}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => fetchShifts()} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={() => fetchShifts()} disabled={loading} className="h-9">
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-            {strings.common.refresh}
+            <span>{strings.common.refresh}</span>
           </Button>
         </div>
       </div>
@@ -162,212 +181,211 @@ export default function ShiftsPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-card border border-border p-4 rounded-xl shadow-xs">
+      <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {/* Branch Filter */}
           <div>
-            <select
+            <Select
               value={branchFilter}
-              onChange={(e) => {
-                setBranchFilter(e.target.value);
+              onValueChange={(val) => {
+                setBranchFilter(val);
                 setPage(1);
               }}
-              className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
             >
-              <option value="all">{strings.shifts.filterBranch}</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name} ({b.code})
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="h-9 text-xs sm:text-sm">
+                <SelectValue placeholder={strings.selectEmpty.allBranches} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs sm:text-sm font-medium">
+                  {strings.selectEmpty.allBranches}
+                </SelectItem>
+                {branches.map((b) => (
+                  <SelectItem key={b.id} value={b.id} className="text-xs sm:text-sm">
+                    {b.name} ({b.code})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Register Filter */}
           <div>
-            <select
+            <Select
               value={registerFilter}
-              onChange={(e) => {
-                setRegisterFilter(e.target.value);
+              onValueChange={(val) => {
+                setRegisterFilter(val);
                 setPage(1);
               }}
-              className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
             >
-              <option value="all">{strings.shifts.filterRegister}</option>
-              {registers.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name} ({r.code})
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="h-9 text-xs sm:text-sm">
+                <SelectValue placeholder={strings.selectEmpty.allRegisters} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs sm:text-sm font-medium">
+                  {strings.selectEmpty.allRegisters}
+                </SelectItem>
+                {registers.map((r) => (
+                  <SelectItem key={r.id} value={r.id} className="text-xs sm:text-sm">
+                    {r.name} ({r.code})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Status Filter */}
           <div>
-            <select
+            <Select
               value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
+              onValueChange={(val) => {
+                setStatusFilter(val);
                 setPage(1);
               }}
-              className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
             >
-              <option value="all">{strings.shifts.filterStatus}</option>
-              <option value="open">{strings.shifts.statusOpen}</option>
-              <option value="closed">{strings.shifts.statusClosed}</option>
-            </select>
+              <SelectTrigger className="h-9 text-xs sm:text-sm">
+                <SelectValue placeholder={strings.selectEmpty.allStatuses} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs sm:text-sm font-medium">
+                  {strings.selectEmpty.allStatuses}
+                </SelectItem>
+                <SelectItem value="open" className="text-xs sm:text-sm">
+                  {strings.enums.shiftStatus.open}
+                </SelectItem>
+                <SelectItem value="closed" className="text-xs sm:text-sm">
+                  {strings.enums.shiftStatus.closed}
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>
 
       {errorMessage && (
-        <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
+        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs sm:text-sm font-medium">
           {errorMessage}
         </div>
       )}
 
       {/* Table */}
-      <div className="bg-card border border-border rounded-xl shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-muted/50 text-muted-foreground font-medium border-b border-border">
-              <tr>
-                <th className="py-3 px-4">{strings.shifts.register}</th>
-                <th className="py-3 px-4">{strings.sales.cashier}</th>
-                <th className="py-3 px-4 text-center">{strings.common.status}</th>
-                <th className="py-3 px-4">{strings.shifts.openedAt}</th>
-                <th className="py-3 px-4 text-right">{strings.shifts.openingCash}</th>
-                <th className="py-3 px-4 text-right">{strings.shifts.countedCash}</th>
-                <th className="py-3 px-4 text-right">{strings.shifts.difference}</th>
-                <th className="py-3 px-4 text-center">{strings.common.actions}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {loading ? (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-muted-foreground">
-                    <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
-                    {strings.common.loading}
-                  </td>
-                </tr>
-              ) : shifts.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-muted-foreground">
-                    {strings.common.noData}
-                  </td>
-                </tr>
-              ) : (
-                shifts.map((s) => {
-                  const isOpen = s.status === "open";
-                  const diff = s.cashDifferenceMinor !== undefined && s.cashDifferenceMinor !== null
-                    ? Number(s.cashDifferenceMinor)
-                    : null;
+      <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-36">{strings.shifts.register}</TableHead>
+              <TableHead className="w-36">{strings.sales.cashier}</TableHead>
+              <TableHead className="text-center w-24">{strings.common.status}</TableHead>
+              <TableHead className="w-44">{strings.shifts.openedAt}</TableHead>
+              <TableHead className="text-right w-32">{strings.shifts.openingCash}</TableHead>
+              <TableHead className="text-right w-32">{strings.shifts.countedCash}</TableHead>
+              <TableHead className="text-right w-32">{strings.shifts.difference}</TableHead>
+              <TableHead className="text-right w-20">{strings.common.actions}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={8} className="py-8 text-center text-muted-foreground text-xs sm:text-sm">
+                  <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-primary" />
+                  {strings.common.loading}
+                </TableCell>
+              </TableRow>
+            ) : shifts.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8} className="py-8 text-center text-muted-foreground text-xs sm:text-sm">
+                  {strings.common.noData}
+                </TableCell>
+              </TableRow>
+            ) : (
+              shifts.map((s) => {
+                const isOpen = s.status === "open";
+                const diff = s.cashDifferenceMinor !== undefined && s.cashDifferenceMinor !== null
+                  ? Number(s.cashDifferenceMinor)
+                  : null;
 
-                  return (
-                    <tr key={s.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="py-3 px-4">
-                        <Link href={`/shifts/${s.id}`} className="font-medium text-foreground hover:underline text-primary block">
-                          {s.register?.name || "Station"}
-                        </Link>
-                        <span className="text-xs text-muted-foreground font-mono">
-                          {s.register?.code || s.id.slice(0, 8)}
-                        </span>
-                      </td>
+                return (
+                  <TableRow
+                    key={s.id}
+                    onClick={() => router.push(`/shifts/${s.id}`)}
+                    className="cursor-pointer hover:bg-muted/30 h-[56px] transition-colors"
+                  >
+                    <TableCell>
+                      <span className="font-semibold text-foreground text-xs sm:text-sm block">
+                        {s.register?.name || "Station"}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground font-mono">
+                        {s.register?.code || s.id.slice(0, 8)}
+                      </span>
+                    </TableCell>
 
-                      <td className="py-3 px-4 text-foreground font-medium">
-                        {s.cashierUser?.name || "Cashier"}
-                      </td>
+                    <TableCell className="text-foreground text-xs font-medium">
+                      {s.cashierUser?.name || "Cashier"}
+                    </TableCell>
 
-                      <td className="py-3 px-4 text-center">
-                        <Badge
-                          variant={isOpen ? "default" : "secondary"}
-                          className={`text-xs font-normal ${
-                            isOpen
-                              ? "bg-emerald-500/10 text-emerald-600 border-emerald-200 animate-pulse"
-                              : "bg-muted text-muted-foreground"
-                          }`}
+                    <TableCell className="text-center">
+                      <Badge
+                        variant={isOpen ? "success" : "secondary"}
+                        className="text-[11px]"
+                      >
+                        {formatShiftStatus(s.status, strings)}
+                      </Badge>
+                    </TableCell>
+
+                    <TableCell className="text-muted-foreground text-xs font-mono tabular-nums whitespace-nowrap">
+                      {formatDateTime(s.openedAt)}
+                    </TableCell>
+
+                    <TableCell className="text-right font-mono tabular-nums font-semibold text-foreground text-xs sm:text-sm whitespace-nowrap">
+                      {formatMoney(s.openingCashMinor)}
+                    </TableCell>
+
+                    <TableCell className="text-right font-mono tabular-nums font-semibold text-foreground text-xs sm:text-sm whitespace-nowrap">
+                      {s.closingCashMinor !== null && s.closingCashMinor !== undefined
+                        ? formatMoney(s.closingCashMinor)
+                        : "—"}
+                    </TableCell>
+
+                    <TableCell className="text-right font-mono tabular-nums text-xs sm:text-sm whitespace-nowrap">
+                      {diff !== null ? (
+                        <span
+                          className={
+                            diff === 0
+                              ? "text-foreground font-medium"
+                              : diff < 0
+                              ? "text-rose-700 dark:text-rose-400 font-semibold"
+                              : "text-foreground font-semibold"
+                          }
                         >
-                          {isOpen ? strings.shifts.statusOpen : strings.shifts.statusClosed}
-                        </Badge>
-                      </td>
+                          {diff > 0 ? `+${formatMoney(diff)}` : formatMoney(diff)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
 
-                      <td className="py-3 px-4 text-muted-foreground text-xs whitespace-nowrap">
-                        {new Date(s.openedAt).toLocaleDateString()} {new Date(s.openedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </td>
-
-                      <td className="py-3 px-4 text-right font-medium text-foreground whitespace-nowrap">
-                        {formatMoney(s.openingCashMinor)}
-                      </td>
-
-                      <td className="py-3 px-4 text-right font-medium text-foreground whitespace-nowrap">
-                        {s.closingCashMinor !== null && s.closingCashMinor !== undefined
-                          ? formatMoney(s.closingCashMinor)
-                          : "-"}
-                      </td>
-
-                      <td className="py-3 px-4 text-right font-medium whitespace-nowrap">
-                        {diff !== null ? (
-                          <span
-                            className={
-                              diff === 0
-                                ? "text-emerald-600 font-semibold"
-                                : diff < 0
-                                ? "text-destructive font-semibold"
-                                : "text-blue-600 font-semibold"
-                            }
-                          >
-                            {diff > 0 ? `+${formatMoney(diff)}` : formatMoney(diff)}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">-</span>
-                        )}
-                      </td>
-
-                      <td className="py-3 px-4 text-center">
-                        <Link href={`/shifts/${s.id}`}>
-                          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs">
-                            <Eye className="h-3.5 w-3.5 mr-1" />
-                            {strings.shifts.viewShift}
-                          </Button>
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                      <Link href={`/shifts/${s.id}`}>
+                        <Button variant="ghost" size="sm" className="h-8 px-2 text-xs">
+                          <Eye className="h-3.5 w-3.5 mr-1" />
+                          <span>{strings.common.details}</span>
+                        </Button>
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="p-4 border-t border-border flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">
-              {strings.common.showing} {shifts.length} {strings.common.of} {totalCount}
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-              >
-                {strings.common.previous}
-              </Button>
-              <span className="text-xs text-foreground font-medium px-2">
-                {page} / {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-              >
-                {strings.common.next}
-              </Button>
-            </div>
-          </div>
-        )}
+        <DataTablePagination
+          page={page}
+          pageSize={pageSize}
+          total={totalCount}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </div>
     </div>
   );

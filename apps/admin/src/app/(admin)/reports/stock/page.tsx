@@ -9,7 +9,6 @@ import { formatMoney } from "@/lib/utils";
 import { exportToCsv } from "@/lib/export";
 import {
   Download,
-  Building2,
   Package,
   DollarSign,
   Search,
@@ -17,12 +16,6 @@ import {
   Boxes,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-interface Branch {
-  id: string;
-  name: string;
-  code: string;
-}
 
 interface StockValuationItem {
   variantId: string;
@@ -43,19 +36,8 @@ export default function StockValuationPage() {
   const { currentBranch, apiFetch } = useAuth();
   const { strings, locale } = useTranslation();
 
-  const [selectedBranchId, setSelectedBranchId] = useState<string>(currentBranch?.id || "");
+  const branchId = currentBranch?.id;
   const [searchQuery, setSearchQuery] = useState<string>("");
-
-  // Branches
-  const { data: branches = [] } = useQuery<Branch[]>({
-    queryKey: ["branches"],
-    queryFn: async () => {
-      const res = await apiFetch("/branches");
-      if (!res.ok) return [];
-      const json = await res.json();
-      return Array.isArray(json) ? json : (json.data || []);
-    },
-  });
 
   // Query Stock Valuation
   const {
@@ -63,10 +45,10 @@ export default function StockValuationPage() {
     isLoading,
     refetch,
   } = useQuery<StockValuationResponse>({
-    queryKey: ["report-stock-valuation", selectedBranchId],
+    queryKey: ["report-stock-valuation", branchId],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (selectedBranchId) params.set("branchId", selectedBranchId);
+      if (branchId) params.set("branchId", branchId);
       const res = await apiFetch(`/reports/stock-valuation?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to load valuation");
       const json = await res.json();
@@ -99,7 +81,7 @@ export default function StockValuationPage() {
       (r.unitCostMinor / 100).toFixed(2),
       (r.valuationMinor / 100).toFixed(2),
     ]);
-    exportToCsv(`stock_valuation_${selectedBranchId || "all_branches"}`, headers, rows);
+    exportToCsv(`stock_valuation_${branchId || "all_branches"}`, headers, rows);
   };
 
   return (
@@ -118,24 +100,6 @@ export default function StockValuationPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* Branch Selector */}
-            <div className="flex items-center gap-1.5 bg-muted/50 px-2.5 py-1.5 rounded-lg border border-border text-xs">
-              <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-              <select
-                value={selectedBranchId}
-                onChange={(e) => setSelectedBranchId(e.target.value)}
-                className="bg-transparent font-medium focus:outline-none cursor-pointer"
-                aria-label="Filter valuation by branch"
-              >
-                <option value="">{strings.common.allBranches}</option>
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} ({b.code})
-                  </option>
-                ))}
-              </select>
-            </div>
-
             <Button
               variant="outline"
               size="sm"
@@ -165,12 +129,12 @@ export default function StockValuationPage() {
               <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">
                 {strings.reports.totalValuation}
               </CardTitle>
-              <div className="h-8 w-8 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <div className="h-8 w-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
                 <DollarSign className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+              <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
                 {formatMoney(valuationData?.totalValuationMinor ?? 0)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
@@ -184,12 +148,12 @@ export default function StockValuationPage() {
               <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">
                 {strings.reports.totalQty}
               </CardTitle>
-              <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+              <div className="h-8 w-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
                 <Boxes className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold tracking-tight">
+              <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
                 {valuationData?.totalQty ?? 0}
               </div>
               <p className="text-xs text-muted-foreground mt-1">

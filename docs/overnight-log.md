@@ -434,5 +434,65 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - Vitest Admin: 17 passed.
   - Vitest API: 38 test suites, 219 tests passed (with all coverage thresholds met).
   - Playwright E2E: 32 tests passed (48.9s).
+  - CI Status: Green (`conclusion: success` on GitHub Actions run 43803319337 for commit `dbd2230`). Dev database verified untouched in CI job.
 
+
+---
+
+## Part B: Design Corrections Across the Whole Admin
+
+- **Start Time:** 2026-11-16 10:15:00 +06:00
+- **End Time:** 2026-11-16 11:18:00 +06:00
+- **What Was Built & Fixed:**
+  1. **Colour Discipline & Visual Hierarchy:**
+     - Replaced scattered brightly tinted icons on KPI cards with neutral grey circles (`bg-muted text-muted-foreground`).
+     - Standardized numerical KPI figures to normal text color (`text-foreground font-semibold tabular-nums`). Highlight colors are reserved strictly for financial loss/destructive states (`text-destructive`) or positive deltas.
+     - Redesigned status badges in `apps/admin/src/components/ui/badge.tsx` using soft tinted backgrounds with darker text of the same hue (`emerald-500/15 text-emerald-700 dark:text-emerald-400`, `amber-500/15`, `rose-500/15`, `blue-500/15`, `muted text-muted-foreground`).
+     - Updated active navigation item in `apps/admin/src/components/layout/sidebar.tsx` to a soft primary tint (`bg-primary/10 text-primary font-semibold border-l-[3px] border-primary rounded-r-lg rounded-l-none pl-2.5`).
+     - Removed redundant user info block from sidebar footer (user profile is cleanly positioned in top header).
+  2. **Single-Language Enforcement & Enum Translations:**
+     - Created centralized `enums` translations in `apps/admin/src/i18n/bn.ts` and `apps/admin/src/i18n/en.ts` for:
+       - Payment methods: `cash` ("ক্যাশ" / "Cash"), `bkash` ("বিকাশ" / "bKash"), `nagad` ("নগদ" / "Nagad"), `rocket` ("রকেট" / "Rocket"), `card` ("কার্ড" / "Card"), `bank_transfer` ("ব্যাংক ট্রান্সফার" / "Bank Transfer").
+       - Sale statuses: "সম্পন্ন" / "বাতিলকৃত".
+       - Shift statuses: "উন্মুক্ত" / "বন্ধ".
+       - Purchase order statuses: "খসড়া" / "অর্ডারকৃত" / "আংশিক প্রাপ্ত" / "সম্পূর্ণ প্রাপ্ত" / "বাতিল".
+       - Inventory movement types: "প্রারম্ভিক মজুদ" / "বিক্রয়" / "বিক্রয় ফেরত" / "পণ্য প্রাপ্তি" / "সমন্বয়".
+       - Walk-in Customer: "সাধারণ ক্রেতা" / "Walk-in Customer".
+     - Removed all mixed English in parentheses across `bn.ts` and screens (`(Cash)`, `(Voided)`, `(Draft)`, `(PO)`, `(GRN)`, etc.).
+     - Built `apps/admin/src/i18n/formatters.ts` with typed helpers (`formatPaymentMethod`, `formatSaleStatus`, `formatShiftStatus`, `formatPoStatus`, `formatMovementType`, `formatRoleName`).
+     - Extended unit test `apps/admin/test/i18n.spec.ts` asserting 100% key parity, non-empty leaves, zero mixed parenthetical labels in `bn.ts`, and full coverage of all system enums (all passed).
+  3. **Standard Date Pickers & Localization:**
+     - Installed and configured `react-day-picker` v10 and `date-fns`.
+     - Built `DatePicker` (single date) and `DateRangePicker` (date range) popovers with standard `DD/MM/YYYY` formatting (`16/11/2026`) in tenant timezone (`Asia/Dhaka`).
+     - Replaced native date inputs in Dashboard, Sales list, Sales reports, and Profit reports.
+  4. **Radix Select Components & Consistent Empty Options:**
+     - Built custom Radix UI select components in `apps/admin/src/components/ui/select.tsx`.
+     - Differentiated filter choices ("সব ক্যাটাগরি" / "All categories") from required form inputs ("ক্যাটাগরি বেছে নিন" / "Choose a category").
+  5. **Table Typography & Shared Pagination Standard:**
+     - Standardized row heights across table components: 44px compact, 56px standard with hover highlight.
+     - Numbers and money values right-aligned with `tabular-nums font-mono`.
+     - Built `DataTablePagination` in `apps/admin/src/components/common/data-table-pagination.tsx` displaying `"1–25 / 142"`, previous, next, and page-size selector (25, 50, 100 default 25). Applied across Products, Stock levels, Sales, Shifts, and Customers lists.
+  6. **Dashboard Revamp:**
+     - Removed redundant in-page branch selector (now strictly synchronizes with the header branch switcher).
+     - Revamped payment breakdown: method dot color matches bar segment, segment labels rendered cleanly.
+     - Best-selling items grouped by product with variants listed underneath showing size, color, SKU, and quantities.
+  7. **New Product Variant Combination Matrix Builder:**
+     - Extended `CreateProductSchema` and `ProductsService.create` to accept custom variant rows with individual prices, costs, SKUs, and barcodes.
+     - Replaced blank form fields (removed pre-filled 1500 / 950 prices).
+     - Built live variant combination rows table with bulk fill actions ("Apply to all", "Apply to this colour", "Apply to this size").
+     - Added currency prefix "৳" inside money inputs and red asterisk for required fields.
+  8. **Branch Selector Unification:**
+     - Removed redundant in-page branch dropdowns across Dashboard, Sales Reports, Stock Valuation, and Profit Reports; pages now follow the active branch in the header (or all branches when selected).
+  9. **Screenshots Captured under `docs/screenshots/design-v2/`:**
+     - Desktop (1440px): `desktop-dashboard-bn.png`, `desktop-dashboard-en.png`, `desktop-products-list.png`, `desktop-product-new.png`, `desktop-product-detail.png`, `desktop-sales-list.png`, `desktop-shift-detail.png`, `desktop-stock-valuation.png`.
+     - Mobile (375px): `mobile-dashboard.png`, `mobile-sales-list.png`, `mobile-product-new.png`.
+     - Dark theme (1440px): `dark-dashboard.png`, `dark-sales-list.png`.
+- **Dependencies Added:** `@radix-ui/react-select`, `@radix-ui/react-popover`, `react-day-picker`, `date-fns` in `@universal-pos/admin`.
+- **Verification & CI Run Result:**
+  - `npm run build`: All 30 routes cleanly compiled with 0 errors.
+  - `npm run lint`: 0 warnings, 0 errors across 63 files.
+  - Vitest Admin: 19 passed.
+  - Vitest API: 38 test suites, 208 passed.
+  - Playwright E2E: 32 tests passed (46.8s) against clean `universal_pos_e2e`.
+  - Development database (`universal_pos`) verified 100% clean and untouched.
 

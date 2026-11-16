@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { PermissionGate } from "@/components/common/permission-gate";
 import { useTranslation } from "@/i18n/context";
 import { useAuth } from "@/lib/auth-context";
@@ -16,19 +17,28 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Shirt, Edit2, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { DataTablePagination } from "@/components/common/data-table-pagination";
+import { Plus, Search, Shirt, Edit2 } from "lucide-react";
 import { formatMoney } from "@/lib/utils";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 
 export default function ProductsPage() {
+  const router = useRouter();
   const { strings, locale } = useTranslation();
   const { apiFetch, currentBranch } = useAuth();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [page, setPage] = useState(1);
-  const limit = 20;
+  const [pageSize, setPageSize] = useState(25);
 
   // Fetch categories for filter dropdown
   const { data: categories = [] } = useQuery({
@@ -43,11 +53,11 @@ export default function ProductsPage() {
 
   // Fetch products with search, category filter, branch filter and pagination
   const { data: productsData, isLoading } = useQuery({
-    queryKey: ["products-list", page, searchTerm, selectedCategory, currentBranch?.id],
+    queryKey: ["products-list", page, pageSize, searchTerm, selectedCategory, currentBranch?.id],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("page", page.toString());
-      params.set("limit", limit.toString());
+      params.set("limit", pageSize.toString());
       if (searchTerm.trim()) params.set("search", searchTerm.trim());
       if (selectedCategory && selectedCategory !== "all") params.set("categoryId", selectedCategory);
       if (currentBranch?.id) params.set("branchId", currentBranch.id);
@@ -63,7 +73,7 @@ export default function ProductsPage() {
   });
 
   const products = productsData?.items || [];
-  const pagination = productsData?.pagination || { total: 0, totalPages: 1 };
+  const totalItems = productsData?.pagination?.total ?? products.length;
 
   return (
     <PermissionGate permission="catalog.read">
@@ -71,17 +81,17 @@ export default function ProductsPage() {
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               {strings.products.title}
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
               {locale === "bn"
                 ? "দোকানের সকল পণ্যের ক্যাটালগ ও ভ্যারিয়েন্ট ব্যবস্থাপনা"
                 : "Manage your product catalog and variants"}
             </p>
           </div>
           <Link href="/catalog/products/new">
-            <Button className="flex items-center gap-1.5 self-start sm:self-auto">
+            <Button className="flex items-center gap-1.5 self-start sm:self-auto h-9">
               <Plus className="h-4 w-4" />
               <span>{strings.products.createProduct}</span>
             </Button>
@@ -95,7 +105,7 @@ export default function ProductsPage() {
               <div className="relative w-full sm:w-80">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder={locale === "bn" ? "নাম, SKU অথবা বারকোড দিয়ে খুঁজুন..." : "Search by name, SKU or barcode..."}
+                  placeholder={locale === "bn" ? "নাম, এসকেইউ অথবা বারকোড দিয়ে খুঁজুন..." : "Search by name, SKU or barcode..."}
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);
@@ -105,38 +115,46 @@ export default function ProductsPage() {
                 />
               </div>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <select
+              <div className="w-full sm:w-56">
+                <Select
                   value={selectedCategory}
-                  onChange={(e) => {
-                    setSelectedCategory(e.target.value);
+                  onValueChange={(val) => {
+                    setSelectedCategory(val);
                     setPage(1);
                   }}
-                  className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-xs sm:text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full sm:w-52"
                 >
-                  <option value="all">{strings.common.all} {strings.products.category}</option>
-                  {categories.map((c: any) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                  <SelectTrigger className="h-9 text-xs sm:text-sm">
+                    <SelectValue placeholder={strings.selectEmpty.allCategories} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" className="text-xs sm:text-sm font-medium">
+                      {strings.selectEmpty.allCategories}
+                    </SelectItem>
+                    {categories.map((c: any) => (
+                      <SelectItem key={c.id} value={c.id} className="text-xs sm:text-sm">
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Products Table */}
-        <Card className="shadow-sm">
+        <Card className="shadow-sm overflow-hidden">
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[320px]">{strings.products.productName}</TableHead>
                   <TableHead className="hidden md:table-cell">{strings.products.category}</TableHead>
-                  <TableHead className="text-center">{strings.products.variantCount}</TableHead>
-                  <TableHead className="text-right">{strings.products.priceRange}</TableHead>
-                  <TableHead className="text-center">{strings.products.totalStock}</TableHead>
-                  <TableHead className="text-center">{strings.common.status}</TableHead>
-                  <TableHead className="text-right">{strings.common.actions}</TableHead>
+                  <TableHead className="text-right w-24">{strings.products.variantCount}</TableHead>
+                  <TableHead className="text-right w-40">{strings.products.priceRange}</TableHead>
+                  <TableHead className="text-right w-28">{strings.products.totalStock}</TableHead>
+                  <TableHead className="text-center w-24">{strings.common.status}</TableHead>
+                  <TableHead className="text-right w-16">{strings.common.actions}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -163,9 +181,10 @@ export default function ProductsPage() {
                       const prices = variantsList.map((v: any) => Number(v.priceMinor));
                       const minPrice = Math.min(...prices);
                       const maxPrice = Math.max(...prices);
-                      priceDisplay = minPrice === maxPrice
-                        ? formatMoney(minPrice)
-                        : `${formatMoney(minPrice)} - ${formatMoney(maxPrice)}`;
+                      priceDisplay =
+                        minPrice === maxPrice
+                          ? formatMoney(minPrice)
+                          : `${formatMoney(minPrice)} – ${formatMoney(maxPrice)}`;
                     }
 
                     // Calculate total stock
@@ -173,7 +192,9 @@ export default function ProductsPage() {
                     if (product.totalStock === undefined) {
                       variantsList.forEach((v: any) => {
                         if (v.stockLevels) {
-                          v.stockLevels.forEach((sl: any) => { totalStock += Number(sl.qty || sl.quantity || 0); });
+                          v.stockLevels.forEach((sl: any) => {
+                            totalStock += Number(sl.qty || sl.quantity || 0);
+                          });
                         } else if (v.totalStock !== undefined) {
                           totalStock += Number(v.totalStock);
                         }
@@ -181,51 +202,47 @@ export default function ProductsPage() {
                     }
 
                     return (
-                      <TableRow key={product.id} className="hover:bg-muted/40">
+                      <TableRow
+                        key={product.id}
+                        onClick={() => router.push(`/catalog/products/${product.id}`)}
+                        className="cursor-pointer hover:bg-muted/40 h-[56px]"
+                      >
                         <TableCell className="font-medium">
-                          <Link href={`/catalog/products/${product.id}`} className="flex items-center gap-2.5 hover:underline group">
-                            <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center shrink-0 group-hover:bg-primary/10">
-                              <Shirt className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
+                          <div className="flex items-center gap-2.5">
+                            <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center shrink-0">
+                              <Shirt className="h-4 w-4 text-muted-foreground" />
                             </div>
                             <div className="flex flex-col min-w-0">
-                              <span className="truncate font-semibold text-sm">{product.name}</span>
-                              <span className="text-[11px] font-mono text-muted-foreground">{product.sku}</span>
+                              <span className="truncate font-semibold text-sm text-foreground">
+                                {product.name}
+                              </span>
+                              <span className="text-[11px] font-mono text-muted-foreground">
+                                {product.sku}
+                              </span>
                             </div>
-                          </Link>
+                          </div>
                         </TableCell>
                         <TableCell className="hidden md:table-cell text-xs text-muted-foreground">
                           {product.category?.name || "—"}
                         </TableCell>
-                        <TableCell className="text-center text-xs">
-                          <Badge variant="secondary" className="font-mono text-xs">
-                            {variantCount}
-                          </Badge>
+                        <TableCell className="text-right font-mono tabular-nums text-xs">
+                          {variantCount}
                         </TableCell>
-                        <TableCell className="text-right font-medium text-xs sm:text-sm">
+                        <TableCell className="text-right font-mono tabular-nums text-xs sm:text-sm font-semibold text-foreground">
                           {priceDisplay}
                         </TableCell>
-                        <TableCell className="text-center">
-                          <span
-                            className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                              totalStock > 10
-                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                                : totalStock > 0
-                                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                                : "bg-destructive/10 text-destructive"
-                            }`}
-                          >
-                            {totalStock}
-                          </span>
+                        <TableCell className="text-right font-mono tabular-nums text-xs font-semibold text-foreground">
+                          {totalStock}
                         </TableCell>
                         <TableCell className="text-center">
                           <Badge
-                            variant={product.isActive ? "success" : "outline"}
+                            variant={product.isActive ? "success" : "secondary"}
                             className="text-[11px]"
                           >
                             {product.isActive ? strings.common.active : strings.common.inactive}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                           <Link href={`/catalog/products/${product.id}`}>
                             <Button variant="ghost" size="icon" className="h-8 w-8">
                               <Edit2 className="h-3.5 w-3.5" />
@@ -240,33 +257,13 @@ export default function ProductsPage() {
             </Table>
 
             {/* Pagination Controls */}
-            {pagination.totalPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t">
-                <span className="text-xs text-muted-foreground">
-                  মোট {pagination.total} টি পণ্য • পৃষ্ঠা {page} / {pagination.totalPages}
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => Math.max(p - 1, 1))}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    disabled={page >= pagination.totalPages}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
+            <DataTablePagination
+              page={page}
+              pageSize={pageSize}
+              total={totalItems}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
           </CardContent>
         </Card>
       </div>

@@ -20,29 +20,49 @@ export function formatMoney(minorUnits: number | bigint | null | undefined, curr
 }
 
 /**
- * Format date in Bangladesh local time
+ * Format date strictly as DD/MM/YYYY in tenant timezone (default Asia/Dhaka)
+ * e.g. 16/11/2026
  */
-export function formatDate(dateStringOrDate: string | Date | null | undefined): string {
+export function formatDate(
+  dateStringOrDate: string | Date | null | undefined,
+  timeZone = "Asia/Dhaka"
+): string {
   if (!dateStringOrDate) return "—";
-  const d = new Date(dateStringOrDate);
-  return d.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
+  const d = typeof dateStringOrDate === "string" ? new Date(dateStringOrDate) : dateStringOrDate;
+  if (isNaN(d.getTime())) return "—";
+
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    day: "2-digit",
+    month: "2-digit",
     year: "numeric",
-  });
+  }).formatToParts(d);
+
+  const day = parts.find((p) => p.type === "day")?.value;
+  const month = parts.find((p) => p.type === "month")?.value;
+  const year = parts.find((p) => p.type === "year")?.value;
+  return `${day}/${month}/${year}`;
 }
 
 /**
- * Format date and time in Bangladesh local time
+ * Format date and time strictly as DD/MM/YYYY, h:mm A in tenant timezone (default Asia/Dhaka)
+ * e.g. 16/11/2026, 9:14 AM
  */
-export function formatDateTime(dateStringOrDate: string | Date | null | undefined): string {
+export function formatDateTime(
+  dateStringOrDate: string | Date | null | undefined,
+  timeZone = "Asia/Dhaka"
+): string {
   if (!dateStringOrDate) return "—";
-  const d = new Date(dateStringOrDate);
-  return d.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
+  const d = typeof dateStringOrDate === "string" ? new Date(dateStringOrDate) : dateStringOrDate;
+  if (isNaN(d.getTime())) return "—";
+
+  const dateFormatted = formatDate(d, timeZone);
+  const timeFormatted = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
     minute: "2-digit",
-  });
+    hour12: true,
+  }).format(d);
+
+  return `${dateFormatted}, ${timeFormatted}`;
 }

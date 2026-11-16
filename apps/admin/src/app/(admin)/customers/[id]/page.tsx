@@ -16,7 +16,8 @@ import {
   CheckCircle2,
   Receipt,
 } from "lucide-react";
-import { formatMoney } from "@/lib/utils";
+import { formatMoney, formatDateTime } from "@/lib/utils";
+import { formatSaleStatus } from "@/i18n/formatters";
 
 interface CustomerSale {
   id: string;
@@ -293,17 +294,15 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                           {s.invoiceNumber}
                         </Link>
                       </td>
-                      <td className="py-3 px-4 text-muted-foreground text-xs">
-                        {new Date(s.createdAt).toLocaleDateString()} {new Date(s.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      <td className="py-3 px-4 text-muted-foreground text-xs font-mono tabular-nums whitespace-nowrap">
+                        {formatDateTime(s.createdAt)}
                       </td>
                       <td className="py-3 px-4 text-center">
                         <Badge
-                          variant={isVoided ? "destructive" : "default"}
-                          className={`text-xs font-normal ${
-                            isVoided ? "bg-red-500/10 text-red-600 border-red-200" : "bg-emerald-500/10 text-emerald-600 border-emerald-200"
-                          }`}
+                          variant={isVoided ? "destructive" : "success"}
+                          className="text-[11px]"
                         >
-                          {isVoided ? strings.sales.statusVoided : strings.sales.statusCompleted}
+                          {formatSaleStatus(s.status, strings)}
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-right font-medium text-foreground">

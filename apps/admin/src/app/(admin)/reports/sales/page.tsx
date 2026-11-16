@@ -11,7 +11,6 @@ import { formatBusinessDate } from "@universal-pos/shared";
 import {
   DollarSign,
   Download,
-  Building2,
   Package,
   Layers,
   Tag,
@@ -19,15 +18,11 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DateRangePicker } from "@/components/ui/date-picker";
+import { formatPaymentMethod } from "@/i18n/formatters";
 
 type ReportTab = "summary" | "variant" | "category" | "brand" | "collection" | "matrix";
 type DatePreset = "today" | "yesterday" | "last7days" | "thisMonth" | "custom";
-
-interface Branch {
-  id: string;
-  name: string;
-  code: string;
-}
 
 interface ProductItem {
   id: string;
@@ -95,7 +90,7 @@ export default function SalesReportsPage() {
 
   const [activeTab, setActiveTab] = useState<ReportTab>("summary");
   const [datePreset, setDatePreset] = useState<DatePreset>("today");
-  const [selectedBranchId, setSelectedBranchId] = useState<string>(currentBranch?.id || "");
+  const branchId = currentBranch?.id;
   const [selectedProductId, setSelectedProductId] = useState<string>("");
 
   const todayStr = useMemo(() => formatBusinessDate(new Date(), "Asia/Dhaka"), []);
@@ -135,17 +130,6 @@ export default function SalesReportsPage() {
   const effectiveStartDate = datePreset === "custom" ? customStart : computedStartDate;
   const effectiveEndDate = datePreset === "custom" ? customEnd : computedEndDate;
 
-  // Branches
-  const { data: branches = [] } = useQuery<Branch[]>({
-    queryKey: ["branches"],
-    queryFn: async () => {
-      const res = await apiFetch("/branches");
-      if (!res.ok) return [];
-      const json = await res.json();
-      return Array.isArray(json) ? json : (json.data || []);
-    },
-  });
-
   // Products for matrix selector
   const { data: products = [] } = useQuery<ProductItem[]>({
     queryKey: ["products-for-matrix"],
@@ -164,14 +148,14 @@ export default function SalesReportsPage() {
     isLoading: isSummaryLoading,
     refetch: refetchSummary,
   } = useQuery<SalesSummaryData>({
-    queryKey: ["report-sales-summary", effectiveStartDate, effectiveEndDate, selectedBranchId],
+    queryKey: ["report-sales-summary", effectiveStartDate, effectiveEndDate, branchId],
     enabled: activeTab === "summary",
     queryFn: async () => {
       const params = new URLSearchParams({
         startDate: effectiveStartDate,
         endDate: effectiveEndDate,
       });
-      if (selectedBranchId) params.set("branchId", selectedBranchId);
+      if (branchId) params.set("branchId", branchId);
       const res = await apiFetch(`/reports/sales-summary?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to load summary");
       const json = await res.json();
@@ -185,14 +169,14 @@ export default function SalesReportsPage() {
     isLoading: isVariantLoading,
     refetch: refetchVariant,
   } = useQuery<VariantSaleRow[]>({
-    queryKey: ["report-sales-by-variant", effectiveStartDate, effectiveEndDate, selectedBranchId],
+    queryKey: ["report-sales-by-variant", effectiveStartDate, effectiveEndDate, branchId],
     enabled: activeTab === "variant",
     queryFn: async () => {
       const params = new URLSearchParams({
         startDate: effectiveStartDate,
         endDate: effectiveEndDate,
       });
-      if (selectedBranchId) params.set("branchId", selectedBranchId);
+      if (branchId) params.set("branchId", branchId);
       const res = await apiFetch(`/reports/sales-by-variant?${params.toString()}`);
       if (!res.ok) return [];
       const json = await res.json();
@@ -206,14 +190,14 @@ export default function SalesReportsPage() {
     isLoading: isCategoryLoading,
     refetch: refetchCategory,
   } = useQuery<CategorySaleRow[]>({
-    queryKey: ["report-sales-by-category", effectiveStartDate, effectiveEndDate, selectedBranchId],
+    queryKey: ["report-sales-by-category", effectiveStartDate, effectiveEndDate, branchId],
     enabled: activeTab === "category",
     queryFn: async () => {
       const params = new URLSearchParams({
         startDate: effectiveStartDate,
         endDate: effectiveEndDate,
       });
-      if (selectedBranchId) params.set("branchId", selectedBranchId);
+      if (branchId) params.set("branchId", branchId);
       const res = await apiFetch(`/reports/sales-by-category?${params.toString()}`);
       if (!res.ok) return [];
       const json = await res.json();
@@ -227,14 +211,14 @@ export default function SalesReportsPage() {
     isLoading: isBrandLoading,
     refetch: refetchBrand,
   } = useQuery<BrandSaleRow[]>({
-    queryKey: ["report-sales-by-brand", effectiveStartDate, effectiveEndDate, selectedBranchId],
+    queryKey: ["report-sales-by-brand", effectiveStartDate, effectiveEndDate, branchId],
     enabled: activeTab === "brand",
     queryFn: async () => {
       const params = new URLSearchParams({
         startDate: effectiveStartDate,
         endDate: effectiveEndDate,
       });
-      if (selectedBranchId) params.set("branchId", selectedBranchId);
+      if (branchId) params.set("branchId", branchId);
       const res = await apiFetch(`/reports/sales-by-brand?${params.toString()}`);
       if (!res.ok) return [];
       const json = await res.json();
@@ -248,14 +232,14 @@ export default function SalesReportsPage() {
     isLoading: isCollectionLoading,
     refetch: refetchCollection,
   } = useQuery<CollectionSaleRow[]>({
-    queryKey: ["report-sales-by-collection", effectiveStartDate, effectiveEndDate, selectedBranchId],
+    queryKey: ["report-sales-by-collection", effectiveStartDate, effectiveEndDate, branchId],
     enabled: activeTab === "collection",
     queryFn: async () => {
       const params = new URLSearchParams({
         startDate: effectiveStartDate,
         endDate: effectiveEndDate,
       });
-      if (selectedBranchId) params.set("branchId", selectedBranchId);
+      if (branchId) params.set("branchId", branchId);
       const res = await apiFetch(`/reports/sales-by-collection?${params.toString()}`);
       if (!res.ok) return [];
       const json = await res.json();
@@ -269,11 +253,11 @@ export default function SalesReportsPage() {
     isLoading: isMatrixLoading,
     refetch: refetchMatrix,
   } = useQuery<VariantMatrixResponse | null>({
-    queryKey: ["report-variant-matrix", selectedProductId, selectedBranchId],
+    queryKey: ["report-variant-matrix", selectedProductId, branchId],
     enabled: activeTab === "matrix" && Boolean(selectedProductId),
     queryFn: async () => {
       const params = new URLSearchParams({ productId: selectedProductId });
-      if (selectedBranchId) params.set("branchId", selectedBranchId);
+      if (branchId) params.set("branchId", branchId);
       const res = await apiFetch(`/reports/variant-matrix?${params.toString()}`);
       if (!res.ok) return null;
       const json = await res.json();
@@ -443,49 +427,19 @@ export default function SalesReportsPage() {
               ))}
             </div>
 
-            {/* Custom Date Pickers & Branch Selector */}
+            {/* Custom Date Pickers */}
             <div className="flex flex-wrap items-center gap-2 text-xs">
               {datePreset === "custom" && (
-                <div className="flex items-center gap-2 bg-muted/40 p-1.5 rounded-lg border border-border">
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">{strings.reports.startDate}:</span>
-                    <input
-                      type="date"
-                      value={customStart}
-                      onChange={(e) => setCustomStart(e.target.value)}
-                      className="bg-transparent font-medium focus:outline-none cursor-pointer"
-                    />
-                  </div>
-                  <span className="text-muted-foreground">-</span>
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">{strings.reports.endDate}:</span>
-                    <input
-                      type="date"
-                      value={customEnd}
-                      onChange={(e) => setCustomEnd(e.target.value)}
-                      className="bg-transparent font-medium focus:outline-none cursor-pointer"
-                    />
-                  </div>
-                </div>
+                <DateRangePicker
+                  startDate={customStart}
+                  endDate={customEnd}
+                  onChange={({ startDate, endDate }) => {
+                    setCustomStart(startDate);
+                    setCustomEnd(endDate);
+                  }}
+                  aria-label="Filter report by date range"
+                />
               )}
-
-              {/* Branch Selector */}
-              <div className="flex items-center gap-1.5 bg-muted/50 px-2.5 py-1.5 rounded-lg border border-border">
-                <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                <select
-                  value={selectedBranchId}
-                  onChange={(e) => setSelectedBranchId(e.target.value)}
-                  className="bg-transparent font-medium focus:outline-none cursor-pointer"
-                  aria-label="Filter report by branch"
-                >
-                  <option value="">{strings.common.allBranches}</option>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} ({b.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
             </div>
           </div>
         </div>
@@ -583,7 +537,7 @@ export default function SalesReportsPage() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                      <div className="text-2xl font-bold text-foreground tabular-nums">
                         {formatMoney(summaryData.totalNetMinor)}
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
@@ -599,7 +553,7 @@ export default function SalesReportsPage() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold text-foreground">
+                      <div className="text-2xl font-bold text-foreground tabular-nums">
                         {formatMoney(summaryData.totalGrossMinor)}
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
@@ -615,7 +569,7 @@ export default function SalesReportsPage() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                      <div className="text-2xl font-bold text-foreground tabular-nums">
                         {formatMoney(summaryData.totalDiscountMinor)}
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
@@ -631,7 +585,7 @@ export default function SalesReportsPage() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      <div className="text-2xl font-bold text-foreground tabular-nums">
                         {formatMoney(summaryData.totalTaxMinor)}
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
@@ -755,8 +709,8 @@ export default function SalesReportsPage() {
                         <tbody className="divide-y divide-border">
                           {Object.entries(summaryData.paymentsByMethod).map(([method, amount]) => (
                             <tr key={method}>
-                              <td className="py-2 px-3 font-medium uppercase">{method}</td>
-                              <td className="py-2 px-3 text-right font-semibold">{formatMoney(amount)}</td>
+                              <td className="py-2 px-3 font-medium">{formatPaymentMethod(method, strings)}</td>
+                              <td className="py-2 px-3 text-right font-semibold tabular-nums">{formatMoney(amount)}</td>
                             </tr>
                           ))}
                         </tbody>

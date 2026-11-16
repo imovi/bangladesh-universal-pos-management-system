@@ -14,6 +14,7 @@ import {
   Scale,
 } from "lucide-react";
 import { formatMoney } from "@/lib/utils";
+import { formatPaymentMethod, formatShiftStatus } from "@/i18n/formatters";
 
 interface ShiftTransaction {
   type: string;
@@ -134,14 +135,10 @@ export default function ShiftDetailPage({ params }: { params: Promise<{ id: stri
                 {strings.shifts.shiftDetails}
               </h1>
               <Badge
-                variant={isOpen ? "default" : "secondary"}
-                className={`text-xs font-normal ${
-                  isOpen
-                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-200 animate-pulse"
-                    : "bg-muted text-muted-foreground"
-                }`}
+                variant={isOpen ? "success" : "secondary"}
+                className="text-xs"
               >
-                {isOpen ? strings.shifts.statusOpen : strings.shifts.statusClosed}
+                {formatShiftStatus(report.status, strings)}
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground font-mono mt-0.5">
@@ -271,10 +268,10 @@ export default function ShiftDetailPage({ params }: { params: Promise<{ id: stri
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {Object.entries(paymentTotals).map(([method, amountMinor]) => (
             <div key={method} className="p-3.5 rounded-xl bg-muted/40 border border-border text-center">
-              <span className="text-xs uppercase font-mono font-semibold text-muted-foreground block mb-1">
-                {method.replace("_", " ")}
+              <span className="text-xs font-semibold text-muted-foreground block mb-1">
+                {formatPaymentMethod(method, strings)}
               </span>
-              <span className="text-sm font-bold text-foreground">
+              <span className="text-sm font-semibold text-foreground font-mono tabular-nums">
                 {formatMoney(Number(amountMinor))}
               </span>
             </div>

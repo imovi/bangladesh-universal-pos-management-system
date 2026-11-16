@@ -11,22 +11,16 @@ import { formatBusinessDate } from "@universal-pos/shared";
 import {
   DollarSign,
   Download,
-  Building2,
   TrendingUp,
   ShieldAlert,
   Percent,
   RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DateRangePicker } from "@/components/ui/date-picker";
 import Link from "next/link";
 
 type DatePreset = "today" | "yesterday" | "last7days" | "thisMonth" | "custom";
-
-interface Branch {
-  id: string;
-  name: string;
-  code: string;
-}
 
 interface ProfitReportResponse {
   revenueMinor: number;
@@ -40,7 +34,7 @@ export default function ProfitReportPage() {
   const { strings, locale } = useTranslation();
 
   const [datePreset, setDatePreset] = useState<DatePreset>("thisMonth");
-  const [selectedBranchId, setSelectedBranchId] = useState<string>(currentBranch?.id || "");
+  const branchId = currentBranch?.id;
 
   const todayStr = useMemo(() => formatBusinessDate(new Date(), "Asia/Dhaka"), []);
 
@@ -81,31 +75,20 @@ export default function ProfitReportPage() {
   // Permission Gate: report.profit
   const canViewProfit = hasPermission("report.profit");
 
-  // Branches
-  const { data: branches = [] } = useQuery<Branch[]>({
-    queryKey: ["branches"],
-    queryFn: async () => {
-      const res = await apiFetch("/branches");
-      if (!res.ok) return [];
-      const json = await res.json();
-      return Array.isArray(json) ? json : (json.data || []);
-    },
-  });
-
   // Query Profit
   const {
     data: profitData,
     isLoading,
     refetch,
   } = useQuery<ProfitReportResponse>({
-    queryKey: ["report-profit", effectiveStartDate, effectiveEndDate, selectedBranchId],
+    queryKey: ["report-profit", effectiveStartDate, effectiveEndDate, branchId],
     enabled: canViewProfit,
     queryFn: async () => {
       const params = new URLSearchParams({
         startDate: effectiveStartDate,
         endDate: effectiveEndDate,
       });
-      if (selectedBranchId) params.set("branchId", selectedBranchId);
+      if (branchId) params.set("branchId", branchId);
       const res = await apiFetch(`/reports/profit?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to load profit report");
       const json = await res.json();
@@ -211,43 +194,19 @@ export default function ProfitReportPage() {
               ))}
             </div>
 
-            {/* Custom Range & Branch */}
+            {/* Custom Range */}
             <div className="flex flex-wrap items-center gap-2 text-xs">
               {datePreset === "custom" && (
-                <div className="flex items-center gap-2 bg-muted/40 p-1.5 rounded-lg border border-border">
-                  <input
-                    type="date"
-                    value={customStart}
-                    onChange={(e) => setCustomStart(e.target.value)}
-                    className="bg-transparent font-medium focus:outline-none cursor-pointer"
-                  />
-                  <span>-</span>
-                  <input
-                    type="date"
-                    value={customEnd}
-                    onChange={(e) => setCustomEnd(e.target.value)}
-                    className="bg-transparent font-medium focus:outline-none cursor-pointer"
-                  />
-                </div>
+                <DateRangePicker
+                  startDate={customStart}
+                  endDate={customEnd}
+                  onChange={({ startDate, endDate }) => {
+                    setCustomStart(startDate);
+                    setCustomEnd(endDate);
+                  }}
+                  aria-label="Filter profit by date range"
+                />
               )}
-
-              {/* Branch */}
-              <div className="flex items-center gap-1.5 bg-muted/50 px-2.5 py-1.5 rounded-lg border border-border">
-                <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                <select
-                  value={selectedBranchId}
-                  onChange={(e) => setSelectedBranchId(e.target.value)}
-                  className="bg-transparent font-medium focus:outline-none cursor-pointer"
-                  aria-label="Filter profit by branch"
-                >
-                  <option value="">{strings.common.allBranches}</option>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} ({b.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
             </div>
           </div>
         </div>
@@ -260,12 +219,12 @@ export default function ProfitReportPage() {
               <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">
                 {strings.reports.revenue}
               </CardTitle>
-              <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+              <div className="h-8 w-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
                 <DollarSign className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold tracking-tight text-foreground" data-testid="profit-revenue">
+              <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums" data-testid="profit-revenue">
                 {formatMoney(revenueMinor)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
@@ -280,12 +239,12 @@ export default function ProfitReportPage() {
               <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">
                 {strings.reports.cogs}
               </CardTitle>
-              <div className="h-8 w-8 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+              <div className="h-8 w-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
                 <TrendingUp className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400" data-testid="profit-cogs">
+              <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums" data-testid="profit-cogs">
                 {formatMoney(cogsMinor)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
@@ -300,15 +259,15 @@ export default function ProfitReportPage() {
               <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">
                 {strings.reports.grossProfit}
               </CardTitle>
-              <div className="h-8 w-8 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <div className="h-8 w-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
                 <DollarSign className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
               <div
-                className={`text-2xl font-bold tracking-tight ${
+                className={`text-2xl font-bold tracking-tight tabular-nums ${
                   grossProfitMinor >= 0
-                    ? "text-emerald-600 dark:text-emerald-400"
+                    ? "text-foreground"
                     : "text-destructive"
                 }`}
                 data-testid="profit-gross-profit"
@@ -327,12 +286,12 @@ export default function ProfitReportPage() {
               <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">
                 {strings.reports.profitMargin}
               </CardTitle>
-              <div className="h-8 w-8 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+              <div className="h-8 w-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
                 <Percent className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold tracking-tight text-indigo-600 dark:text-indigo-400" data-testid="profit-margin">
+              <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums" data-testid="profit-margin">
                 {marginPercent}%
               </div>
               <p className="text-xs text-muted-foreground mt-1">

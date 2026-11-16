@@ -75,14 +75,34 @@ export class ReportsService {
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const items = await tx.saleItem.findMany({
         where: { tenantId, sale: { tenantId, ...this.buildDateFilter(filter, tz) } },
-        include: { variant: { include: { product: true } } },
+        include: {
+          variant: {
+            include: {
+              product: true,
+              optionValues: {
+                include: {
+                  optionValue: true,
+                },
+              },
+            },
+          },
+        },
       });
 
-      const map = new Map<string, { variantId: string; sku: string; productName: string; qty: number; rev: bigint }>();
+      const map = new Map<string, { variantId: string; sku: string; productId: string; productName: string; variantName: string | null; qty: number; rev: bigint }>();
       for (const it of items) {
         const vId = it.variantId;
+        const variantOptions = it.variant.optionValues?.length
+          ? it.variant.optionValues.map((ov) => ov.optionValue.value).join(" / ")
+          : null;
         const entry = map.get(vId) || {
-          variantId: vId, sku: it.variant.sku, productName: it.variant.product.name, qty: 0, rev: 0n,
+          variantId: vId,
+          sku: it.variant.sku,
+          productId: it.variant.productId,
+          productName: it.variant.product.name,
+          variantName: variantOptions,
+          qty: 0,
+          rev: 0n,
         };
         entry.qty += Number(it.quantity);
         entry.rev += it.totalMinor;
@@ -90,8 +110,14 @@ export class ReportsService {
       }
 
       return Array.from(map.values()).map((e) => ({
-        variantId: e.variantId, sku: e.sku, productName: e.productName, quantitySold: e.qty,
-        revenueMinor: Number(e.rev), averagePriceMinor: e.qty > 0 ? Number(e.rev / BigInt(e.qty)) : 0,
+        variantId: e.variantId,
+        sku: e.sku,
+        productId: e.productId,
+        productName: e.productName,
+        variantName: e.variantName,
+        quantitySold: e.qty,
+        revenueMinor: Number(e.rev),
+        averagePriceMinor: e.qty > 0 ? Number(e.rev / BigInt(e.qty)) : 0,
       }));
     });
   }

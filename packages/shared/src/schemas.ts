@@ -210,6 +210,17 @@ export const ProductOptionInputSchema = z.object({
 });
 export type ProductOptionInputDto = z.infer<typeof ProductOptionInputSchema>;
 
+export const CreateProductVariantItemSchema = z.object({
+  sku: z.string().trim().min(2).max(50),
+  priceMinor: z.coerce.number().int().min(0),
+  costMinor: z.coerce.number().int().min(0).optional(),
+  reorderLevel: z.coerce.number().min(0).optional(),
+  barcode: z.string().trim().optional().nullable(),
+  optionValues: z.record(z.string()).optional(),
+  isActive: z.boolean().optional(),
+});
+export type CreateProductVariantItemDto = z.infer<typeof CreateProductVariantItemSchema>;
+
 export const CreateProductSchema = z.object({
   name: z.string().trim().min(2).max(150),
   description: z.string().trim().max(1000).optional().nullable(),
@@ -224,6 +235,7 @@ export const CreateProductSchema = z.object({
   trackingMode: z.enum(["none", "batch", "serial"]).default("none"),
   customFields: z.record(z.unknown()).optional(),
   options: z.array(ProductOptionInputSchema).max(3).optional(),
+  variants: z.array(CreateProductVariantItemSchema).optional(),
 });
 export type CreateProductDto = z.infer<typeof CreateProductSchema>;
 

@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   RefreshCw,
   CheckCircle2,
+  RotateCcw,
 } from "lucide-react";
 import { formatMoney, formatDateTime } from "@/lib/utils";
 import { formatPaymentMethod, formatSaleStatus } from "@/i18n/formatters";
@@ -29,6 +30,8 @@ interface SaleItem {
   id: string;
   variantId: string;
   quantity: number;
+  returnedQuantity?: number;
+  returnableQuantity?: number;
   unitPriceMinor: number;
   discountMinor: number;
   taxMinor: number;
@@ -41,6 +44,25 @@ interface SaleItem {
       name: string;
     } | null;
   } | null;
+}
+
+interface SaleReturnSummary {
+  id: string;
+  returnNumber: string;
+  refundMethod: string;
+  totalRefundMinor: number;
+  createdAt: string;
+  reason?: string | null;
+  cashierUser?: {
+    id: string;
+    name: string;
+  } | null;
+  items?: Array<{
+    id: string;
+    quantity: number;
+    condition: string;
+    totalRefundMinor: number;
+  }>;
 }
 
 interface SaleDetail {
@@ -77,6 +99,7 @@ interface SaleDetail {
   } | null;
   items: SaleItem[];
   payments: SalePayment[];
+  returns?: SaleReturnSummary[];
 }
 
 export default function SaleDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -84,7 +107,7 @@ export default function SaleDetailPage({ params }: { params: Promise<{ id: strin
   const saleId = resolvedParams.id;
 
   const { apiFetch, hasPermission } = useAuth();
-  const { strings } = useTranslation();
+  const { strings, locale } = useTranslation();
 
   const [sale, setSale] = useState<SaleDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -220,6 +243,15 @@ export default function SaleDetailPage({ params }: { params: Promise<{ id: strin
         </div>
 
         <div className="flex items-center gap-2">
+          {sale.status === "completed" && (
+            <Link href={`/pos?returnInvoice=${sale.invoiceNumber}`}>
+              <Button variant="outline" size="sm" className="border-amber-500 text-amber-700 dark:text-amber-400 hover:bg-amber-50">
+                <RotateCcw className="h-4 w-4 mr-1.5" />
+                {locale === "bn" ? "ফেরত / বদল" : "Return / Exchange"}
+              </Button>
+            </Link>
+          )}
+
           <Button variant="outline" size="sm" onClick={handlePrint}>
             <Printer className="h-4 w-4 mr-1.5" />
             {strings.sales.printReceipt}
@@ -326,7 +358,12 @@ export default function SaleDetailPage({ params }: { params: Promise<{ id: strin
                         </div>
                       </td>
                       <td className="py-3 px-3 text-center font-medium">
-                        {it.quantity}
+                        <div>{it.quantity}</div>
+                        {typeof it.returnedQuantity === "number" && it.returnedQuantity > 0 && (
+                          <div className="text-[11px] text-amber-600 dark:text-amber-400 font-normal">
+                            ({locale === "bn" ? "ফেরত" : "returned"}: {it.returnedQuantity})
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-3 text-right text-muted-foreground">
                         {formatMoney(it.unitPriceMinor)}
@@ -373,6 +410,53 @@ export default function SaleDetailPage({ params }: { params: Promise<{ id: strin
               ))}
             </div>
           </div>
+
+          {/* Returns & Exchanges List */}
+          {sale.returns && sale.returns.length > 0 && (
+            <div className="bg-card border border-amber-200 dark:border-amber-900/50 p-5 rounded-xl shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-amber-800 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <RotateCcw className="h-4 w-4" />
+                  {locale === "bn" ? "পণ্য ফেরত ও রিফান্ড ইতিহাস" : "Returns & Refund History"}
+                </h2>
+                <Badge variant="outline" className="border-amber-400 text-amber-700 bg-amber-50">
+                  {sale.returns.length} {locale === "bn" ? "টি ফেরত" : "return(s)"}
+                </Badge>
+              </div>
+
+              <div className="space-y-2">
+                {sale.returns.map((ret) => (
+                  <div
+                    key={ret.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 text-sm"
+                  >
+                    <div>
+                      <Link
+                        href={`/sales/returns/${ret.id}`}
+                        className="font-mono font-medium text-primary hover:underline"
+                      >
+                        {ret.returnNumber}
+                      </Link>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {formatDateTime(ret.createdAt)} • {formatPaymentMethod(ret.refundMethod, strings)}
+                        {ret.cashierUser ? ` • ${ret.cashierUser.name}` : ""}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-semibold text-red-600 dark:text-red-400 font-mono">
+                        -{formatMoney(ret.totalRefundMinor)}
+                      </span>
+                      <Link href={`/sales/returns/${ret.id}`} className="block ml-auto mt-1">
+                        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs">
+                          {locale === "bn" ? "বিস্তারিত" : "View"}
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Col: Receipt & Financial Summary */}

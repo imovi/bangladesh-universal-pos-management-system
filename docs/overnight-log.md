@@ -803,6 +803,46 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - Admin Lint: 0 warnings, 0 errors.
   - Admin Build: 35 routes compiled cleanly.
   - `pos-header-layout.spec.ts`: Passed across all 3 viewports (1366, 1024, 375 px).
+  - GitHub Actions CI Run: [43881432578](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43881432578) (Commit `931cb43`) — **Status: completed, Conclusion: success (Green)**.
+
+---
+
+### Milestone C1: Returns and Exchanges
+
+- **Start Time:** 2026-11-16 20:00 +06:00
+- **End Time:** 2026-11-16 22:05 +06:00
+- **What Was Built & Fixed:**
+  1. **Schema & Migration (`20261116200000_milestone_c1_returns_exchanges`):**
+     - Models: `SaleReturn`, `SaleReturnItem`, `ReturnCounter`.
+     - Fields: `totalRefundMinor`, `refundMethod`, `reason`, `condition` (`resellable` vs `damaged`), `exchangeSaleId`, `returnNumber`.
+     - Multi-tenant RLS: `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY` on `sale_returns`, `sale_return_items`, and `return_counters`, with `tenant_isolation_policy` for `pos_app`.
+     - Permissions: Added `SALE_RETURN` ("sale.return") and `SALE_RETURN_OVERRIDE` ("sale.return.override"). Granted both to `Owner`, and `sale.return` to `Manager` and `Cashier`.
+  2. **Core Returns Calculation Engine (`packages/shared/src/money.ts` & `apps/api/src/modules/sales/returns.service.ts`):**
+     - Integer poisha math for proportional unit returns matching original bill discounts and taxes without rounding drift (`calculateLineReturnRefund`).
+     - Advisory transactional locks (`SELECT pg_advisory_xact_lock(hashtext(itemId))`) on returnable line items to serialize concurrent partial returns cleanly under PostgreSQL RLS without table update permission conflicts.
+     - Sequential numbering: `${regCode}-R-${dateKey}-${seq}` format (e.g., `REG01-R-20261116-0001`).
+     - Condition handling: `resellable` returns increment stock via `sale_return` inventory movement; `damaged` logs movement with `qtyDelta: 0` for audit trail without inflating resellable inventory.
+     - Return window check: enforces tenant `return_window_days` (default 7 days) and rejects stale returns with 422 unless user has `sale.return.override` permission.
+     - Cash drawer protection: cash refunds validate against available shift cash drawer (`expectedCashMinor`), rejecting drawer deficit with 409 `DRAWER_CASH_EXCEEDED`.
+     - Sales void immutability: sales with returns cannot be voided (400 Bad Request).
+     - Atomic exchange: single database transaction creates new sale, logs sale return, handles price differences (customer pays difference or shop refunds customer), and links `exchangeSaleId`.
+  3. **Admin Dashboard UI:**
+     - `/sales/returns`: Dedicated returns list with search, branch filter, refund method filter, date range, pagination, and status badges.
+     - `/sales/returns/[id]`: Return detail view showing customer, original sale, exchange link, returned items breakdown with condition tags, and printable receipt.
+     - `/sales/[id]`: Line items display returned quantity vs returnable quantity badges; returns history section lists all linked returns; header includes "ফেরত / বদল" action button linking directly to POS.
+  4. **POS Selling Screen Integration (`apps/admin/src/app/pos/page.tsx`):**
+     - Added "ফেরত / বদল" (F6) shortcut and header/cart action buttons.
+     - `ReturnModal`: Interactive modal to search original invoice, select returned items, choose condition, handle return window override reasons, process instant return with thermal receipt preview, or switch to exchange.
+     - Exchange mode: active exchange displays banner in cart, calculates return credit, updates cart total to net payable / refund to customer, and processes single `/sales/exchange` transaction.
+     - Thermal Receipt: updated `ReceiptView` to print dedicated return receipts and unified exchange receipts.
+  5. **Verification & Tests:**
+     - `apps/api/test/returns-engine.spec.ts`: 11 integration tests covering partial returns, over-return rejection, damaged inventory, drawer cash validation, atomic exchange, return window override, and tenant isolation.
+     - `apps/api/test/returns-rounding.spec.ts`: Unit test for poisha math.
+     - `apps/admin/e2e/returns-flow.spec.ts`: E2E test verifying returns list, detail page, returnable badges, and API-driven return audit history.
+     - RLS Catalogue Guard: 100% compliance across all 42 tenant tables with `FORCE ROW LEVEL SECURITY`.
+     - Monorepo full quality check: `npm run lint` (0 errors), `npm run build` (36 static/dynamic routes compiled cleanly), `npm test:cov` (42/42 test files, 230 tests passed, 88.61% statement coverage).
+
+
 
 
 

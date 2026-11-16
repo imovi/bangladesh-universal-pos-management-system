@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { SalesService } from "./sales.service.js";
+import { ReturnsService } from "./returns.service.js";
 import { SalesController } from "./sales.controller.js";
 import { AuditModule } from "../audit/audit.module.js";
 import { AuthModule } from "../auth/auth.module.js";
@@ -14,11 +15,12 @@ import { SystemDbService } from "../../common/database/system-db.service.js";
   controllers: [SalesController],
   providers: [
     SalesService,
+    ReturnsService,
     PrismaService,
     TenantContextService,
     ConfigService,
     SystemDbService,
   ],
-  exports: [SalesService],
+  exports: [SalesService, ReturnsService],
 })
 export class SalesModule {}

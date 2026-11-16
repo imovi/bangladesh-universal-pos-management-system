@@ -87,6 +87,7 @@ export const en: TranslationKeys = {
     goodsReceipts: "Goods Receipts",
     sales: "Sales & Counter",
     salesList: "Sales History",
+    returns: "Returns",
     shifts: "Shift Reports",
     registers: "Registers",
     customers: "Customers",

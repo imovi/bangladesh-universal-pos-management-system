@@ -121,6 +121,7 @@ export class ShiftsService {
       openingCashMinor: shift.openingCashMinor,
       cashMovements: shift.cashMovements,
       sales: shift.sales,
+      returns: shift.returns,
     });
     const expectedCashMinor = calc.expectedCashMinor;
     const closingCashMinor = BigInt(dto.closingCashMinor);
@@ -162,6 +163,8 @@ export class ShiftsService {
     return {
       ...updated,
       paymentMethodTotalsMinor,
+      returnsMinor: Number(calc.totalRefundsMinor),
+      returnsCount: calc.returnsCount,
       cardSalesMinor: Number(calc.cardSalesMinor),
       bkashSalesMinor: Number(calc.bkashSalesMinor),
       otherSalesMinor: Number(calc.otherSalesMinor),
@@ -180,6 +183,7 @@ export class ShiftsService {
         where: { id: shiftId },
         include: {
           cashMovements: true,
+          returns: true,
           sales: {
             where: { status: "completed" },
             include: { payments: true },
@@ -206,6 +210,7 @@ export class ShiftsService {
           branch: true,
           cashierUser: { select: { id: true, name: true, email: true } },
           cashMovements: { orderBy: { createdAt: "asc" } },
+          returns: true,
           sales: {
             where: { status: "completed" },
             include: { payments: true },
@@ -220,6 +225,7 @@ export class ShiftsService {
         openingCashMinor: shift.openingCashMinor,
         cashMovements: shift.cashMovements,
         sales: shift.sales,
+        returns: shift.returns,
       });
 
       const paymentMethodTotalsMinor = Object.fromEntries(
@@ -235,6 +241,8 @@ export class ShiftsService {
           netCashSalesMinor: Number(calc.netCashSalesMinor),
           cashInMinor: Number(calc.cashInMinor),
           cashOutMinor: Number(calc.cashOutMinor),
+          returnsMinor: Number(calc.totalRefundsMinor),
+          returnsCount: calc.returnsCount,
           completedSalesCount: calc.completedSalesCount,
           paymentMethodTotalsMinor,
           cardSalesMinor: Number(calc.cardSalesMinor),

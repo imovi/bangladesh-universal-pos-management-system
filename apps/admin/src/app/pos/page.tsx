@@ -44,6 +44,7 @@ import { CustomerDialog, SelectedCustomer } from "@/components/pos/customer-dial
 import { VariantPickerModal } from "@/components/pos/variant-picker-modal";
 import { HoldCartDialog } from "@/components/pos/hold-cart-dialog";
 import { ShiftSalesModal } from "@/components/pos/shift-sales-modal";
+import { ReturnModal, ReturnSelectedLine } from "@/components/pos/return-modal";
 import {
   Store,
   Search,
@@ -67,6 +68,7 @@ import {
   ArrowLeft,
   X,
   CreditCard,
+  RotateCcw,
 } from "lucide-react";
 
 export default function PosPage() {
@@ -121,6 +123,15 @@ export default function PosPage() {
   const [isHoldCartOpen, setIsHoldCartOpen] = useState(false);
   const [isShiftSalesOpen, setIsShiftSalesOpen] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  const [isReturnOpen, setIsReturnOpen] = useState(false);
+  const [initialReturnInvoice, setInitialReturnInvoice] = useState<string>("");
+  const [exchangeContext, setExchangeContext] = useState<{
+    originalSale: any;
+    returnItems: ReturnSelectedLine[];
+    returnRefundMinor: number;
+    reason: string;
+    overrideReason?: string;
+  } | null>(null);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isCashierMenuOpen, setIsCashierMenuOpen] = useState(false);
   const cashierMenuRef = useRef<HTMLDivElement>(null);
@@ -168,6 +179,14 @@ export default function PosPage() {
     billDiscount,
   });
 
+  const exchangeReturnCreditMinor = exchangeContext?.returnRefundMinor ?? 0;
+  const netPayableMinor = exchangeContext
+    ? Math.max(0, cartTotals.totalMinor - exchangeReturnCreditMinor)
+    : cartTotals.totalMinor;
+  const exchangeDifferenceMinor = exchangeContext
+    ? cartTotals.totalMinor - exchangeReturnCreditMinor
+    : cartTotals.totalMinor;
+
   // Check discount limit
   const isDiscountLimitExceeded =
     maxDiscountBp !== null && cartTotals.effectiveDiscountBp > maxDiscountBp;
@@ -183,6 +202,18 @@ export default function PosPage() {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
+  }, []);
+
+  // Check URL query parameters for returnInvoice
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const retInv = params.get("returnInvoice");
+      if (retInv) {
+        setInitialReturnInvoice(retInv);
+        setIsReturnOpen(true);
+      }
+    }
   }, []);
 
   // Load POS Settings
@@ -391,6 +422,7 @@ export default function PosPage() {
         setIsShiftSalesOpen(false);
         setIsPaymentOpen(false);
         setIsShortcutsOpen(false);
+        setIsReturnOpen(false);
         setSelectedProductForVariants(null);
         setEditingDiscountLineIdx(null);
         setIsBillDiscountOpen(false);
@@ -417,6 +449,15 @@ export default function PosPage() {
         e.preventDefault();
         if (cartItems.length > 0 && activeShift && !activeReceipt) {
           setIsPaymentOpen(true);
+        }
+        return;
+      }
+
+      // F6: Returns & Exchanges
+      if (e.key === "F6") {
+        e.preventDefault();
+        if (activeShift && !activeReceipt) {
+          setIsReturnOpen(true);
         }
         return;
       }
@@ -627,7 +668,9 @@ export default function PosPage() {
     setBillDiscount(undefined);
     setSaleNotes("");
     setActiveReceipt(null);
+    setExchangeContext(null);
     setServerErrorBanner(null);
+
     setBarcodeSearchNotice(null);
     if (selectedRegister?.id) {
       clearActiveCart(selectedRegister.id);
@@ -636,10 +679,166 @@ export default function PosPage() {
   };
 
   // Complete Sale (with UUID v7 idempotency & retry)
-  const handleCompleteSale = async (payments: PaymentItemInput[]) => {
+  const handleCompleteSale = async (payments: PaymentItemInput[], refundMethod?: string) => {
     if (!activeShift?.id || !currentBranch?.id) return;
     setIsCompletingSale(true);
     setServerErrorBanner(null);
+
+    // If Exchange mode is active, submit to /sales/exchange
+    if (exchangeContext) {
+      const exchangeId = uuidv7();
+      const exchangePayload = {
+        id: exchangeId,
+        originalSaleId: exchangeContext.originalSale.id,
+        shiftId: activeShift.id,
+        branchId: currentBranch.id,
+        customerId: selectedCustomer?.id || undefined,
+        returnItems: exchangeContext.returnItems.map((ri) => ({
+          saleItemId: ri.saleItemId,
+          quantity: ri.quantity,
+          condition: ri.condition,
+        })),
+        newItems: cartItems.map((it) => ({
+          variantId: it.variantId,
+          quantity: it.quantity,
+          overrideUnitPriceMinor: it.overrideUnitPriceMinor,
+          discount: it.discount
+            ? {
+                type: it.discount.type,
+                amountMinor: it.discount.amountMinor,
+                percentBp: it.discount.percentBp,
+              }
+            : undefined,
+        })),
+        billDiscount: billDiscount
+          ? {
+              type: billDiscount.type,
+              amountMinor: billDiscount.amountMinor,
+              percentBp: billDiscount.percentBp,
+            }
+          : undefined,
+        payments: payments
+          .filter((p) => p.amountMinor > 0)
+          .map((p) => ({
+            paymentMethod: p.paymentMethod,
+            amountMinor: p.amountMinor,
+            reference: p.reference?.trim() || undefined,
+          })),
+        refundMethod: refundMethod || "cash",
+        returnReason: exchangeContext.reason,
+        overrideReason: exchangeContext.overrideReason,
+        notes: saleNotes.trim() || undefined,
+      };
+
+      try {
+        const res = await apiFetch("/sales/exchange", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": exchangeId,
+          },
+          body: JSON.stringify(exchangePayload),
+        });
+
+        const json = await res.json();
+        if (!res.ok) {
+          throw new Error(json.error?.message || json.message || "Failed to process exchange");
+        }
+
+        const exchangeData = json.data || json;
+        const newSale = exchangeData.sale || exchangeData.exchangeSale || exchangeData;
+        const saleReturn = exchangeData.return || exchangeData;
+
+        // Build Exchange Receipt
+        const receiptData: ReceiptData = {
+          saleId: newSale.id,
+          invoiceNumber: newSale.invoiceNumber,
+          createdAt: newSale.createdAt || new Date().toISOString(),
+          cashierName: user?.name || "Cashier",
+          registerName: selectedRegister?.name || "Register 1",
+          branchName: currentBranch?.name || "Main Branch",
+          branchAddress: currentBranch?.code ? `Branch: ${currentBranch.code}` : undefined,
+          customerName: selectedCustomer.name,
+          customerPhone: selectedCustomer.phone,
+          shopName: posConfig.shopName,
+          receiptHeader: posConfig.receiptHeader,
+          receiptFooter: posConfig.receiptFooter,
+          isExchange: true,
+          exchangeInfo: {
+            returnNumber: saleReturn.returnNumber || exchangeData.returnNumber,
+            originalInvoice: exchangeContext.originalSale.invoiceNumber,
+            returnedItems: exchangeContext.returnItems.map((ri) => ({
+              name: ri.productName,
+              quantity: ri.quantity,
+              refundMinor: ri.estimatedLineRefundMinor,
+              condition: ri.condition,
+            })),
+            totalRefundMinor: exchangeContext.returnRefundMinor,
+            differenceMinor: exchangeDifferenceMinor,
+            refundMethod: refundMethod || "cash",
+          },
+          items: cartItems.map((it, idx) => {
+            const calcLine = cartTotals.lines[idx];
+            return {
+              name: it.name,
+              sku: it.sku,
+              size: it.size,
+              color: it.color,
+              quantity: it.quantity,
+              unitPriceMinor: it.overrideUnitPriceMinor ?? it.unitPriceMinor,
+              grossMinor: calcLine?.grossMinor ?? it.unitPriceMinor * it.quantity,
+              discountMinor: (calcLine?.lineDiscountMinor ?? 0) + (calcLine?.allocatedBillDiscountMinor ?? 0),
+              taxMinor: calcLine?.taxMinor ?? 0,
+              totalMinor: calcLine?.totalMinor ?? it.unitPriceMinor * it.quantity,
+            };
+          }),
+          grossMinor: cartTotals.grossMinor,
+          discountMinor: cartTotals.totalDiscountMinor,
+          taxMinor: cartTotals.taxMinor,
+          totalMinor: cartTotals.totalMinor,
+          paidMinor: payments.reduce((sum, p) => sum + p.amountMinor, 0),
+          changeMinor: Math.max(0, payments.reduce((sum, p) => sum + p.amountMinor, 0) - netPayableMinor),
+          payments,
+        };
+
+        setActiveReceipt(receiptData);
+        setIsPaymentOpen(false);
+        setExchangeContext(null);
+
+        // In-memory stock decrement for new items
+        setProducts((prev) =>
+          prev.map((p) => {
+            const cartItem = cartItems.find((ci) => ci.productId === p.id);
+            if (!cartItem) return p;
+            return {
+              ...p,
+              variants: p.variants.map((v) => {
+                if (v.id !== cartItem.variantId) return v;
+                return {
+                  ...v,
+                  stockLevels: v.stockLevels?.map((sl) =>
+                    sl.branchId === currentBranch?.id
+                      ? {
+                          ...sl,
+                          qty: Math.max(0, Number(sl.qty || 0) - cartItem.quantity).toString(),
+                        }
+                      : sl,
+                  ),
+                };
+              }),
+            };
+          }),
+        );
+
+        checkRegisterShift();
+        return;
+      } catch (err: any) {
+        setServerErrorBanner(err.message || "Failed to process exchange");
+        return;
+      } finally {
+        setIsCompletingSale(false);
+      }
+    }
 
     const salePayload = {
       id: saleId,
@@ -1167,6 +1366,18 @@ export default function PosPage() {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={() => setIsReturnOpen(true)}
+                className="h-8 px-2 text-xs font-medium text-amber-600 hover:text-amber-700 hover:bg-amber-500/10"
+                data-testid="pos-return-button"
+                title={locale === "bn" ? "পণ্য ফেরত / বদল (F6)" : "Returns & Exchanges (F6)"}
+              >
+                <RotateCcw className="h-3.5 w-3.5 2xl:mr-1" />
+                <span className="hidden 2xl:inline">{locale === "bn" ? "ফেরত (F6)" : "Return (F6)"}</span>
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setIsCloseShiftOpen(true)}
                 className="h-8 px-2 text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-500/10"
                 data-testid="close-shift-button"
@@ -1427,7 +1638,17 @@ export default function PosPage() {
               <span className="truncate">{selectedCustomer.name}</span>
             </Button>
 
-            {/* Hold & Clear Cart Actions */}
+            {/* Hold, Return & Clear Cart Actions */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsReturnOpen(true)}
+              className="h-8 px-2 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 hover:bg-amber-500/10"
+              title={locale === "bn" ? "পণ্য ফেরত বা বদল (F6)" : "Return / Exchange (F6)"}
+            >
+              <RotateCcw className="h-3.5 w-3.5 mr-1" />
+              <span>{locale === "bn" ? "ফেরত (F6)" : "Return (F6)"}</span>
+            </Button>
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
@@ -1454,6 +1675,30 @@ export default function PosPage() {
               </Button>
             </div>
           </div>
+
+          {/* Active Exchange Context Banner */}
+          {exchangeContext && (
+            <div className="p-2.5 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5 text-amber-900 dark:text-amber-200">
+                <RotateCcw className="h-4 w-4 text-amber-600 shrink-0" />
+                <div>
+                  <span className="font-semibold">{locale === "bn" ? "পণ্য বদল মোড" : "Exchange Mode"}:</span>{" "}
+                  <span className="font-mono">{exchangeContext.originalSale.invoiceNumber}</span>
+                  <div className="text-[10px] text-amber-700 dark:text-amber-400">
+                    {locale === "bn" ? "ফেরত বাবদ জমা:" : "Return Credit:"} -{formatMoney(exchangeContext.returnRefundMinor)}
+                  </div>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setExchangeContext(null)}
+                className="h-6 px-1.5 text-[10px] text-red-600 hover:text-red-700"
+              >
+                {locale === "bn" ? "বাতিল" : "Cancel"}
+              </Button>
+            </div>
+          )}
 
           {/* Discount Limit Exceeded Alert Banner */}
           {isDiscountLimitExceeded && (
@@ -1657,11 +1902,25 @@ export default function PosPage() {
                 <span className="font-mono tabular-nums">{formatMoney(cartTotals.taxMinor)}</span>
               </div>
 
+              {/* Exchange Credit Line if active */}
+              {exchangeContext && (
+                <div className="flex justify-between text-xs text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 p-1.5 rounded border border-amber-200 dark:border-amber-800">
+                  <span>{locale === "bn" ? "ফেরত বাবদ সমন্বয়:" : "Return Credit:"}</span>
+                  <span className="font-mono tabular-nums font-semibold">-{formatMoney(exchangeReturnCreditMinor)}</span>
+                </div>
+              )}
+
               {/* Grand Total */}
               <div className="flex justify-between items-baseline pt-2 border-t border-border">
-                <span className="text-base font-bold text-foreground">{strings.pos.payable}</span>
-                <span className="text-2xl font-black font-mono tabular-nums text-primary">
-                  {formatMoney(cartTotals.expectedTotalMinor)}
+                <span className="text-base font-bold text-foreground">
+                  {exchangeContext
+                    ? exchangeDifferenceMinor < 0
+                      ? locale === "bn" ? "গ্রাহককে ফেরত" : "Refund to Customer"
+                      : locale === "bn" ? "নিট প্রদেয়" : "Net Payable"
+                    : strings.pos.payable}
+                </span>
+                <span className={`text-2xl font-black font-mono tabular-nums ${exchangeContext && exchangeDifferenceMinor < 0 ? "text-amber-600 dark:text-amber-400" : "text-primary"}`}>
+                  {formatMoney(Math.abs(exchangeDifferenceMinor))}
                 </span>
               </div>
             </div>
@@ -1687,9 +1946,39 @@ export default function PosPage() {
       <PaymentDialog
         isOpen={isPaymentOpen}
         onClose={() => setIsPaymentOpen(false)}
-        totalPayableMinor={cartTotals.expectedTotalMinor}
+        totalPayableMinor={exchangeContext ? exchangeDifferenceMinor : cartTotals.expectedTotalMinor}
+        isExchange={Boolean(exchangeContext)}
         onCompleteSale={handleCompleteSale}
         isSubmitting={isCompletingSale}
+      />
+
+      {/* Return & Exchange Modal (F6) */}
+      <ReturnModal
+        isOpen={isReturnOpen}
+        onClose={() => {
+          setIsReturnOpen(false);
+          setInitialReturnInvoice("");
+        }}
+        shiftId={activeShift?.id || ""}
+        branchId={currentBranch?.id || ""}
+        drawerCashMinor={activeShift ? Number(activeShift.openingCashMinor || 0) : 0}
+        initialInvoiceNumber={initialReturnInvoice}
+        onStartExchange={(origSale, returnItems, reason, overrideReason) => {
+          const retRefundMinor = returnItems.reduce(
+            (s, it) => s + it.estimatedLineRefundMinor,
+            0,
+          );
+          setExchangeContext({
+            originalSale: origSale,
+            returnItems,
+            returnRefundMinor: retRefundMinor,
+            reason,
+            overrideReason,
+          });
+        }}
+        onReturnCompleted={() => {
+          checkRegisterShift();
+        }}
       />
 
       {/* 2. Open Shift Dialog */}

@@ -85,6 +85,7 @@ export const bn = {
     goodsReceipts: "পণ্য গ্রহণ",
     sales: "বিক্রি ও কাউন্টার",
     salesList: "বিক্রির হিসাব",
+    returns: "পণ্য ফেরত",
     shifts: "শিফট রিপোর্ট",
     registers: "ক্যাশ রেজিস্টার",
     customers: "গ্রাহক তালিকা",

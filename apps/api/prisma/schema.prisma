@@ -44,8 +44,11 @@ model Tenant {
   sales              Sale[]
   saleItems          SaleItem[]
   salePayments       SalePayment[]
+  saleReturns        SaleReturn[]
+  saleReturnItems    SaleReturnItem[]
   receiptCounters    ReceiptCounter[]
   documentCounters   DocumentCounter[]
+  returnCounters     ReturnCounter[]
 
   @@map("tenants")
 }
@@ -69,6 +72,7 @@ model Branch {
   registers      Register[]
   shifts         Shift[]
   sales          Sale[]
+  saleReturns    SaleReturn[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -96,6 +100,8 @@ model User {
   shifts        Shift[]
   salesCreated  Sale[]         @relation("SaleCashier")
   salesVoided   Sale[]         @relation("SaleVoidedBy")
+  returnsCreated SaleReturn[]  @relation("ReturnCashier")
+  returnsOverridden SaleReturn[] @relation("ReturnOverrideUser")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -374,6 +380,7 @@ model ProductVariant {
   purchaseOrderItems PurchaseOrderItem[]
   goodsReceiptItems  GoodsReceiptItem[]
   saleItems          SaleItem[]
+  saleReturnItems    SaleReturnItem[]
 
   @@unique([tenantId, sku])
   @@index([tenantId])
@@ -640,6 +647,8 @@ model Register {
   branch Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
   shifts Shift[]
   receiptCounters ReceiptCounter[]
+  returnCounters  ReturnCounter[]
+  saleReturns     SaleReturn[]
 
   @@unique([tenantId, branchId, code])
   @@index([tenantId])
@@ -670,6 +679,7 @@ model Shift {
   cashierUser   User           @relation(fields: [cashierUserId], references: [id], onDelete: Restrict)
   cashMovements CashMovement[]
   sales         Sale[]
+  returns       SaleReturn[]
 
   @@index([tenantId])
   @@index([registerId])
@@ -727,6 +737,8 @@ model Sale {
   customer    Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
   items       SaleItem[]
   payments    SalePayment[]
+  returns     SaleReturn[]  @relation("SaleReturns")
+  exchangeReturns SaleReturn[] @relation("ExchangeSaleReturn")
 
   @@unique([tenantId, invoiceNumber])
   @@index([tenantId])
@@ -758,6 +770,7 @@ model SaleItem {
   tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   sale    Sale           @relation(fields: [saleId], references: [id], onDelete: Cascade)
   variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  returnItems SaleReturnItem[]
 
   @@index([tenantId])
   @@index([saleId])
@@ -814,6 +827,87 @@ model DocumentCounter {
   @@index([tenantId])
   @@map("document_counters")
 }
+
+model SaleReturn {
+  id                String           @id @default(uuid(7)) @db.Uuid
+  tenantId          String           @map("tenant_id") @db.Uuid
+  returnNumber      String           @map("return_number")
+  saleId            String           @map("sale_id") @db.Uuid
+  shiftId           String           @map("shift_id") @db.Uuid
+  branchId          String           @map("branch_id") @db.Uuid
+  registerId        String           @map("register_id") @db.Uuid
+  cashierUserId     String           @map("cashier_user_id") @db.Uuid
+  refundMethod      String           @map("refund_method")
+  totalRefundMinor  BigInt           @map("total_refund_minor")
+  taxRefundMinor    BigInt           @default(0) @map("tax_refund_minor")
+  exchangeSaleId    String?          @map("exchange_sale_id") @db.Uuid
+  reason            String?
+  overrideReason    String?          @map("override_reason")
+  overrideByUserId  String?          @map("override_by_user_id") @db.Uuid
+  requestPayloadHash String?         @map("request_payload_hash") @db.VarChar(64)
+  createdAt         DateTime         @default(now()) @map("created_at")
+
+  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sale          Sale             @relation("SaleReturns", fields: [saleId], references: [id], onDelete: Restrict)
+  shift         Shift            @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  branch        Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  register      Register         @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  cashierUser   User             @relation("ReturnCashier", fields: [cashierUserId], references: [id], onDelete: Restrict)
+  overrideUser  User?            @relation("ReturnOverrideUser", fields: [overrideByUserId], references: [id], onDelete: SetNull)
+  exchangeSale  Sale?            @relation("ExchangeSaleReturn", fields: [exchangeSaleId], references: [id], onDelete: SetNull)
+  items         SaleReturnItem[]
+
+  @@unique([tenantId, returnNumber])
+  @@index([tenantId])
+  @@index([saleId])
+  @@index([shiftId])
+  @@index([branchId])
+  @@index([createdAt])
+  @@map("sale_returns")
+}
+
+model SaleReturnItem {
+  id               String         @id @default(uuid(7)) @db.Uuid
+  tenantId         String         @map("tenant_id") @db.Uuid
+  saleReturnId     String         @map("sale_return_id") @db.Uuid
+  saleItemId       String         @map("sale_item_id") @db.Uuid
+  variantId        String         @map("variant_id") @db.Uuid
+  quantity         Decimal        @db.Decimal(14, 3)
+  unitRefundMinor  BigInt         @map("unit_refund_minor")
+  taxRefundMinor   BigInt         @default(0) @map("tax_refund_minor")
+  totalRefundMinor BigInt         @map("total_refund_minor")
+  condition        String         @default("resellable")
+  createdAt        DateTime       @default(now()) @map("created_at")
+
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  saleReturn SaleReturn     @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
+  saleItem   SaleItem       @relation(fields: [saleItemId], references: [id], onDelete: Restrict)
+  variant    ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([saleReturnId])
+  @@index([saleItemId])
+  @@index([variantId])
+  @@map("sale_return_items")
+}
+
+model ReturnCounter {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  registerId String   @map("register_id") @db.Uuid
+  dateKey    String   @map("date_key")
+  lastSeq    Int      @default(0) @map("last_seq")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  register Register @relation(fields: [registerId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, registerId, dateKey])
+  @@index([tenantId])
+  @@index([registerId])
+  @@map("return_counters")
+}
+
 
 
 

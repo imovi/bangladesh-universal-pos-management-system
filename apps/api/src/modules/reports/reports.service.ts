@@ -35,13 +35,30 @@ export class ReportsService {
     return where;
   }
 
+  private buildReturnDateFilter(filter: ReportDateFilter, timeZone = "Asia/Dhaka"): Prisma.SaleReturnWhereInput {
+    const where: Prisma.SaleReturnWhereInput = {};
+    if (filter.branchId) where.shift = { register: { branchId: filter.branchId } };
+    if (filter.startDate || filter.endDate) {
+      const { gte, lte } = parseDateFilterRange(filter.startDate, filter.endDate, timeZone);
+      where.createdAt = {};
+      if (gte) where.createdAt.gte = gte;
+      if (lte) where.createdAt.lte = lte;
+    }
+    return where;
+  }
+
   async getSalesSummary(tenantId: string, filter: ReportDateFilter) {
     const tz = await this.getTimeZone(tenantId);
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
-      const sales = await tx.sale.findMany({
-        where: { tenantId, ...this.buildDateFilter(filter, tz) },
-        include: { payments: true },
-      });
+      const [sales, returns] = await Promise.all([
+        tx.sale.findMany({
+          where: { tenantId, ...this.buildDateFilter(filter, tz) },
+          include: { payments: true },
+        }),
+        tx.saleReturn.findMany({
+          where: { tenantId, ...this.buildReturnDateFilter(filter, tz) },
+        }),
+      ]);
 
       let totalGrossMinor = 0n;
       let totalDiscountMinor = 0n;
@@ -59,12 +76,22 @@ export class ReportsService {
         }
       }
 
+      let totalRefundMinor = 0n;
+      for (const r of returns) {
+        totalRefundMinor += r.totalRefundMinor;
+        if (r.refundMethod in paymentsByMethod) {
+          paymentsByMethod[r.refundMethod] -= Number(r.totalRefundMinor);
+        }
+      }
+
       return {
         salesCount: sales.length,
+        returnsCount: returns.length,
         totalGrossMinor: Number(totalGrossMinor),
         totalDiscountMinor: Number(totalDiscountMinor),
         totalTaxMinor: Number(totalTaxMinor),
-        totalNetMinor: Number(totalNetMinor),
+        totalNetMinor: Number(totalNetMinor - totalRefundMinor),
+        totalRefundMinor: Number(totalRefundMinor),
         paymentsByMethod,
       };
     });
@@ -224,25 +251,43 @@ export class ReportsService {
   async getProfitReport(tenantId: string, filter: ReportDateFilter) {
     const tz = await this.getTimeZone(tenantId);
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
-      const items = await tx.saleItem.findMany({
-        where: { tenantId, sale: { tenantId, ...this.buildDateFilter(filter, tz) } },
-      });
+      const [items, returnItems] = await Promise.all([
+        tx.saleItem.findMany({
+          where: { tenantId, sale: { tenantId, ...this.buildDateFilter(filter, tz) } },
+        }),
+        tx.saleReturnItem.findMany({
+          where: { tenantId, saleReturn: { tenantId, ...this.buildReturnDateFilter(filter, tz) } },
+          include: { saleItem: true },
+        }),
+      ]);
 
       let revenueMinor = 0n;
       let cogsMinor = 0n;
       for (const it of items) {
         revenueMinor += it.totalMinor;
-        cogsMinor += (it.unitCostMinor * BigInt(Math.round(Number(it.quantity))));
+        cogsMinor += it.unitCostMinor * BigInt(Math.round(Number(it.quantity)));
       }
 
-      const grossProfitMinor = revenueMinor - cogsMinor;
-      const profitMarginBp = revenueMinor > 0n ? Number((grossProfitMinor * 10000n) / revenueMinor) : 0;
+      let returnedRevenueMinor = 0n;
+      let returnedCogsMinor = 0n;
+      for (const ri of returnItems) {
+        returnedRevenueMinor += ri.totalRefundMinor;
+        if (ri.condition === "resellable") {
+          returnedCogsMinor += ri.saleItem.unitCostMinor * BigInt(Math.round(Number(ri.quantity)));
+        }
+      }
+
+      const netRevenueMinor = revenueMinor - returnedRevenueMinor;
+      const netCogsMinor = cogsMinor - returnedCogsMinor;
+      const grossProfitMinor = netRevenueMinor - netCogsMinor;
+      const profitMarginBp = netRevenueMinor > 0n ? Number((grossProfitMinor * 10000n) / netRevenueMinor) : 0;
 
       return {
-        revenueMinor: Number(revenueMinor),
-        cogsMinor: Number(cogsMinor),
+        revenueMinor: Number(netRevenueMinor),
+        cogsMinor: Number(netCogsMinor),
         grossProfitMinor: Number(grossProfitMinor),
         profitMarginBp,
+        returnedRevenueMinor: Number(returnedRevenueMinor),
       };
     });
   }
@@ -280,6 +325,7 @@ export class ReportsService {
           register: true,
           cashierUser: { select: { id: true, name: true } },
           cashMovements: true,
+          returns: true,
           sales: { where: { status: "completed" }, include: { payments: true } },
         },
       });
@@ -289,10 +335,12 @@ export class ReportsService {
         openingCashMinor: shift.openingCashMinor,
         cashMovements: shift.cashMovements,
         sales: shift.sales,
+        returns: shift.returns,
       });
 
       const transactions = [
         ...shift.sales.map((s) => ({ type: "sale", id: s.id, inv: s.invoiceNumber, totalMinor: Number(s.totalMinor), at: s.createdAt })),
+        ...shift.returns.map((r) => ({ type: "return", id: r.id, inv: r.returnNumber, totalMinor: -Number(r.totalRefundMinor), at: r.createdAt })),
         ...shift.cashMovements.map((m) => ({ type: m.type, id: m.id, amountMinor: Number(m.amountMinor), reason: m.reason, at: m.createdAt })),
       ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 
@@ -309,6 +357,8 @@ export class ReportsService {
         cashInMinor: Number(calc.cashInMinor),
         cashOutMinor: Number(calc.cashOutMinor),
         cashSalesMinor: Number(calc.cashPaymentsMinor),
+        returnsMinor: Number(calc.totalRefundsMinor),
+        returnsCount: calc.returnsCount,
         expectedCashMinor: Number(calc.expectedCashMinor),
         closingCashMinor: shift.closingCashMinor ? Number(shift.closingCashMinor) : null,
         differenceMinor: shift.cashDifferenceMinor ? Number(shift.cashDifferenceMinor) : null,

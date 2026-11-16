@@ -373,3 +373,58 @@ export function calculateWeightedAverageCost(
   return roundHalfUp(numerator, totalQtyThousandths);
 }
 
+/**
+ * Calculates exact poisha refund for partial or full returns on a sale line item.
+ * Guarantees that across multiple partial returns, the sum of all refunds
+ * equals the line item's totalMinor exactly, with zero poisha lost or gained.
+ */
+export function calculateLineReturnRefund(
+  soldQuantityThousandths: bigint,
+  lineTotalMinor: bigint,
+  lineTaxMinor: bigint,
+  alreadyReturnedQtyThousandths: bigint,
+  alreadyRefundedTotalMinor: bigint,
+  alreadyRefundedTaxMinor: bigint,
+  returningQtyThousandths: bigint,
+): { refundMinor: bigint; taxRefundMinor: bigint } {
+  if (returningQtyThousandths <= 0n) {
+    return { refundMinor: 0n, taxRefundMinor: 0n };
+  }
+
+  const newTotalReturnedQty =
+    alreadyReturnedQtyThousandths + returningQtyThousandths;
+
+  if (newTotalReturnedQty > soldQuantityThousandths) {
+    throw new Error(
+      `Cannot return more than sold quantity: returning ${newTotalReturnedQty} > sold ${soldQuantityThousandths}`,
+    );
+  }
+
+  // If this batch completes the return for the entire line, refund the exact remaining balance
+  let cumulativeRefund: bigint;
+  let cumulativeTax: bigint;
+
+  if (newTotalReturnedQty === soldQuantityThousandths) {
+    cumulativeRefund = lineTotalMinor;
+    cumulativeTax = lineTaxMinor;
+  } else {
+    cumulativeRefund = roundHalfUp(
+      newTotalReturnedQty * lineTotalMinor,
+      soldQuantityThousandths,
+    );
+    cumulativeTax = roundHalfUp(
+      newTotalReturnedQty * lineTaxMinor,
+      soldQuantityThousandths,
+    );
+  }
+
+  const refundMinor = cumulativeRefund - alreadyRefundedTotalMinor;
+  const taxRefundMinor = cumulativeTax - alreadyRefundedTaxMinor;
+
+  return {
+    refundMinor: refundMinor < 0n ? 0n : refundMinor,
+    taxRefundMinor: taxRefundMinor < 0n ? 0n : taxRefundMinor,
+  };
+}
+
+

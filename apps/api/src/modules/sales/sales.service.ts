@@ -313,6 +313,10 @@ export class SalesService {
       const sale = await tx.sale.findUnique({ where: { id: saleId }, include: { items: true, shift: true } });
       if (!sale || sale.tenantId !== tenantId) throw new NotFoundException("Sale not found");
       if (sale.status === "voided") throw new BadRequestException("Sale is already voided");
+      const returnCount = await tx.saleReturn.count({ where: { saleId } });
+      if (returnCount > 0) {
+        throw new BadRequestException("Cannot void a sale that has returns");
+      }
       if (sale.shift && sale.shift.status === "closed") {
         throw new ConflictException({
           code: "SHIFT_ALREADY_CLOSED",
@@ -349,12 +353,41 @@ export class SalesService {
       const sale = await tx.sale.findUnique({
         where: { id },
         include: {
-          items: { include: { variant: { select: { id: true, sku: true, product: { select: { id: true, name: true } } } } } },
-          payments: true, customer: true, cashierUser: { select: { id: true, name: true } },
+          items: {
+            include: {
+              variant: { select: { id: true, sku: true, product: { select: { id: true, name: true } } } },
+              returnItems: { select: { quantity: true, totalRefundMinor: true } },
+            },
+          },
+          payments: true,
+          customer: true,
+          cashierUser: { select: { id: true, name: true } },
+          returns: {
+            include: {
+              items: true,
+              cashierUser: { select: { id: true, name: true } },
+            },
+            orderBy: { createdAt: "desc" },
+          },
         },
       });
       if (!sale || sale.tenantId !== tenantId) throw new NotFoundException("Sale not found");
-      return sale;
+
+      const enrichedItems = sale.items.map((item) => {
+        const returnedQty = item.returnItems.reduce((sum, ri) => sum + Number(ri.quantity), 0);
+        const soldQty = Number(item.quantity);
+        const returnableQty = Math.max(0, soldQty - returnedQty);
+        return {
+          ...item,
+          returnedQuantity: returnedQty,
+          returnableQuantity: returnableQty,
+        };
+      });
+
+      return {
+        ...sale,
+        items: enrichedItems,
+      };
     });
   }
 

@@ -20,6 +20,20 @@ export interface ReceiptData {
   shopName: string;
   receiptHeader?: string;
   receiptFooter?: string;
+  isExchange?: boolean;
+  exchangeInfo?: {
+    returnNumber: string;
+    originalInvoice: string;
+    returnedItems: Array<{
+      name: string;
+      quantity: number;
+      refundMinor: number;
+      condition?: string;
+    }>;
+    totalRefundMinor: number;
+    differenceMinor: number;
+    refundMethod?: string;
+  };
   items: Array<{
     name: string;
     sku: string;
@@ -146,6 +160,11 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
           {receipt.receiptHeader && (
             <p className="text-[11px] text-gray-700 mt-1 whitespace-pre-wrap">{receipt.receiptHeader}</p>
           )}
+          {receipt.isExchange && (
+            <p className="font-bold text-xs uppercase bg-gray-200 py-0.5 rounded mt-1 font-mono">
+              {locale === "bn" ? "পণ্য বদল চালান (EXCHANGE)" : "EXCHANGE RECEIPT"}
+            </p>
+          )}
         </div>
 
         {/* Metadata */}
@@ -177,6 +196,28 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
             </div>
           )}
         </div>
+
+        {/* Exchange Returned Items Summary */}
+        {receipt.exchangeInfo && (
+          <div className="pb-2 mb-2 border-b border-dashed border-gray-400 text-[11px] space-y-1 bg-gray-50 p-2 rounded">
+            <div className="font-bold text-gray-800">
+              {locale === "bn" ? "ফেরতকৃত পণ্য (Return):" : "Returned Items:"}
+            </div>
+            <div className="text-[10px] text-gray-600">
+              {locale === "bn" ? "মূল চালান:" : "Orig Invoice:"} {receipt.exchangeInfo.originalInvoice}
+            </div>
+            {receipt.exchangeInfo.returnedItems.map((ri, idx) => (
+              <div key={idx} className="flex justify-between text-[10px]">
+                <span>{ri.name} x{ri.quantity}</span>
+                <span className="font-mono text-red-600">-{formatMoney(ri.refundMinor)}</span>
+              </div>
+            ))}
+            <div className="flex justify-between font-semibold pt-1 border-t border-gray-200">
+              <span>{locale === "bn" ? "মোট ফেরত জমা:" : "Total Return Credit:"}</span>
+              <span className="font-mono text-red-600">-{formatMoney(receipt.exchangeInfo.totalRefundMinor)}</span>
+            </div>
+          </div>
+        )}
 
         {/* Items List */}
         <div className="pb-2 mb-2 border-b border-dashed border-gray-400">
@@ -232,9 +273,21 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
               <span className="tabular-nums whitespace-nowrap">{formatMoney(receipt.taxMinor)}</span>
             </div>
           )}
+          {receipt.exchangeInfo && (
+            <div className="flex justify-between text-gray-700">
+              <span>{locale === "bn" ? "ফেরত বাবদ সমন্বয়:" : "Return Credit:"}</span>
+              <span className="tabular-nums font-mono text-red-600">-{formatMoney(receipt.exchangeInfo.totalRefundMinor)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-sm font-bold pt-1 border-t border-gray-300">
-            <span>{strings.pos.payable}:</span>
-            <span className="tabular-nums whitespace-nowrap">{formatMoney(receipt.totalMinor)}</span>
+            <span>{receipt.exchangeInfo ? (locale === "bn" ? "নিট সমন্বয়:" : "Net Difference:") : strings.pos.payable}:</span>
+            <span className="tabular-nums whitespace-nowrap">
+              {receipt.exchangeInfo
+                ? (receipt.exchangeInfo.differenceMinor > 0
+                    ? `+${formatMoney(receipt.exchangeInfo.differenceMinor)}`
+                    : formatMoney(receipt.exchangeInfo.differenceMinor))
+                : formatMoney(receipt.totalMinor)}
+            </span>
           </div>
         </div>
 

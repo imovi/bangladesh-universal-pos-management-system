@@ -24,10 +24,16 @@ export interface ShiftCashMovementInput {
   amountMinor: bigint | number;
 }
 
+export interface ShiftReturnInput {
+  refundMethod: string;
+  totalRefundMinor: bigint | number;
+}
+
 export interface ShiftCalculationInput {
   openingCashMinor: bigint | number;
   cashMovements: ShiftCashMovementInput[];
   sales: ShiftSaleInput[];
+  returns?: ShiftReturnInput[];
 }
 
 export interface ShiftCashCalculationResult {
@@ -40,6 +46,9 @@ export interface ShiftCashCalculationResult {
   netCashFlowMinor: bigint;
   expectedCashMinor: bigint;
   paymentMethodTotalsMinor: PaymentMethodTotalsMinor;
+  totalRefundsMinor: bigint;
+  cashRefundsMinor: bigint;
+  returnsCount: number;
   /** @deprecated Use paymentMethodTotalsMinor.card */
   cardSalesMinor: bigint;
   /** @deprecated Use paymentMethodTotalsMinor.bkash */
@@ -99,9 +108,32 @@ function aggregateMovements(movements: ShiftCashMovementInput[]) {
   return { cashIn, cashOut };
 }
 
+function aggregateReturns(returns?: ShiftReturnInput[]) {
+  let totalRefunds = 0n,
+    cashRefunds = 0n,
+    returnsCount = 0;
+  const refundMethodTotals: Record<string, bigint> = {};
+
+  if (!returns) {
+    return { totalRefunds, cashRefunds, returnsCount, refundMethodTotals };
+  }
+
+  for (const r of returns) {
+    returnsCount++;
+    const amt = BigInt(r.totalRefundMinor);
+    totalRefunds += amt;
+    refundMethodTotals[r.refundMethod] = (refundMethodTotals[r.refundMethod] || 0n) + amt;
+    if (r.refundMethod === "cash") {
+      cashRefunds += amt;
+    }
+  }
+
+  return { totalRefunds, cashRefunds, returnsCount, refundMethodTotals };
+}
+
 /**
  * Computes expected cash from the ground up:
- * expectedCash = openingCash + cashPaymentsOfCompletedSales - changeGiven - cashOut + cashIn.
+ * expectedCash = openingCash + cashPaymentsOfCompletedSales - changeGiven - cashRefunds - cashOut + cashIn.
  */
 export function calculateShiftCashTotals(
   input: ShiftCalculationInput,
@@ -109,8 +141,17 @@ export function calculateShiftCashTotals(
   const openingCash = BigInt(input.openingCashMinor);
   const salesAgg = aggregateSales(input.sales);
   const movAgg = aggregateMovements(input.cashMovements);
+  const retAgg = aggregateReturns(input.returns);
 
-  const netCashSales = salesAgg.cashPayments - salesAgg.changeGiven;
+  // Subtract refunds from paymentMethodTotalsMinor
+  for (const [method, refundAmt] of Object.entries(retAgg.refundMethodTotals)) {
+    const m = method as SalePaymentMethod;
+    if (m in salesAgg.paymentMethodTotals) {
+      salesAgg.paymentMethodTotals[m] -= refundAmt;
+    }
+  }
+
+  const netCashSales = salesAgg.cashPayments - salesAgg.changeGiven - retAgg.cashRefunds;
   const netCashFlow = netCashSales + movAgg.cashIn - movAgg.cashOut;
   const expectedCash = openingCash + netCashFlow;
 
@@ -124,6 +165,9 @@ export function calculateShiftCashTotals(
     netCashFlowMinor: netCashFlow,
     expectedCashMinor: expectedCash,
     paymentMethodTotalsMinor: salesAgg.paymentMethodTotals,
+    totalRefundsMinor: retAgg.totalRefunds,
+    cashRefundsMinor: retAgg.cashRefunds,
+    returnsCount: retAgg.returnsCount,
     cardSalesMinor: salesAgg.cardSales,
     bkashSalesMinor: salesAgg.bkashSales,
     otherSalesMinor: salesAgg.otherSales,

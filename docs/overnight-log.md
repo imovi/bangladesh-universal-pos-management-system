@@ -381,3 +381,58 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - Vitest Admin: 17 unit tests passed in `apps/admin` (100% formulas and parity verified).
   - Playwright E2E: All 14 tests in `--project=chromium` passed cleanly (31.4s).
 
+---
+
+## Part A: Fix Wrong Data on Screens and Stop Test Pollution
+
+- **Start Time:** 2026-11-16 09:37:00 +06:00
+- **End Time:** 2026-11-16 10:14:00 +06:00
+- **What Was Built & Fixed:**
+  1. **Dedicated Database for E2E Tests (`universal_pos_e2e`):**
+     - Updated `scripts/bootstrap-db.sh` to create `universal_pos_e2e` with `pos_admin` ownership and `pos_runtime` connect permissions.
+     - Created `scripts/setup-e2e-db.ts` and root script `"db:reset:e2e"` to safely reset and seed `universal_pos_e2e` with guards refusing to run if database name does not end in `_e2e` or if `NODE_ENV=production`.
+     - Created `scripts/reset-dev-db.ts` and root script `"db:reset:dev"` to rebuild the development database (`universal_pos`), with guards requiring the name to be strictly `universal_pos` and non-production. Ran once to cleanly restore demo dataset.
+     - Updated `apps/api/test/test-db-helper.ts` to allow database names ending in `_test` or `_e2e`.
+     - Updated `.github/workflows/ci.yml` so that E2E tests run exclusively against `universal_pos_e2e` with a post-E2E step verifying `universal_pos` remains untouched.
+  2. **Product List Total Stock Calculation Parity (Item 2):**
+     - Cause: `ProductsService.findAll` did not include `stockLevels` on variants and did not calculate `totalStock`.
+     - Fix: Updated `ProductsService.findAll` to include `stockLevels` on variants (filtered by `query.branchId` when specified). Computes `totalStock` on products and variants.
+     - Frontend: Updated `apps/admin/src/app/(admin)/catalog/products/page.tsx` to read `totalStock`, supply `currentBranch?.id`, and display actual branch/global sums.
+     - Test: Added integration test in `apps/api/test/part-a-data-display.spec.ts` asserting product list total stock equals the sum of variant stock levels across all branches (50+20+10 = 80), and for a specific branch (Alpha = 60, Beta = 20).
+  3. **Stock List Branch Display (Item 3):**
+     - Cause: `InventoryService.getStockLevels` did not include `branch`, so frontend defaulted to hardcoded `strings.inventory.branch` ("শাখা").
+     - Fix: Included `branch: { select: { id: true, name: true, code: true } }` in backend stock query. Frontend now renders `${item.branch.name}` and code badge `${item.branch.code}`.
+  4. **Stock List Option Values (Item 4):**
+     - Cause: `variant` query did not select `optionValues` or `barcodes`, falling back to hardcoded string `"Standard"`.
+     - Fix: Included `optionValues` (with nested option and value) and `barcodes` in `getStockLevels`. Frontend displays real combination labels (e.g. "XL / Black"), falling back to translated neutral label ("সাধারণ" / "Standard") only when a product has no options.
+  5. **Stock List Reorder Level & Low-Stock Indication (Item 5):**
+     - Cause: Frontend read `item.reorderLevel` which was stored on `item.variant.reorderLevel`.
+     - Fix: Backend now includes `reorderLevel` directly on root item and on variant. Frontend renders the value with tabular figures and visually marks rows where `qty <= reorderLevel` with an amber low-stock badge and subtle row highlight.
+  6. **Shared AppShell Layout Route Group (Item 6):**
+     - Cause: Pages like `/sales`, `/shifts`, `/registers`, `/customers` were missing `<AppShell>` wrappers.
+     - Fix: Reorganized admin routes under Next.js Route Group `apps/admin/src/app/(admin)/` with a single shared `layout.tsx` that provides `<AppShell>{children}</AppShell>`.
+     - Removed redundant `<AppShell>` wrappers from individual child pages and introduced `<PermissionGate>` for clean permission-based access checks.
+     - Added Playwright test `apps/admin/e2e/app-shell-routes.spec.ts` visiting all 18 admin routes and verifying the header and sidebar navigation are present and interactive.
+  7. **Clean Data Verification & Zero Pollution Proof (Item 7):**
+     - Verified clean demo data on all list screens.
+     - Documented row counts of `universal_pos` before and after running the full Playwright E2E suite:
+       - `products`: 10 -> 10
+       - `variants`: 53 -> 53
+       - `stockLevels`: 53 -> 53
+       - `customers`: 5 -> 5
+       - `sales`: 10 -> 10
+       - `shifts`: 2 -> 2
+       - `registers`: 2 -> 2
+       - `suppliers`: 2 -> 2
+       - `purchaseOrders`: 1 -> 1
+       - `goodsReceipts`: 1 -> 1
+       - Proof: `universal_pos` remained 100% untouched while all 32 Playwright tests ran and passed against `universal_pos_e2e`.
+- **Dependencies Added:** None.
+- **Verification & CI Run Result:**
+  - `npm run build`: 30 routes cleanly compiled.
+  - `npm run lint`: 0 warnings, 0 errors across 57 files.
+  - Vitest Admin: 17 passed.
+  - Vitest API: 38 test suites, 219 tests passed (with all coverage thresholds met).
+  - Playwright E2E: 32 tests passed (48.9s).
+
+

@@ -14,6 +14,8 @@
     "test:cov": "npm run test:cov --workspaces --if-present",
     "format": "prettier --write \"**/*.{ts,js,json,md}\"",
     "seed:demo": "tsx scripts/seed-demo.ts",
+    "db:reset:dev": "tsx scripts/reset-dev-db.ts",
+    "db:reset:e2e": "tsx scripts/setup-e2e-db.ts",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down"
   },

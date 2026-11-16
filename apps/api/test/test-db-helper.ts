@@ -29,9 +29,9 @@ export function getTestAdminDatabaseUrl(): string {
 export function assertTestDatabase(url: string): void {
   const parsed = new URL(url);
   const dbName = parsed.pathname.replace(/^\//, "");
-  if (!dbName.endsWith("_test")) {
+  if (!dbName.endsWith("_test") && !dbName.endsWith("_e2e")) {
     throw new Error(
-      `Refusing to execute destructive operations against database '${dbName}': database name must end in '_test' to protect the development database.`,
+      `Refusing to execute destructive operations against database '${dbName}': database name must end in '_test' or '_e2e' to protect the development database.`,
     );
   }
 }

@@ -205,6 +205,7 @@ export class ProductsService {
       categoryId?: string;
       brandId?: string;
       collectionId?: string;
+      branchId?: string;
       isActive?: string;
       sortBy?: string;
       sortOrder?: "asc" | "desc";
@@ -262,7 +263,11 @@ export class ProductsService {
             collection: true,
             taxClass: true,
             variants: {
-              include: { optionValues: { include: { optionValue: true } }, barcodes: true },
+              include: {
+                optionValues: { include: { optionValue: true } },
+                barcodes: true,
+                stockLevels: query.branchId ? { where: { branchId: query.branchId } } : true,
+              },
             },
           },
           skip,
@@ -272,8 +277,28 @@ export class ProductsService {
         tx.product.count({ where }),
       ]);
 
+      const enrichedItems = items.map((p) => {
+        let productTotalStock = 0;
+        const variantsWithStock = p.variants.map((v) => {
+          const vStock = (v.stockLevels || []).reduce(
+            (sum, sl) => sum + Number(sl.qty || 0),
+            0,
+          );
+          productTotalStock += vStock;
+          return {
+            ...v,
+            totalStock: vStock,
+          };
+        });
+        return {
+          ...p,
+          totalStock: productTotalStock,
+          variants: variantsWithStock,
+        };
+      });
+
       return {
-        items,
+        items: enrichedItems,
         pagination: {
           page,
           limit,

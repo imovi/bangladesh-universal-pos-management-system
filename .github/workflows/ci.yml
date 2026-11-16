@@ -104,6 +104,12 @@ jobs:
       - name: Install Playwright browsers with system dependencies
         run: npx playwright install --with-deps chromium
 
+      - name: Reset and seed E2E database
+        run: npm run db:reset:e2e
+        env:
+          NODE_ENV: test
+          MIGRATION_E2E_DATABASE_URL: postgresql://pos_admin:pos_secret@localhost:5432/universal_pos_e2e?schema=public
+
       - name: Run Admin Dashboard E2E tests
         run: |
           AUTH_THROTTLE_LIMIT=5000 RATE_LIMIT_LIMIT=5000 REFRESH_THROTTLE_LIMIT=5000 PORT=4000 node apps/api/dist/main.js &
@@ -123,12 +129,15 @@ jobs:
           RATE_LIMIT_LIMIT: 5000
           REFRESH_THROTTLE_LIMIT: 5000
           PORT: 4000
-          DATABASE_URL: postgresql://pos_runtime:pos_runtime_secret@localhost:5432/universal_pos?schema=public
-          MIGRATION_DATABASE_URL: postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public
+          DATABASE_URL: postgresql://pos_runtime:pos_runtime_secret@localhost:5432/universal_pos_e2e?schema=public
+          MIGRATION_DATABASE_URL: postgresql://pos_admin:pos_secret@localhost:5432/universal_pos_e2e?schema=public
           JWT_ACCESS_SECRET: test-jwt-access-secret-minimum-32-chars-long
           JWT_REFRESH_SECRET: test-jwt-refresh-secret-minimum-32-chars-long
           NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
           ADMIN_URL: http://localhost:3000
+
+      - name: Verify development database remained untouched by E2E tests
+        run: npx tsx scripts/db-counts.ts "postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public"
 
       - name: Upload Playwright Report
         uses: actions/upload-artifact@v4

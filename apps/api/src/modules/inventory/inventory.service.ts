@@ -317,6 +317,13 @@ export class InventoryService {
       const allLevels = await tx.stockLevel.findMany({
         where,
         include: {
+          branch: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
           variant: {
             select: {
               id: true,
@@ -324,7 +331,28 @@ export class InventoryService {
               costMinor: true,
               priceMinor: true,
               reorderLevel: true,
-              product: { select: { id: true, name: true } },
+              barcodes: true,
+              optionValues: {
+                include: {
+                  optionValue: {
+                    include: {
+                      option: true,
+                    },
+                  },
+                },
+              },
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  category: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -362,7 +390,10 @@ export class InventoryService {
       const limit = Math.min(100, Math.max(1, query.limit || 50));
       const skip = (page - 1) * limit;
 
-      const items = filtered.slice(skip, skip + limit);
+      const items = filtered.slice(skip, skip + limit).map((l) => ({
+        ...l,
+        reorderLevel: l.variant.reorderLevel !== null ? Number(l.variant.reorderLevel) : null,
+      }));
 
       return {
         items,

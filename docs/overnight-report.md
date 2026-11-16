@@ -25,7 +25,7 @@
 | **Milestone A8** | Settings & Staff (`/settings/shop`, `/settings/branches`, `/settings/roles`, `/settings/users`, `/settings/audit`), 0..100% discount limits required on roles, protected system roles, self-deactivation guard, audit log diff viewer | **Done** | `3d5c815` | [43829435127](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43829435127) | **Success (Green)** |
 | **Milestone A9** | Final Hardening, WCAG 2.2 AA automated Axe audit across all 23 routes, keyboard navigation (tab order, Esc dismiss, F2 barcode focus), 375px responsive verification, `apps/admin/README.md`, final screenshots | **Done** | `9015050` | [43834582271](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43834582271) | **Success (Green)** |
 | **Backend Fix 4** | Narrow broad `pos_system` database privileges: revoked SELECT and dropped 7 broad read policies (`branches`, `roles`, `role_permissions`, `users`, `user_roles`, `user_branches`, `audit_logs`), refactored signup to use `createMany` | **Done** | `91de7ae` | [43838570659](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43838570659) | **Success (Green)** |
-| **Selling Screen Fix Run** | Resolve stock NaN, variant option nesting, split payment select, receipt whitespace, client/server field mismatches, 46-route integrity guard | **Done** | `5e30056` | Pending CI | Verified locally |
+| **Selling Screen Fix Run** | Resolve stock NaN, variant option nesting, split payment select, receipt whitespace, client/server field mismatches, 46-route integrity guard | **Done** | `199976d` | [43854236046](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43854236046) | **Success (Green)** |
 
 ---
 
@@ -121,8 +121,8 @@ npm --workspace=@universal-pos/admin run dev
 
 ## 6. Final CI Status & Run URL
 
-- **Final GitHub Actions Run:** [https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43838570659](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43838570659)
-- **Commit:** `91de7ae39e2a771680cc83676fcb2c33f571212c` (`fix(api): narrow pos_system database privileges and remove broad read policies`)
+- **Final GitHub Actions Run:** [https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43854236046](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43854236046)
+- **Commit:** `199976dc627207c1a19610196948b2f21d6c0889` (`fix(pos): resolve stock nan, option nesting, payment select, and audit field mismatches`)
 - **Status:** `completed`
 - **Conclusion:** `success` (**GREEN**)
 

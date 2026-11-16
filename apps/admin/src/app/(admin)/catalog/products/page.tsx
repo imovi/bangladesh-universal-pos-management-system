@@ -193,7 +193,7 @@ export default function ProductsPage() {
                       variantsList.forEach((v: any) => {
                         if (v.stockLevels) {
                           v.stockLevels.forEach((sl: any) => {
-                            totalStock += Number(sl.qty || sl.quantity || 0);
+                            totalStock += Number(sl.qty || 0);
                           });
                         } else if (v.totalStock !== undefined) {
                           totalStock += Number(v.totalStock);

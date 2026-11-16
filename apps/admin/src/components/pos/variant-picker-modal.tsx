@@ -1,17 +1,19 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { formatMoney } from "@/lib/utils";
 import { useTranslation } from "@/i18n/context";
 import { Button } from "@/components/ui/button";
 import { X, Layers } from "lucide-react";
+import type { PosProduct, PosProductVariant } from "@/lib/pos/types";
+import { buildVariantMatrix } from "@/lib/pos/variant-matrix";
 
 interface VariantPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  product: any;
+  product: PosProduct | null;
   branchId: string;
-  onSelectVariant: (variant: any, product: any) => void;
+  onSelectVariant: (variant: PosProductVariant, product: PosProduct) => void;
 }
 
 export function VariantPickerModal({
@@ -23,43 +25,23 @@ export function VariantPickerModal({
 }: VariantPickerModalProps) {
   const { locale } = useTranslation();
 
+  // Escape key handler
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen || !product || !product.variants || product.variants.length === 0) {
     return null;
   }
 
-  // Extract sizes and colors
-  const sizeSet = new Set<string>();
-  const colorSet = new Set<string>();
-  const matrixMap = new Map<string, any>();
-
-  for (const v of product.variants) {
-    let size = "Default";
-    let color = "Standard";
-
-    if (v.optionValues && Array.isArray(v.optionValues)) {
-      for (const ov of v.optionValues) {
-        const optName = ov.optionValue?.option?.name?.toLowerCase();
-        const val = ov.optionValue?.value;
-        if (optName === "size") size = val;
-        else if (optName === "color" || optName === "colour") color = val;
-      }
-    }
-
-    sizeSet.add(size);
-    colorSet.add(color);
-
-    // Compute branch stock
-    let stock = 0;
-    if (Array.isArray(v.stockLevels)) {
-      const sl = v.stockLevels.find((s: any) => s.branchId === branchId);
-      stock = sl ? Number(sl.quantity) : 0;
-    }
-
-    matrixMap.set(`${color}:${size}`, { variant: v, stock, size, color });
-  }
-
-  const sizes = Array.from(sizeSet);
-  const colors = Array.from(colorSet);
+  const { sizes, colors, matrixMap } = buildVariantMatrix(product, branchId);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
@@ -145,13 +127,13 @@ export function VariantPickerModal({
                             <span
                               className={`text-[10px] px-1.5 py-0.2 rounded ${
                                 isOutOfStock
-                                  ? "text-rose-600 dark:text-rose-400"
+                                  ? "text-rose-600 dark:text-rose-400 font-medium"
                                   : "text-emerald-700 dark:text-emerald-400 font-medium"
                               }`}
                             >
                               {isOutOfStock
                                 ? locale === "bn"
-                                  ? "স্টক নেই"
+                                  ? "স্টক শেষ"
                                   : "Out of stock"
                                 : `${locale === "bn" ? "স্টক:" : "Stock:"} ${item.stock}`}
                             </span>

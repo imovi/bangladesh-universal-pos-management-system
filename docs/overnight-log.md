@@ -713,6 +713,64 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - Playwright E2E: All 48 tests passed (1.8m) on `universal_pos_e2e`.
   - GitHub Actions CI Run: 43838570659 (Commit `91de7ae`) — **Status: completed, Conclusion: success (Green)**.
 
+---
+
+## Selling screen fix run
+
+- **Start Time:** 2026-11-16 15:35 +06:00
+- **End Time:** 2026-11-16 17:00 +06:00
+- **What Was Built & Fixed:**
+  1. **Part 1 — Selling Screen Bugs Fixed:**
+     - **Bug 1 (Stock shows "NaN" on product cards & picker):**
+       - Root Cause: Admin client read `sl.quantity`, whereas Prisma model and API return `sl.qty` (Decimal as string). `Number(undefined)` evaluated to `NaN`.
+       - Fix: Defined a single typed response contract in `apps/admin/src/lib/pos/types.ts` (`PosProduct`, `PosProductVariant`, `PosStockLevel`, `PosProductListResponse`). Removed all loose `any` types in `apps/admin/src/app/pos/page.tsx` and `variant-picker-modal.tsx`. Replaced `sl.quantity` with `Number(sl.qty)`.
+       - Post-Sale Stock Decrement: Updated post-sale in-memory stock decrement in `page.tsx` to update `sl.qty` as string decimal.
+       - Out of Stock Label: Added logic displaying "স্টক শেষ" / "Out of stock" when `totalStock <= 0` instead of "0" or "NaN".
+     - **Bug 2 (Variant Picker collapsed to single "Default / Standard" cell):**
+       - Root Cause: `ProductsService.findAll` and `findOneInternal` in `apps/api/src/modules/catalog/products.service.ts` queried `optionValues: { include: { optionValue: true } }` without including `option: true`. On the client, `ov.optionValue?.option?.name` was undefined, falling back to "Default" and "Standard".
+       - Fix: Updated API Prisma include in `products.service.ts` to `optionValues: { include: { optionValue: { include: { option: true } } } }`.
+       - Built `apps/admin/src/lib/pos/variant-matrix.ts` with `buildVariantMatrix()`: extracts options case-insensitively (`size`, `color`/`colour`), preserves definition ordering (`position`: S, M, L, XL), groups into rows (sizes) and columns (colors). If a product has no size/color options, displays the variant's SKU or name, never "Default" / "Standard".
+     - **Bug 3 (Styling, Overlap & Controls):**
+       - Split payment method dropdown: Replaced native `<select>` with shadcn Radix `Select`, `SelectTrigger`, `SelectValue`, `SelectContent`, `SelectItem`.
+       - Money Cells: Applied `whitespace-nowrap` across all receipt monetary cells and summary rows to prevent wrapping of the "৳" currency symbol and numeric amounts.
+       - Top Bar Layout: Made POS top bar responsive at 1024px and 1366px with `shrink-0`, `min-w-0`, and `whitespace-nowrap`, displaying "সীমাহীন" / "No limit" for Owner roles instead of "∞".
+     - **Bonus Bug Caught & Fixed (Dangling Open Shift Alert & Duplicate JSON Read):**
+       - In `page.tsx`, `checkRegisterShift` was calling `(await shiftRes.json()).data || (await shiftRes.json())` which threw `TypeError: Already read` causing `activeShift` to fail silently. Fixed to read JSON once.
+       - Replaced native `alert()` calls in `handleOpenShift` and `handleCloseShift` with structured state updates and handled HTTP 409 Conflict gracefully.
+       - Wired up `onSwitchRegister` to immediately select the alternate register in `selectedRegister`.
+  2. **Part 2 — Hardened Tests:**
+     - Captured live API response fixture in `apps/admin/test/fixtures/pos-products.json`.
+     - Added comprehensive unit tests in `apps/admin/test/pos-logic.spec.ts` asserting Oxford Formal Shirt produces a 6-cell variant matrix (M, L, XL x White, Sky Blue), each with numeric stock and price, and zero occurrences of "NaN" or "Default".
+     - Added Flow 5 to `apps/admin/e2e/pos-flow.spec.ts`:
+       - Asserts zero visible occurrences of "NaN", "undefined", "null", or "Default" across the DOM.
+       - Verifies product card stock matches branch stock sum exactly.
+       - Verifies Oxford Formal Shirt renders exactly 6 variant buttons with correct stock and price.
+       - Verifies picking L/White adds item with SKU `M-OXF-L-WHITE`.
+       - Completes sale of quantity 2 and asserts stock decrements by 2 immediately on screen AND persists after page reload.
+     - Created `apps/admin/e2e/global-data-integrity-guard.spec.ts`:
+       - Systematically visits all 22 admin routes plus `/pos` in both Bengali and English (46 test cases).
+       - Asserts zero occurrences of "NaN", "undefined", "null", "Invalid Date", or "[object Object]".
+  3. **Part 3 — Admin Client/Server Field Audit:**
+     - Audited all API consumer calls across all admin pages.
+     - Replaced defensive chained unwraps (`data.data ?? data.data.items`) with typed single-unwrap patterns matching NestJS response shapes.
+     - Fixed `v.variantOptionValues` -> `v.optionValues` and `sl.quantity` -> `sl.qty` across products, stock, adjustments, low-stock, opening stock, purchase orders, and goods receipts.
+  4. **Part 4 — Screenshots Refreshed:**
+     - Refreshed all 9 screenshots under `docs/screenshots/pos/`: `desktop-pos-ready.png`, `variant-picker-modal.png`, `payment-dialog.png`, `thermal-receipt.png`, `close-shift-dialog.png`, `desktop-1366-bn-light.png`, `desktop-1366-en-light.png`, `tablet-1024-en-light.png`, `desktop-1366-dark.png`.
+     - Refreshed `docs/screenshots/final/final-desktop-pos.png` with open shift, populated cart, and clean view without overlaying dialogs.
+- **Decisions Made & Why:**
+  - Implemented typed shapes in `apps/admin/src/lib/pos/types.ts` rather than polluting with loose `any` casts to guarantee compile-time safety across the POS view.
+  - Ensured `optionValues.optionValue.option` is eager-loaded in catalog service so variant options can be reliably identified across catalog and POS without separate network round-trips.
+- **Dependencies Added:** None.
+- **Verification & CI Run Result:**
+  - Admin Lint: 0 warnings, 0 errors.
+  - API Lint: 0 warnings, 0 errors.
+  - Admin Build: 35 routes compiled successfully.
+  - API Build: Clean TypeScript build.
+  - Unit Tests: 32 tests passed in admin.
+  - Playwright POS Flow: 5 tests passed on Chromium and 5 passed on Mobile-Chrome.
+  - Global Integrity Guard: 46 tests passed on Chromium (all 23 routes in BN and EN).
+
+
 
 
 

@@ -11,20 +11,21 @@
 
 | Milestone / Work Item | Description | Status | Commit Hash | CI Run ID | CI Status |
 |---|---|---|---|---|---|
-| **Housekeeping & Milestone A1** | API Gap closure, metadata active, tax classes, supplier statements, strict settings, whitelist sorting | **Done** | `933f7c9` | [43770335036](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43770335036) | **Success (Green)** |
-| **Milestone A2** | Sign-In, Session (httpOnly cookie + in-memory access token + CSRF), App Shell, i18n Bangla/English | **Done** | `5e85bb7` | [43771970258](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43771970258) | **Success (Green)** |
-| **Milestone A3** | Products & Variants, Reusable Size-and-Colour Grid component, barcode generation | **Done** | `e5008be` | [43773539314](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43773539314) | **Success (Green)** |
-| **Milestone A4** | Stock & Inventory, Opening Stock Grid, Stock Adjustments, Low Stock Reorder levels, Ledger history | **Done** | `0fc4c20` | [43775084969](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43775084969) | **Success (Green)** |
-| **Milestone A5** | Purchasing & Suppliers, Supplier Directory, Purchase Orders, Goods Receipt Notes, Supplier Payments | **Done** | `168661c` | [43776510344](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43776510344) | **Success (Green)** |
-| **Backend Fix 5** | Per-payment-method breakdown in shift close figures and shift report (`cash`, `card`, `bkash`, `nagad`, `rocket`, `bank_transfer`) | **Done** | `2f9f592` | [43778000305](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43778000305) | **Success (Green)** |
-| **Milestone A6** | Sales History, Receipts, Sale Void with Reason, Customer Directory with ledger, Registers & Shifts management | **Done** | `4ff0c35` | [43779495447](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43779495447) | **Success (Green)** |
-| **Milestone A7** | Dashboard & Analytics, Sales Reports with Charts, Profit & Loss with permission gating, Stock Valuation | **Done** | `44883f3` | [43787720768](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43787720768) | **Success (Green)** |
-| **Part A: DB Isolation & Screen Data** | Dedicated `universal_pos_e2e` database, zero dev DB pollution, accurate stock sums, branch name display, single route-group layout | **Done** | `dbd2230` | [43803319337](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43803319337) | **Success (Green)** |
-| **Part B: Design Corrections V2** | Color discipline, soft tinted active nav, enum translations, shared DatePickers, shadcn Selects, 44/56px tables, tabular figures, variant matrix builder, 375px responsive | **Done** | `198eb83` | [43810068423](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43810068423) | **Success (Green)** |
+| **Housekeeping & Milestone A1** | API Gap closure, metadata active, tax classes, supplier statements, strict settings, whitelist sorting | **Done** | `04932e5` | [43770335036](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43770335036) | **Success (Green)** |
+| **Milestone A2** | Sign-In, Session (httpOnly cookie + in-memory access token + CSRF), App Shell, i18n Bangla/English | **Done** | `d2af950` | [43771970258](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43771970258) | **Success (Green)** |
+| **Milestone A3** | Products & Variants, Reusable Size-and-Colour Grid component, barcode generation | **Done** | `66fe872` | [43773539314](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43773539314) | **Success (Green)** |
+| **Milestone A4** | Stock & Inventory, Opening Stock Grid, Stock Adjustments, Low Stock Reorder levels, Ledger history | **Done** | `e68641c` | [43775084969](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43775084969) | **Success (Green)** |
+| **Milestone A5** | Purchasing & Suppliers, Supplier Directory, Purchase Orders, Goods Receipt Notes, Supplier Payments | **Done** | `101e986` | [43776510344](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43776510344) | **Success (Green)** |
+| **Backend Fix 5** | Per-payment-method breakdown in shift close figures and shift report (`cash`, `card`, `bkash`, `nagad`, `rocket`, `bank_transfer`) | **Done** | `1d371e9` | [43778000305](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43778000305) | **Success (Green)** |
+| **Milestone A6** | Sales History, Receipts, Sale Void with Reason, Customer Directory with ledger, Registers & Shifts management | **Done** | `fb6efd3` | [43779495447](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43779495447) | **Success (Green)** |
+| **Milestone A7** | Dashboard & Analytics, Sales Reports with Charts, Profit & Loss with permission gating, Stock Valuation | **Done** | `e7c6c66` | [43787720768](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43787720768) | **Success (Green)** |
+| **Part A: DB Isolation & Screen Data** | Dedicated `universal_pos_e2e` database, zero dev DB pollution, accurate stock sums, branch name display, single route-group layout | **Done** | `fa52eaa` | [43803319337](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43803319337) | **Success (Green)** |
+| **Part B: Design Corrections V2** | Color discipline, soft tinted active nav, enum translations, shared DatePickers, shadcn Selects, 44/56px tables, tabular figures, variant matrix builder, 375px responsive | **Done** | `d638d1b` | [43810068423](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43810068423) | **Success (Green)** |
 | **Part C: Selling Screen at `/pos`** | Full-screen Counter POS layout, register & shift enforcement, barcode scanning + product picker, cart + calculateSaleTotals, cashier discount caps, split payment, idempotent retry, 58/80mm thermal receipt, cash in/out, shift close with denomination counter | **Done** | `f757148` | [43824646324](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43824646324) | **Success (Green)** |
 | **Milestone A8** | Settings & Staff (`/settings/shop`, `/settings/branches`, `/settings/roles`, `/settings/users`, `/settings/audit`), 0..100% discount limits required on roles, protected system roles, self-deactivation guard, audit log diff viewer | **Done** | `3d5c815` | [43829435127](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43829435127) | **Success (Green)** |
 | **Milestone A9** | Final Hardening, WCAG 2.2 AA automated Axe audit across all 23 routes, keyboard navigation (tab order, Esc dismiss, F2 barcode focus), 375px responsive verification, `apps/admin/README.md`, final screenshots | **Done** | `9015050` | [43834582271](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43834582271) | **Success (Green)** |
 | **Backend Fix 4** | Narrow broad `pos_system` database privileges: revoked SELECT and dropped 7 broad read policies (`branches`, `roles`, `role_permissions`, `users`, `user_roles`, `user_branches`, `audit_logs`), refactored signup to use `createMany` | **Done** | `91de7ae` | [43838570659](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43838570659) | **Success (Green)** |
+| **Selling Screen Fix Run** | Resolve stock NaN, variant option nesting, split payment select, receipt whitespace, client/server field mismatches, 46-route integrity guard | **Done** | `5e30056` | Pending CI | Verified locally |
 
 ---
 
@@ -131,3 +132,76 @@ npm --workspace=@universal-pos/admin run dev
 
 - **Automated Verification:** 100% verified with 40 API test suites (218 unit/integration tests) and 48 Playwright E2E browser tests passing on Chromium across desktop, tablet, and mobile (375px) viewports in both Bangla and English locales.
 - **Hardware Simulation:** ESC/POS thermal receipt printing was verified via HTML/CSS printable thermal templates matching standard 58mm and 80mm roll dimensions (`@media print` CSS, monospace tabular formatting, dashed separators, and auto-print triggers). Real ESC/POS serial/network hardware could not be tested directly in a headless CI/software environment.
+
+---
+
+## 8. Selling Screen Fix Run & Client/Server Audit
+
+### 8.1 Bugs Identified & Resolved
+
+1. **Bug 1: Stock Shows "NaN" on Product Cards & Variant Picker**
+   - **Root Cause:** The client code read `stockLevels[].quantity`, but the Prisma schema model `StockLevel` and the API serialize the field as `qty` (Decimal sent as string). `Number(undefined)` evaluated to `NaN`.
+   - **Fix Applied:**
+     - Created a single typed contract in `apps/admin/src/lib/pos/types.ts` (`PosProduct`, `PosProductVariant`, `PosStockLevel`, `PosProductListResponse`).
+     - Removed all loose `any` casts in `apps/admin/src/app/pos/page.tsx` and `variant-picker-modal.tsx`.
+     - Standardized reading `Number(sl.qty)`.
+     - Updated post-sale in-memory stock decrement in `page.tsx` to safely update `sl.qty` as string decimal.
+     - Added logic displaying "স্টক শেষ" / "Out of stock" when `totalStock <= 0` instead of `0` or `NaN`.
+
+2. **Bug 2: Size-Colour Picker Collapses to Single "Default / Standard" Cell**
+   - **Root Cause:** `ProductsService.findAll` and `findOneInternal` in `apps/api/src/modules/catalog/products.service.ts` queried `optionValues: { include: { optionValue: true } }` without including `option: true`. On the client, `ov.optionValue?.option?.name` was undefined, falling back to "Default" and "Standard".
+   - **Fix Applied:**
+     - Updated API Prisma query in `products.service.ts` to `optionValues: { include: { optionValue: { include: { option: true } } } }`.
+     - Created `apps/admin/src/lib/pos/variant-matrix.ts` with `buildVariantMatrix()`: extracts options case-insensitively (`size`, `color`/`colour`), preserves position order (S, M, L, XL), groups into sizes (rows) and colors (columns). If a product has no size/color options, displays the variant's SKU or name, never "Default" / "Standard".
+
+3. **Bug 3: Styling, Layout Overflow & Component Discipline**
+   - **Split Payment Method Dropdown:** Replaced native `<select>` with custom shadcn Radix `Select`, `SelectTrigger`, `SelectValue`, `SelectContent`, `SelectItem`.
+   - **Thermal Receipt Typography:** Added `whitespace-nowrap` across all monetary table cells and summary rows in `apps/admin/src/components/pos/receipt-view.tsx` to prevent wrapping of the "৳" currency symbol and numeric amounts.
+   - **POS Header Responsiveness:** Made POS top bar responsive at 1024px and 1366px with `shrink-0`, `min-w-0`, and `whitespace-nowrap`, displaying "সীমাহীন" / "No limit" for Owner roles instead of "∞".
+
+4. **Bonus Bug Caught: Duplicate JSON Consumption in Shift Fetch**
+   - **Root Cause:** In `apps/admin/src/app/pos/page.tsx`, `checkRegisterShift()` called `(await shiftRes.json()).data || (await shiftRes.json())`, which threw `TypeError: Already read` on the second call, silently aborting active shift restoration.
+   - **Fix Applied:** Read `await shiftRes.json()` once into a local variable before extracting `.data`.
+   - **Shift In Use Handling:** Added `data-testid="switch-register-btn"` and wired up `onSwitchRegister` to immediately switch the active register in `selectedRegister`.
+
+---
+
+### 8.2 Client / Server Field Mismatch Audit Table
+
+| Route / Component | Client Expected Field | API Actually Returns | Resolution Applied |
+|---|---|---|---|
+| `/pos` Product Cards | `stockLevels[].quantity` | `stockLevels[].qty` (Decimal string) | Defined `PosStockLevel.qty` in `types.ts`, read `Number(sl.qty)` |
+| `/pos` Variant Picker | `ov.optionValue.option.name` | `ov.optionValue.option` undefined | Included `option: true` in `ProductsService.findAll` and `findOneInternal` |
+| `/pos` Register Shift Check | `(await res.json()).data \|\| (await res.json())` | Single-read ReadableStream | Read JSON once into `shiftJson`, extracted `shiftJson?.data \|\| shiftJson` |
+| `/catalog/products/[id]` | `v.variantOptionValues` | `v.optionValues` | Updated to `v.optionValues` |
+| `/catalog/products/[id]` | `sl.quantity` | `sl.qty` | Updated to `Number(sl.qty)` |
+| `/catalog/products` | `sl.quantity` | `sl.qty` | Updated to `Number(sl.qty \|\| 0)` |
+| `/inventory/stock` | `rawOpts` fallback chain | `item.variant?.optionValues` | Standardized on `item.variant?.optionValues` |
+| `/inventory/adjustments` | `item.variant.variantOptionValues` | `item.variant.optionValues` | Updated to `item.variant.optionValues` |
+| `/inventory/low-stock` | `variantOptionValues` fallback chain | `item.variant.optionValues` | Standardized on `item.variant.optionValues` |
+| `/inventory/opening` | `v.variantOptionValues` | `v.optionValues` | Updated to `v.optionValues` |
+| `/purchasing/orders/[id]` | `variantOptionValues` | `item.variant.optionValues` | Standardized on `item.variant.optionValues` |
+| `/purchasing/orders/new` | `pJson.data?.items` | `pJson.data` (Array) | Removed `.items` unwrap, read `pJson.data` directly |
+| `/purchasing/receipts/[id]` | `variantOptionValues` | `item.variant.optionValues` | Standardized on `item.variant.optionValues` |
+| `/purchasing/receipts/new` | `pJson.data?.items` | `pJson.data` (Array) | Removed `.items` unwrap, read `pJson.data` directly |
+
+---
+
+### 8.3 Test Suite & Verification Matrix
+
+1. **Unit Tests (`apps/admin/test/pos-logic.spec.ts`):**
+   - 13 passed tests using captured production fixture `apps/admin/test/fixtures/pos-products.json`.
+   - Verified 6-cell matrix generation (M, L, XL x White, Sky Blue), stock lookup per branch, and zero "NaN" or "Default" occurrences.
+
+2. **Playwright POS Flow (`apps/admin/e2e/pos-flow.spec.ts`):**
+   - 5 end-to-end tests passing on Chromium and Mobile-Chrome (10 total runs):
+     - Flow 1: Cashier direct land on `/pos`, 5% discount cap enforcement.
+     - Flow 2: Full selling flow: Open shift -> Scan -> Variant matrix -> Split payment -> Receipt -> Cash out -> Close shift with denomination counter.
+     - Flow 3: Screenshot generation across 1366px BN light, 1366px EN light, 1024px tablet, and 1366px dark mode.
+     - Flow 4: WCAG 2.2 AA accessibility audit with Axe on `/pos` and payment dialog (0 violations).
+     - Flow 5: Hardened data integrity verification: 0 visible "NaN", "undefined", "null", or "Default"; branch stock sum matches card stock; Oxford shirt renders exactly 6 variant cells; selecting L/White adds SKU `M-OXF-L-WHITE`; selling 2 units decrements stock immediately and persists across page reload.
+
+3. **Global Data Integrity Guard (`apps/admin/e2e/global-data-integrity-guard.spec.ts`):**
+   - 46 automated test cases visiting all 23 application routes in both Bengali and English.
+   - Verified zero occurrences of "NaN", "undefined", "null", "Invalid Date", or "[object Object]".
+

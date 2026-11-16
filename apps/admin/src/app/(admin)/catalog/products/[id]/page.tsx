@@ -73,9 +73,10 @@ export default function ProductDetailPage() {
     let size = "Default";
     let color = "Default";
 
-    if (v.variantOptionValues && v.variantOptionValues.length > 0) {
-      v.variantOptionValues.forEach((vov: any) => {
-        const optName = vov.optionValue?.option?.name?.toLowerCase();
+    const opts = v.optionValues || [];
+    if (opts.length > 0) {
+      opts.forEach((vov: any) => {
+        const optName = vov.optionValue?.option?.name?.toLowerCase().trim();
         if (optName === "size") size = vov.optionValue?.value;
         if (optName === "colour" || optName === "color") color = vov.optionValue?.value;
       });
@@ -85,7 +86,7 @@ export default function ProductDetailPage() {
     colorSet.add(color);
 
     const totalStock = v.stockLevels
-      ? v.stockLevels.reduce((sum: number, sl: any) => sum + (sl.quantity || 0), 0)
+      ? v.stockLevels.reduce((sum: number, sl: any) => sum + (Number(sl.qty) || 0), 0)
       : (v.totalStock ?? 0);
 
     stockMatrix[`${color}:${size}`] = {
@@ -318,8 +319,9 @@ export default function ProductDetailPage() {
               </TableHeader>
               <TableBody>
                 {variants.map((v: any) => {
-                  const optionsLabel = v.variantOptionValues && v.variantOptionValues.length > 0
-                    ? v.variantOptionValues.map((vov: any) => `${vov.optionValue?.option?.name}: ${vov.optionValue?.value}`).join(", ")
+                  const opts = v.optionValues || [];
+                  const optionsLabel = opts.length > 0
+                    ? opts.map((vov: any) => `${vov.optionValue?.option?.name}: ${vov.optionValue?.value}`).join(", ")
                     : "Standard";
 
                   return (

@@ -200,14 +200,14 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
                       </div>
                     )}
                     {item.discountMinor > 0 && (
-                      <div className="text-[10px] text-gray-500">
+                      <div className="text-[10px] text-gray-500 whitespace-nowrap">
                         -{formatMoney(item.discountMinor)}
                       </div>
                     )}
                   </td>
-                  <td className="py-1 text-center tabular-nums">{item.quantity}</td>
-                  <td className="py-1 text-right tabular-nums">{formatMoney(item.unitPriceMinor)}</td>
-                  <td className="py-1 text-right font-medium tabular-nums">{formatMoney(item.totalMinor)}</td>
+                  <td className="py-1 text-center tabular-nums whitespace-nowrap">{item.quantity}</td>
+                  <td className="py-1 text-right tabular-nums whitespace-nowrap">{formatMoney(item.unitPriceMinor)}</td>
+                  <td className="py-1 text-right font-medium tabular-nums whitespace-nowrap">{formatMoney(item.totalMinor)}</td>
                 </tr>
               ))}
             </tbody>
@@ -218,23 +218,23 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
         <div className="space-y-1 pb-2 mb-2 border-b border-dashed border-gray-400 text-[11px]">
           <div className="flex justify-between">
             <span>{strings.pos.subtotal}:</span>
-            <span className="tabular-nums">{formatMoney(receipt.grossMinor)}</span>
+            <span className="tabular-nums whitespace-nowrap">{formatMoney(receipt.grossMinor)}</span>
           </div>
           {receipt.discountMinor > 0 && (
             <div className="flex justify-between text-gray-700">
               <span>{strings.pos.discount}:</span>
-              <span className="tabular-nums">-{formatMoney(receipt.discountMinor)}</span>
+              <span className="tabular-nums whitespace-nowrap">-{formatMoney(receipt.discountMinor)}</span>
             </div>
           )}
           {receipt.taxMinor > 0 && (
             <div className="flex justify-between text-gray-700">
               <span>{strings.pos.tax}:</span>
-              <span className="tabular-nums">{formatMoney(receipt.taxMinor)}</span>
+              <span className="tabular-nums whitespace-nowrap">{formatMoney(receipt.taxMinor)}</span>
             </div>
           )}
           <div className="flex justify-between text-sm font-bold pt-1 border-t border-gray-300">
             <span>{strings.pos.payable}:</span>
-            <span className="tabular-nums">{formatMoney(receipt.totalMinor)}</span>
+            <span className="tabular-nums whitespace-nowrap">{formatMoney(receipt.totalMinor)}</span>
           </div>
         </div>
 
@@ -246,13 +246,13 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
                 {getMethodLabel(p.paymentMethod)}
                 {p.reference ? ` (${p.reference})` : ""}:
               </span>
-              <span className="tabular-nums">{formatMoney(p.amountMinor)}</span>
+              <span className="tabular-nums whitespace-nowrap">{formatMoney(p.amountMinor)}</span>
             </div>
           ))}
           {receipt.changeMinor > 0 && (
             <div className="flex justify-between font-semibold pt-1">
               <span>{strings.pos.change}:</span>
-              <span className="tabular-nums">{formatMoney(receipt.changeMinor)}</span>
+              <span className="tabular-nums whitespace-nowrap">{formatMoney(receipt.changeMinor)}</span>
             </div>
           )}
         </div>

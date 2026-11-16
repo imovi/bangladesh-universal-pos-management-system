@@ -400,8 +400,7 @@ export default function PurchaseOrderDetailPage({
             </thead>
             <tbody className="divide-y divide-border">
               {order.items.map((item, idx) => {
-                const optValues =
-                  item.variant?.optionValues || item.variant?.variantOptionValues || [];
+                const optValues = item.variant?.optionValues || [];
                 const optionLabel = optValues
                   .map((ov: any) => ov.value || ov.optionValue?.value)
                   .join(" / ");

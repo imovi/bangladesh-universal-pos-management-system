@@ -95,14 +95,14 @@ export default function NewPurchaseOrderPage() {
         const pRes = await apiFetch("/products?limit=100");
         if (pRes.ok) {
           const pJson = await pRes.json();
-          const pItems = Array.isArray(pJson.data) ? pJson.data : (pJson.data?.items || []);
+          const pItems = pJson.data || [];
 
           const variantList: ProductVariantOption[] = [];
           for (const prod of pItems) {
             if (prod.variants && Array.isArray(prod.variants)) {
               for (const v of prod.variants) {
-                const optValues = v.optionValues || v.variantOptionValues || [];
-                const optionLabel = optValues.map((ov: any) => ov.value || ov.optionValue?.value).join(" / ");
+                const optValues = v.optionValues || [];
+                const optionLabel = optValues.map((ov: any) => ov.optionValue?.value || ov.value).join(" / ");
                 variantList.push({
                   id: v.id,
                   sku: v.sku,

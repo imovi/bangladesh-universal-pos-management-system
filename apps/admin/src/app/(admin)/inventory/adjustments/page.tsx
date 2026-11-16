@@ -256,7 +256,8 @@ export default function StockAdjustmentsPage() {
                       <div className="p-2 text-center text-xs text-muted-foreground">কোন ভ্যারিয়েন্ট মেলেনি</div>
                     ) : (
                       searchResults.map((item: any) => {
-                        const opt = item.variant.variantOptionValues?.map((vov: any) => `${vov.optionValue?.value}`).join(", ") || "";
+                        const rawOpts = item.variant.optionValues || [];
+                        const opt = rawOpts.map((vov: any) => `${vov.optionValue?.value}`).join(", ");
                         return (
                           <button
                             key={item.id}

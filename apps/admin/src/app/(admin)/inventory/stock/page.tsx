@@ -339,7 +339,7 @@ export default function StockLevelsPage() {
               </TableRow>
             ) : (
               items.map((item: any) => {
-                const rawOpts = (item.variant as any).optionValues || item.variant.variantOptionValues || [];
+                const rawOpts = (item.variant as any)?.optionValues || [];
                 const optionsLabel =
                   rawOpts.length > 0
                     ? rawOpts

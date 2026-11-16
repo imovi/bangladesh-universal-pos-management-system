@@ -11,6 +11,13 @@ import {
   calculatePaymentChange,
 } from "@/lib/pos/cart-calculations";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   X,
   CreditCard,
   Banknote,
@@ -213,22 +220,29 @@ export function PaymentDialog({
                   className="p-3 rounded-lg border border-border bg-card flex flex-col sm:flex-row sm:items-center gap-3"
                 >
                   <div className="w-full sm:w-40 shrink-0">
-                    <select
+                    <Select
                       value={p.paymentMethod}
-                      onChange={(e) =>
+                      onValueChange={(val) =>
                         handleUpdatePayment(idx, {
-                          paymentMethod: e.target.value as PaymentItemInput["paymentMethod"],
+                          paymentMethod: val as PaymentItemInput["paymentMethod"],
                         })
                       }
-                      aria-label={locale === "bn" ? "পেমেন্ট মাধ্যম" : "Payment Method"}
-                      className="w-full h-9 rounded-md border border-input bg-background px-2.5 py-1 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
                     >
-                      {PAYMENT_METHODS.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {locale === "bn" ? m.labelBn : m.labelEn}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger
+                        aria-label={locale === "bn" ? "পেমেন্ট মাধ্যম" : "Payment Method"}
+                        className="w-full h-9 text-xs font-medium"
+                        data-testid={`payment-method-select-${idx}`}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PAYMENT_METHODS.map((m) => (
+                          <SelectItem key={m.id} value={m.id} className="text-xs">
+                            {locale === "bn" ? m.labelBn : m.labelEn}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="flex-1 flex items-center gap-2">

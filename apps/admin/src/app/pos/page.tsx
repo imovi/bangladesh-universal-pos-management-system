@@ -18,6 +18,8 @@ import {
   CartLineDiscount,
   PaymentItemInput,
 } from "@/lib/pos/cart-calculations";
+import type { PosProduct, PosProductVariant } from "@/lib/pos/types";
+import { getProductBranchStock } from "@/lib/pos/variant-matrix";
 import {
   loadActiveCart,
   saveActiveCart,
@@ -94,7 +96,7 @@ export default function PosPage() {
   const [_isLoadingRegister, setIsLoadingRegister] = useState(true);
 
   // Products & Categories
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<PosProduct[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -120,7 +122,7 @@ export default function PosPage() {
   const [isShiftSalesOpen, setIsShiftSalesOpen] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
-  const [selectedProductForVariants, setSelectedProductForVariants] = useState<any | null>(null);
+  const [selectedProductForVariants, setSelectedProductForVariants] = useState<PosProduct | null>(null);
   const [activeReceipt, setActiveReceipt] = useState<ReceiptData | null>(null);
 
   // Line Discount Modal
@@ -198,7 +200,7 @@ export default function PosPage() {
       const res = await apiFetch(`/registers?branchId=${currentBranch.id}`);
       if (res.ok) {
         const data = await res.json();
-        const list = data.data?.items || data.data || data || [];
+        const list = data.data || [];
         setRegisters(list);
 
         // Restore saved register
@@ -228,14 +230,15 @@ export default function PosPage() {
       const res = await apiFetch(`/shifts?registerId=${selectedRegister.id}&status=open`);
       if (res.ok) {
         const data = await res.json();
-        const items = Array.isArray(data.data) ? data.data : (data.data?.items || data.items || []);
+        const items = data.data?.items || [];
         const openShift = items[0] || null;
 
         if (openShift) {
           if (openShift.cashierUserId === user.id || openShift.cashierUser?.id === user.id) {
             // Fetch detailed shift with cash movements and sales
             const shiftRes = await apiFetch(`/shifts/${openShift.id}`);
-            const fullShift = shiftRes.ok ? (await shiftRes.json()).data || (await shiftRes.json()) : openShift;
+            const shiftJson = shiftRes.ok ? await shiftRes.json() : null;
+            const fullShift = shiftJson?.data || shiftJson || openShift;
             setActiveShift(fullShift);
             setShiftInUseOtherUser(null);
           } else {
@@ -270,11 +273,11 @@ export default function PosPage() {
       ]);
       if (prodRes.ok) {
         const data = await prodRes.json();
-        setProducts(Array.isArray(data.data) ? data.data : (data.data?.items || data.items || []));
+        setProducts(data.data || []);
       }
       if (catRes.ok) {
         const data = await catRes.json();
-        setCategories(data.data?.items || data.data || data.items || data || []);
+        setCategories(data.data || []);
       }
     } catch {}
   }, [currentBranch?.id, user?.branches, apiFetch]);
@@ -424,7 +427,7 @@ export default function PosPage() {
   }, [cartItems.length, activeShift, activeReceipt]);
 
   // Add Item to Cart
-  const handleAddToCart = (variant: any, product: any, qty = 1) => {
+  const handleAddToCart = (variant: PosProductVariant, product: PosProduct, qty = 1) => {
     setCartItems((prev) => {
       const existingIdx = prev.findIndex((item) => item.variantId === variant.id);
       if (existingIdx >= 0) {
@@ -436,11 +439,11 @@ export default function PosPage() {
         return next;
       }
 
-      let size = "Default";
-      let color = "Standard";
+      let size: string | undefined = undefined;
+      let color: string | undefined = undefined;
       if (variant.optionValues && Array.isArray(variant.optionValues)) {
         for (const ov of variant.optionValues) {
-          const optName = ov.optionValue?.option?.name?.toLowerCase();
+          const optName = ov.optionValue?.option?.name?.toLowerCase().trim();
           const val = ov.optionValue?.value;
           if (optName === "size") size = val;
           else if (optName === "color" || optName === "colour") color = val;
@@ -452,8 +455,8 @@ export default function PosPage() {
         productId: product.id,
         name: product.name,
         sku: variant.sku,
-        size: size !== "Default" ? size : undefined,
-        color: color !== "Standard" ? color : undefined,
+        size,
+        color,
         unitPriceMinor: variant.priceMinor,
         quantity: qty,
         taxRateBp: variant.taxRateBp ?? product.taxClass?.rateBp ?? 0,
@@ -752,13 +755,16 @@ export default function PosPage() {
           if (!cartItem) return p;
           return {
             ...p,
-            variants: p.variants?.map((v: any) => {
+            variants: p.variants.map((v) => {
               if (v.id !== cartItem.variantId) return v;
               return {
                 ...v,
-                stockLevels: v.stockLevels?.map((sl: any) =>
+                stockLevels: v.stockLevels?.map((sl) =>
                   sl.branchId === currentBranch?.id
-                    ? { ...sl, quantity: Math.max(0, sl.quantity - cartItem.quantity) }
+                    ? {
+                        ...sl,
+                        qty: Math.max(0, Number(sl.qty || 0) - cartItem.quantity).toString(),
+                      }
                     : sl,
                 ),
               };
@@ -794,11 +800,15 @@ export default function PosPage() {
       if (res.ok && (data.success || data.id)) {
         setIsOpenShiftOpen(false);
         checkRegisterShift();
+      } else if (res.status === 409) {
+        // Shift is already open on this register
+        setIsOpenShiftOpen(false);
+        checkRegisterShift();
       } else {
-        alert(data.error?.message || data.message || "Failed to open shift");
+        console.error("Failed to open shift:", data.error?.message || data.message);
       }
     } catch (err: any) {
-      alert(err.message || "Failed to open shift");
+      console.error("Failed to open shift:", err.message);
     } finally {
       setIsShiftSubmitting(false);
     }
@@ -836,11 +846,11 @@ export default function PosPage() {
         checkRegisterShift();
         return closed;
       } else {
-        alert(data.error?.message || data.message || "Failed to close shift");
+        console.error("Failed to close shift:", data.error?.message || data.message);
         return null;
       }
     } catch (err: any) {
-      alert(err.message || "Failed to close shift");
+      console.error("Failed to close shift:", err.message);
       return null;
     } finally {
       setIsShiftSubmitting(false);
@@ -1013,15 +1023,15 @@ export default function PosPage() {
 
           {/* Shift status badge */}
           {activeShift ? (
-            <Badge variant="default" className="text-[10px] py-0 px-2 font-medium flex items-center gap-1 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-none">
-              <Unlock className="h-3 w-3" />
+            <Badge variant="default" className="text-[10px] py-0 px-2 font-medium flex items-center gap-1 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-none shrink-0 whitespace-nowrap">
+              <Unlock className="h-3 w-3 shrink-0" />
               <span>
                 {locale === "bn" ? "শিফট চলমান" : "Shift Open"} ({new Date(activeShift.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
               </span>
             </Badge>
           ) : (
-            <Badge variant="outline" className="text-[10px] py-0 px-2 font-medium flex items-center gap-1 border-dashed">
-              <Lock className="h-3 w-3" />
+            <Badge variant="outline" className="text-[10px] py-0 px-2 font-medium flex items-center gap-1 border-dashed shrink-0 whitespace-nowrap">
+              <Lock className="h-3 w-3 shrink-0" />
               <span>{locale === "bn" ? "শিফট বন্ধ" : "Shift Closed"}</span>
             </Badge>
           )}
@@ -1031,24 +1041,24 @@ export default function PosPage() {
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Offline warning indicator */}
           {!isOnline && (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-semibold">
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-semibold shrink-0">
               <WifiOff className="h-3.5 w-3.5" />
               <span className="hidden md:inline">{locale === "bn" ? "অফলাইন" : "Offline"}</span>
             </div>
           )}
 
           {/* Cashier Name & Limit */}
-          <div className="hidden lg:flex flex-col text-right leading-tight pr-1">
-            <span className="text-xs font-semibold text-foreground truncate max-w-[130px]">
+          <div className="hidden lg:flex flex-col text-right leading-tight pr-1 shrink-0">
+            <span className="text-xs font-semibold text-foreground truncate max-w-[120px] xl:max-w-[160px]">
               {user.name}
             </span>
             <span
               data-testid="cashier-discount-limit"
-              className="text-[10px] text-muted-foreground font-mono"
+              className="text-[10px] text-muted-foreground font-mono whitespace-nowrap"
             >
-              {maxDiscountPercent !== null
-                ? `${strings.pos.discountLimit}: ${maxDiscountPercent}%`
-                : `${strings.pos.discountLimit}: ∞`}
+              {user?.isOwner || user?.roles?.includes("Owner") || maxDiscountPercent === null
+                ? `${strings.pos.discountLimit}: ${locale === "bn" ? "সীমাহীন" : "No limit"}`
+                : `${strings.pos.discountLimit}: ${maxDiscountPercent}%`}
             </span>
           </div>
 
@@ -1268,16 +1278,7 @@ export default function PosPage() {
                   const price = firstVariant?.priceMinor || 0;
 
                   // Calculate total branch stock
-                  let totalStock = 0;
-                  if (p.variants) {
-                    for (const v of p.variants) {
-                      if (Array.isArray(v.stockLevels)) {
-                        const sl = v.stockLevels.find((s: any) => s.branchId === currentBranch?.id);
-                        totalStock += sl ? Number(sl.quantity) : 0;
-                      }
-                    }
-                  }
-
+                  const totalStock = getProductBranchStock(p, currentBranch?.id);
                   const isOutOfStock = totalStock <= 0;
 
                   return (
@@ -1316,15 +1317,15 @@ export default function PosPage() {
                         <span
                           className={`text-[10px] font-mono ${
                             isOutOfStock
-                              ? "text-rose-600 dark:text-rose-400"
+                              ? "text-rose-600 dark:text-rose-400 font-medium"
                               : "text-muted-foreground"
                           }`}
                         >
                           {isOutOfStock
                             ? locale === "bn"
-                              ? "স্টক নেই"
-                              : "Out"
-                            : `${locale === "bn" ? "স্টক:" : "Stk:"} ${totalStock}`}
+                              ? "স্টক শেষ"
+                              : "Out of stock"
+                            : `${locale === "bn" ? "স্টক:" : "Stock:"} ${totalStock}`}
                         </span>
                       </div>
                     </button>
@@ -1631,7 +1632,10 @@ export default function PosPage() {
         cashierName={shiftInUseOtherUser?.cashierUser?.name || "Another Cashier"}
         onSwitchRegister={() => {
           setShiftInUseOtherUser(null);
-          // select next available or open register dialog
+          const other = registers.find((r: any) => r.id !== selectedRegister?.id);
+          if (other) {
+            handleSelectRegister(other);
+          }
         }}
       />
 

@@ -166,7 +166,7 @@ export function ShiftInUseAlert({
         </div>
 
         <div className="pt-2">
-          <Button onClick={onSwitchRegister} className="w-full h-10 font-medium">
+          <Button onClick={onSwitchRegister} data-testid="switch-register-btn" className="w-full h-10 font-medium">
             {locale === "bn" ? "অন্য রেজিস্টার বেছে নিন" : "Choose Another Register"}
           </Button>
         </div>
@@ -402,7 +402,7 @@ export function CloseShiftDialog({
             </div>
           </div>
           {!closedSummary && (
-            <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 rounded-full">
+            <Button variant="ghost" size="icon" onClick={() => { setClosedSummary(null); onClose(); }} className="h-8 w-8 rounded-full">
               <X className="h-4 w-4" />
             </Button>
           )}
@@ -469,7 +469,14 @@ export function CloseShiftDialog({
                   <Printer className="h-4 w-4" />
                   <span>{strings.pos.printShiftSummary}</span>
                 </Button>
-                <Button onClick={onClose} className="flex-1 h-10 font-semibold">
+                <Button
+                  onClick={() => {
+                    setClosedSummary(null);
+                    onClose();
+                  }}
+                  data-testid="done-close-shift-btn"
+                  className="flex-1 h-10 font-semibold"
+                >
                   {locale === "bn" ? "ঠিক আছে" : "Done"}
                 </Button>
               </div>

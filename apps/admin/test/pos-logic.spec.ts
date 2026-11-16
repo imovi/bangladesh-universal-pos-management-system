@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import fs from "fs";
+import path from "path";
 import {
   calculateSaleTotals,
   calculateShiftCashTotals,
@@ -10,6 +12,12 @@ import {
   matchBarcodeOrSku,
   CartItem,
 } from "@/lib/pos/cart-calculations";
+import {
+  buildVariantMatrix,
+  getVariantStock,
+  getProductBranchStock,
+} from "@/lib/pos/variant-matrix";
+import type { PosProduct } from "@/lib/pos/types";
 
 describe("POS Core Calculations & Cart Engine", () => {
   const dummyVariant1 = {
@@ -242,6 +250,56 @@ describe("POS Core Calculations & Cart Engine", () => {
       expect(result.netCashSalesMinor).toBe(130000n);
       expect(result.paymentMethodTotalsMinor.cash).toBe(150000n);
       expect(result.paymentMethodTotalsMinor.bkash).toBe(50000n);
+    });
+  });
+
+  describe("POS Variant Matrix Builder & Stock Reader with Real Fixture", () => {
+    const fixturePath = path.resolve(__dirname, "fixtures/pos-products.json");
+    const fixtureData = JSON.parse(fs.readFileSync(fixturePath, "utf-8"));
+    const products: PosProduct[] = fixtureData.data;
+
+    it("builds correct matrix for Oxford Formal Shirt from real API response", () => {
+      const oxford = products.find((p) => p.name === "Oxford Formal Shirt");
+      expect(oxford).toBeDefined();
+
+      const branchId = oxford!.variants[0].stockLevels?.[0]?.branchId;
+      expect(branchId).toBeDefined();
+
+      const matrix = buildVariantMatrix(oxford!, branchId);
+      expect(matrix.hasMatrix).toBe(true);
+      expect(matrix.sizes).toEqual(["M", "L", "XL"]);
+      expect(matrix.colors).toEqual(["White", "Sky Blue"]);
+
+      // Exactly 6 cells in matrix
+      expect(matrix.matrixMap.size).toBe(6);
+
+      for (const color of matrix.colors) {
+        for (const size of matrix.sizes) {
+          const item = matrix.matrixMap.get(`${color}:${size}`);
+          expect(item).toBeDefined();
+          expect(item?.size).not.toBe("Default");
+          expect(item?.color).not.toBe("Standard");
+          expect(Number.isNaN(item?.stock)).toBe(false);
+          expect(typeof item?.stock).toBe("number");
+          expect(item!.stock).toBeGreaterThanOrEqual(0);
+        }
+      }
+    });
+
+    it("stock reader calculates product branch stock without NaN", () => {
+      for (const p of products) {
+        const branchId = p.variants[0]?.stockLevels?.[0]?.branchId;
+        const totalStock = getProductBranchStock(p, branchId);
+        expect(Number.isNaN(totalStock)).toBe(false);
+        expect(totalStock).toBeGreaterThanOrEqual(0);
+
+        for (const v of p.variants) {
+          const vStock = getVariantStock(v, branchId);
+          expect(Number.isNaN(vStock)).toBe(false);
+          expect(typeof vStock).toBe("number");
+          expect(vStock).toBeGreaterThanOrEqual(0);
+        }
+      }
     });
   });
 });

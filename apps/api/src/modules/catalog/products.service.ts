@@ -230,7 +230,13 @@ export class ProductsService {
         variants: {
           include: {
             optionValues: {
-              include: { optionValue: true },
+              include: {
+                optionValue: {
+                  include: {
+                    option: true,
+                  },
+                },
+              },
             },
             barcodes: true,
           },
@@ -314,7 +320,15 @@ export class ProductsService {
             taxClass: true,
             variants: {
               include: {
-                optionValues: { include: { optionValue: true } },
+                optionValues: {
+                  include: {
+                    optionValue: {
+                      include: {
+                        option: true,
+                      },
+                    },
+                  },
+                },
                 barcodes: true,
                 stockLevels: validBranchId ? { where: { branchId: validBranchId } } : true,
               },

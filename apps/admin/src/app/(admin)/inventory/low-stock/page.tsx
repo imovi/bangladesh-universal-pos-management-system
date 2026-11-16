@@ -230,7 +230,7 @@ export default function LowStockPage() {
                 </TableRow>
               ) : (
                 items.map((item: any) => {
-                  const rawOpts = item.variant.optionValues || item.variant.variantOptionValues || [];
+                  const rawOpts = item.variant.optionValues || [];
                   const optionsLabel = rawOpts.length > 0
                     ? rawOpts.map((vov: any) => `${vov.optionValue?.option?.name || ""}: ${vov.optionValue?.value || ""}`).join(", ")
                     : "Standard";

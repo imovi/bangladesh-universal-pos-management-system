@@ -4,6 +4,7 @@ import {
   SaleCalculationOptions,
   CalculatedSaleTotals,
 } from "@universal-pos/shared";
+import { getVariantStock } from "./variant-matrix";
 
 export interface CartLineDiscount {
   type: "fixed" | "percent";
@@ -204,15 +205,7 @@ export function matchBarcodeOrSku(
       const skuMatch = variant.sku && variant.sku.toLowerCase() === trimmed;
 
       if (barcodeMatch || skuMatch) {
-        let stock = 0;
-        if (Array.isArray(variant.stockLevels)) {
-          if (branchId) {
-            const sl = variant.stockLevels.find((s: any) => s.branchId === branchId);
-            stock = sl ? Number(sl.quantity) : 0;
-          } else {
-            stock = variant.stockLevels.reduce((acc: number, s: any) => acc + Number(s.quantity || 0), 0);
-          }
-        }
+        const stock = getVariantStock(variant, branchId);
         return {
           matched: true,
           product,

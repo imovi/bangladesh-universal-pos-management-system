@@ -87,7 +87,7 @@ export default function OpeningStockPage() {
       let variantColor = "Standard";
       let variantSize = "Standard";
 
-      const rawOpts = v.optionValues || v.variantOptionValues || [];
+      const rawOpts = v.optionValues || [];
       if (rawOpts.length > 0) {
         for (const vov of rawOpts) {
           const optName = (vov.optionValue?.option?.name || "").toLowerCase();

@@ -14,8 +14,19 @@ export const SaleItemInputSchema = z.object({
   discount: LineDiscountInputSchema.optional(),
 });
 
+export const SALE_PAYMENT_METHODS = [
+  "cash",
+  "card",
+  "bkash",
+  "nagad",
+  "rocket",
+  "bank_transfer",
+] as const;
+
+export type SalePaymentMethod = (typeof SALE_PAYMENT_METHODS)[number];
+
 export const SalePaymentInputSchema = z.object({
-  paymentMethod: z.enum(["cash", "card", "bkash", "nagad", "rocket", "bank_transfer"]),
+  paymentMethod: z.enum(SALE_PAYMENT_METHODS),
   amountMinor: z.coerce.number().int().positive(),
   reference: z.string().trim().max(100).optional(),
 });

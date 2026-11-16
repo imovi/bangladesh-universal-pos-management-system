@@ -155,7 +155,17 @@ export class ShiftsService {
       tx,
     );
 
-    return updated;
+    const paymentMethodTotalsMinor = Object.fromEntries(
+      Object.entries(calc.paymentMethodTotalsMinor).map(([k, v]) => [k, Number(v)]),
+    );
+
+    return {
+      ...updated,
+      paymentMethodTotalsMinor,
+      cardSalesMinor: Number(calc.cardSalesMinor),
+      bkashSalesMinor: Number(calc.bkashSalesMinor),
+      otherSalesMinor: Number(calc.otherSalesMinor),
+    };
   }
 
   async close(

@@ -201,6 +201,7 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
 ---
 
 ## Milestone A5: Purchasing (Suppliers, Purchase Orders, Goods Receipts & Payments)
+
 - **Start Time:** 2026-11-16 07:15:00 +06:00
 - **End Time:** 2026-11-16 07:56:00 +06:00
 - **What Was Built:**
@@ -243,6 +244,39 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - Vitest Admin: 12 passed in `apps/admin`.
   - Vitest API: 36 test files, 204 tests passed in `apps/api`.
   - Playwright E2E: All 16 tests passed across Chromium and Mobile Chrome (39.3s).
+
+---
+
+## Backend Fix 5: Per-Payment-Method Totals in Shift Figures
+
+- **Start Time:** 2026-11-16 07:58:00 +06:00
+- **End Time:** 2026-11-16 08:06:00 +06:00
+- **What Was Built:**
+  1. **Payment Enum Derivation:**
+     - Defined and exported `SALE_PAYMENT_METHODS = ["cash", "card", "bkash", "nagad", "rocket", "bank_transfer"] as const;` and `SalePaymentMethod` in `packages/shared/src/schemas/sales.schemas.ts`.
+     - Derived `SalePaymentInputSchema` directly from `SALE_PAYMENT_METHODS`.
+  2. **Shift Engine Updates:**
+     - In `packages/shared/src/shifts.ts`, defined `PaymentMethodTotalsMinor = Record<SalePaymentMethod, bigint>`.
+     - In `calculateShiftCashTotals`, initialized dynamic accumulator across all enum methods.
+     - Kept `cardSalesMinor`, `bkashSalesMinor`, and `otherSalesMinor` for backward compatibility, marked `@deprecated`.
+  3. **Shift Close and Shift Report Responses:**
+     - In `apps/api/src/modules/shifts/shifts.service.ts`: `executeShiftClose` returns `paymentMethodTotalsMinor` mapped to integer minor units.
+     - In `apps/api/src/modules/reports/reports.service.ts`: `getShiftReport` returns `paymentMethodTotalsMinor` mapped to integer minor units alongside deprecated fields.
+  4. **Automated Verification:**
+     - Tests-first: Created `apps/api/test/fix5-shift-payments.spec.ts` with real PostgreSQL integration test as `pos_runtime`.
+     - Posted 6 sales across each payment method (`cash`, `card`, `bkash`, `nagad`, `rocket`, `bank_transfer`).
+     - Verified exact amounts in `GET /reports/shift/:id` and `POST /shifts/:id/close`.
+     - Verified sum of payment method totals equals shift total sales.
+- **Decisions Made & Why:**
+  - Shift calculations happen on-the-fly from completed sales payments; no schema migration was necessary.
+  - Kept deprecated fields for backward compatibility with existing clients.
+- **Dependencies Added:** None.
+- **Skipped:** None.
+- **Verification & CI Run Result:**
+  - Vitest API: All 37 test files, 205 tests passed.
+  - `@universal-pos/shared` built cleanly.
+  - `@universal-pos/api` built cleanly and daemon restarted.
+
 
 
 

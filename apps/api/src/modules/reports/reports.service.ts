@@ -270,14 +270,27 @@ export class ReportsService {
         ...shift.cashMovements.map((m) => ({ type: m.type, id: m.id, amountMinor: Number(m.amountMinor), reason: m.reason, at: m.createdAt })),
       ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 
+      const paymentMethodTotalsMinor = Object.fromEntries(
+        Object.entries(calc.paymentMethodTotalsMinor).map(([k, v]) => [k, Number(v)]),
+      );
+
       return {
-        shiftId: shift.id, registerName: shift.register.name, cashierName: shift.cashierUser.name, status: shift.status,
-        openingCashMinor: Number(calc.openingCashMinor), cashInMinor: Number(calc.cashInMinor), cashOutMinor: Number(calc.cashOutMinor),
-        cashSalesMinor: Number(calc.cashPaymentsMinor), expectedCashMinor: Number(calc.expectedCashMinor),
+        shiftId: shift.id,
+        registerName: shift.register.name,
+        cashierName: shift.cashierUser.name,
+        status: shift.status,
+        openingCashMinor: Number(calc.openingCashMinor),
+        cashInMinor: Number(calc.cashInMinor),
+        cashOutMinor: Number(calc.cashOutMinor),
+        cashSalesMinor: Number(calc.cashPaymentsMinor),
+        expectedCashMinor: Number(calc.expectedCashMinor),
         closingCashMinor: shift.closingCashMinor ? Number(shift.closingCashMinor) : null,
         differenceMinor: shift.cashDifferenceMinor ? Number(shift.cashDifferenceMinor) : null,
-        bkashSalesMinor: Number(calc.bkashSalesMinor), cardSalesMinor: Number(calc.cardSalesMinor),
-        totalSalesCount: calc.completedSalesCount, transactions,
+        paymentMethodTotalsMinor,
+        bkashSalesMinor: Number(calc.bkashSalesMinor),
+        cardSalesMinor: Number(calc.cardSalesMinor),
+        totalSalesCount: calc.completedSalesCount,
+        transactions,
       };
     });
   }

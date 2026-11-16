@@ -1,8 +1,12 @@
+import { SALE_PAYMENT_METHODS, type SalePaymentMethod } from "./schemas/sales.schemas.js";
+
 /**
  * Unified shift cash calculation engine for Universal POS.
  * Formulated with integer minor units (poisha).
  * Shared by ShiftsService.close and ReportsService.getShiftReport.
  */
+
+export type PaymentMethodTotalsMinor = Record<SalePaymentMethod, bigint>;
 
 export interface ShiftPaymentInput {
   paymentMethod: string;
@@ -35,31 +39,58 @@ export interface ShiftCashCalculationResult {
   cashOutMinor: bigint;
   netCashFlowMinor: bigint;
   expectedCashMinor: bigint;
+  paymentMethodTotalsMinor: PaymentMethodTotalsMinor;
+  /** @deprecated Use paymentMethodTotalsMinor.card */
   cardSalesMinor: bigint;
+  /** @deprecated Use paymentMethodTotalsMinor.bkash */
   bkashSalesMinor: bigint;
+  /** @deprecated Use paymentMethodTotalsMinor */
   otherSalesMinor: bigint;
   completedSalesCount: number;
 }
 
 function aggregateSales(sales: ShiftSaleInput[]) {
-  let cashPayments = 0n, changeGiven = 0n, cardSales = 0n, bkashSales = 0n, otherSales = 0n, completedCount = 0;
+  let cashPayments = 0n,
+    changeGiven = 0n,
+    cardSales = 0n,
+    bkashSales = 0n,
+    otherSales = 0n,
+    completedCount = 0;
+
+  const paymentMethodTotals: Record<SalePaymentMethod, bigint> = Object.fromEntries(
+    SALE_PAYMENT_METHODS.map((m) => [m, 0n]),
+  ) as Record<SalePaymentMethod, bigint>;
+
   for (const s of sales) {
     if (s.status !== "completed") continue;
     completedCount++;
     changeGiven += BigInt(s.changeMinor ?? 0);
     for (const p of s.payments) {
       const amt = BigInt(p.amountMinor);
+      const method = p.paymentMethod as SalePaymentMethod;
+      if (method in paymentMethodTotals) {
+        paymentMethodTotals[method] += amt;
+      }
       if (p.paymentMethod === "cash") cashPayments += amt;
       else if (p.paymentMethod === "card") cardSales += amt;
       else if (["bkash", "nagad", "rocket"].includes(p.paymentMethod)) bkashSales += amt;
       else otherSales += amt;
     }
   }
-  return { cashPayments, changeGiven, cardSales, bkashSales, otherSales, completedCount };
+  return {
+    cashPayments,
+    changeGiven,
+    cardSales,
+    bkashSales,
+    otherSales,
+    completedCount,
+    paymentMethodTotals,
+  };
 }
 
 function aggregateMovements(movements: ShiftCashMovementInput[]) {
-  let cashIn = 0n, cashOut = 0n;
+  let cashIn = 0n,
+    cashOut = 0n;
   for (const m of movements) {
     const amt = BigInt(m.amountMinor);
     if (m.type === "cash_in") cashIn += amt;
@@ -92,6 +123,7 @@ export function calculateShiftCashTotals(
     cashOutMinor: movAgg.cashOut,
     netCashFlowMinor: netCashFlow,
     expectedCashMinor: expectedCash,
+    paymentMethodTotalsMinor: salesAgg.paymentMethodTotals,
     cardSalesMinor: salesAgg.cardSales,
     bkashSalesMinor: salesAgg.bkashSales,
     otherSalesMinor: salesAgg.otherSales,

@@ -89,3 +89,38 @@ jobs:
           MIGRATION_TEST_DATABASE_URL: postgresql://pos_admin:pos_secret@localhost:5432/universal_pos_test?schema=public
           JWT_ACCESS_SECRET: test-jwt-access-secret-minimum-32-chars-long
           JWT_REFRESH_SECRET: test-jwt-refresh-secret-minimum-32-chars-long
+
+      - name: Seed demo dataset
+        run: npm run seed:demo
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://pos_runtime:pos_runtime_secret@localhost:5432/universal_pos?schema=public
+          MIGRATION_DATABASE_URL: postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public
+          JWT_ACCESS_SECRET: test-jwt-access-secret-minimum-32-chars-long
+          JWT_REFRESH_SECRET: test-jwt-refresh-secret-minimum-32-chars-long
+
+      - name: Install Playwright browsers with system dependencies
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Admin Dashboard E2E tests
+        run: |
+          node apps/api/dist/main.js &
+          for i in {1..30}; do
+            if curl -s http://localhost:4000/api/v1/auth/login > /dev/null 2>&1; then
+              echo "API server is ready"
+              break
+            fi
+            echo "Waiting for API server..."
+            sleep 1
+          done
+          npm --workspace=@universal-pos/admin run test:e2e -- --project=chromium
+        env:
+          CI: true
+          NODE_ENV: production
+          PORT: 4000
+          DATABASE_URL: postgresql://pos_runtime:pos_runtime_secret@localhost:5432/universal_pos?schema=public
+          MIGRATION_DATABASE_URL: postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public
+          JWT_ACCESS_SECRET: test-jwt-access-secret-minimum-32-chars-long
+          JWT_REFRESH_SECRET: test-jwt-refresh-secret-minimum-32-chars-long
+          NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+          ADMIN_URL: http://localhost:3000

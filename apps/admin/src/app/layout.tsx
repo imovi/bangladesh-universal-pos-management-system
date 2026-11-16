@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Hind_Siliguri, Inter } from "next/font/google";
+import { Providers } from "@/components/providers";
 import "./globals.css";
 
 const hindSiliguri = Hind_Siliguri({
@@ -27,8 +28,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="bn" suppressHydrationWarning>
-      <body className={`${hindSiliguri.variable} ${inter.variable} font-sans antialiased`}>
-        {children}
+      <body className={`${hindSiliguri.variable} ${inter.variable} font-sans antialiased min-h-screen bg-background text-foreground`}>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

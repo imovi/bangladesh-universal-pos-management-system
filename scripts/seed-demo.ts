@@ -15,6 +15,7 @@ import { ShiftsService } from "../apps/api/dist/modules/shifts/shifts.service.js
 import { SalesService } from "../apps/api/dist/modules/sales/sales.service.js";
 import { UsersService } from "../apps/api/dist/modules/users/users.service.js";
 import { RolesService } from "../apps/api/dist/modules/roles/roles.service.js";
+import { v7 as uuidv7 } from "uuid";
 import {
   DEMO_CATEGORIES,
   DEMO_BRANDS,
@@ -142,7 +143,9 @@ async function seedShiftsAndSales(app: any, tId: string, bId: string, oId: strin
   await shifts.addCashMovement(tId, s1.id, { type: "cash_in", amountMinor: 10000, reason: "Float addition" }, cId);
   for (let i = 0; i < 3; i++) {
     await sales.create(tId, {
+      id: uuidv7(),
       shiftId: s1.id, branchId: bId, customerId: custIds[i], pricesIncludeTax: true,
+      expectedTotalMinor: vars[i].priceMinor,
       items: [{ variantId: vars[i].id, quantity: 1, unitPriceMinor: vars[i].priceMinor, taxRateBp: 500 }],
       payments: [{ paymentMethod: i % 2 === 0 ? "cash" : "bkash", amountMinor: vars[i].priceMinor }],
     }, cId);
@@ -154,7 +157,9 @@ async function seedShiftsAndSales(app: any, tId: string, bId: string, oId: strin
   await shifts.addCashMovement(tId, s2.id, { type: "cash_out", amountMinor: 2000, reason: "Store refreshments" }, cId);
   for (let i = 3; i < 10; i++) {
     const sale = await sales.create(tId, {
+      id: uuidv7(),
       shiftId: s2.id, branchId: bId, customerId: custIds[i % custIds.length], pricesIncludeTax: true,
+      expectedTotalMinor: vars[i].priceMinor * 2,
       items: [{ variantId: vars[i].id, quantity: 2, unitPriceMinor: vars[i].priceMinor, taxRateBp: 500 }],
       payments: [{ paymentMethod: i % 3 === 0 ? "cash" : i % 3 === 1 ? "bkash" : "card", amountMinor: vars[i].priceMinor * 2 }],
     }, cId);

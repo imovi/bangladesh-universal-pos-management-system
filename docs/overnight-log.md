@@ -277,6 +277,56 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - `@universal-pos/shared` built cleanly.
   - `@universal-pos/api` built cleanly and daemon restarted.
 
+---
+
+## Milestone A6: Sales, Customers, Registers and Shifts
+
+- **Start Time:** 2026-11-16 08:07:00 +06:00
+- **End Time:** 2026-11-16 08:20:00 +06:00
+- **What Was Built:**
+  1. **Sales Management (`/sales`, `/sales/[id]`):**
+     - Sales history table with live filters by branch, shift, cashier, status (`completed`, `voided`), payment method, date range, and debounced search by receipt/invoice number.
+     - Sale detail page displaying original vs charged price, line discounts, tax, total, customer, cashier, branch, and payments breakdown.
+     - Thermal receipt preview panel (58/80mm style) with print-friendly layout (`@media print`).
+     - Sale void modal requiring mandatory reason (minimum 3 characters) and permission `sale.void`. Handles server rejection when shifts are closed (409 `SHIFT_CLOSED`) with explicit user feedback.
+  2. **Customer Management (`/customers`, `/customers/[id]`):**
+     - Customers listing with live search, purchase metrics (total spent in BDT, total visits), and Create/Edit modals adhering to `CreateCustomerSchema`.
+     - Customer profile page with contact details, notes, key metrics (total spent, visits, average order value), and purchase history linking directly to individual sales.
+  3. **Cash Registers Management (`/registers`):**
+     - Register station management by branch, with Create and Edit modals supporting active/inactive toggles.
+  4. **Shifts & Cash Drawer Reconciliation (`/shifts`, `/shifts/[id]`):**
+     - Shift list with status badges (`open` pulsing green, `closed` gray), opening float, closing counted cash, and cash discrepancy (balanced, shortage, overage).
+     - Shift detail page with comprehensive cash reconciliation:
+       - Opening cash float
+       - Net cash sales
+       - Cash additions (cash in) and payouts (cash out)
+       - Expected drawer cash vs counted closing cash
+       - Discrepancy indicator (balanced in emerald, shortage in red, overage in blue)
+     - Sales by payment method breakdown powered by Backend Fix 5 (`cash`, `card`, `bkash`, `nagad`, `rocket`, `bank_transfer`).
+     - Chronological transactions log of all sales and cash movements.
+  5. **Bilingual Localization:**
+     - Added complete sales, customers, registers, and shifts translations in `apps/admin/src/i18n/bn.ts` and `en.ts` with 100% leaf parity verified by unit tests.
+  6. **Automated Verification & E2E:**
+     - Added Playwright E2E test `apps/admin/e2e/sales-flow.spec.ts`:
+       - Posts a completed sale via backend API in active shift.
+       - Signs in as cashier: visits `/sales/[id]` and asserts "Void Sale" button is completely hidden (enforcing lack of `sale.void` permission).
+       - Signs in as owner: searches for sale by receipt number in `/sales`, views `/sales/[id]`, triggers void modal with reason, confirms void, and verifies status updates to `Voided` / `বাতিলকৃত`.
+       - Creates new customer in `/customers` and verifies profile in table.
+       - Navigates to `/registers` and `/shifts/[id]`, verifying cash drawer reconciliation and per-payment-method figures.
+     - All 20 Playwright E2E tests passing across Chromium and Mobile Chrome (Pixel 5).
+- **Decisions Made & Why:**
+  - Placed `registers` under `sales` in sidebar navigation for easy operator access alongside shifts and sales history.
+  - Thermal receipt preview on sale detail page uses standard dashed styling in browser and prints cleanly without UI clutter.
+- **Dependencies Added:** None.
+- **Skipped:** None.
+- **Verification & CI Run Result:**
+  - `npm run build`: 27 routes cleanly compiled in `apps/admin`.
+  - `npx oxlint --deny-warnings apps/admin/src`: 0 warnings, 0 errors across 51 files.
+  - Vitest Admin: 12 unit tests passed in `apps/admin`.
+  - Vitest API: 37 test files, 205 tests passed in `apps/api`.
+  - Playwright E2E: All 20 tests passed across Chromium and Mobile Chrome (46.0s).
+
+
 
 
 

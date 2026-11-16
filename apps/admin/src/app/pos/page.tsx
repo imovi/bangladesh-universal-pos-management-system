@@ -122,7 +122,21 @@ export default function PosPage() {
   const [isShiftSalesOpen, setIsShiftSalesOpen] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [isCashierMenuOpen, setIsCashierMenuOpen] = useState(false);
+  const cashierMenuRef = useRef<HTMLDivElement>(null);
   const [selectedProductForVariants, setSelectedProductForVariants] = useState<PosProduct | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (cashierMenuRef.current && !cashierMenuRef.current.contains(e.target as Node)) {
+        setIsCashierMenuOpen(false);
+      }
+    };
+    if (isCashierMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isCashierMenuOpen]);
   const [activeReceipt, setActiveReceipt] = useState<ReceiptData | null>(null);
 
   // Line Discount Modal
@@ -981,20 +995,21 @@ export default function PosPage() {
       {/* 1. POS Top Bar */}
       <header className="h-14 border-b border-border bg-card px-4 flex items-center justify-between shrink-0 select-none">
         {/* Left: Brand & Register status */}
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0">
           <div className="flex items-center gap-2 text-primary shrink-0">
             <Store className="h-5 w-5" />
             <h1 className="text-sm font-bold truncate">
-              <span className="hidden sm:inline">{posConfig.shopName}</span>
+              <span className="hidden xl:inline">{posConfig.shopName}</span>
             </h1>
           </div>
 
-          <div className="h-4 w-px bg-border hidden sm:block" />
+          <div className="h-4 w-px bg-border hidden xl:block" />
 
           {/* Branch & Register Dropdowns */}
-          <div className="flex items-center gap-1.5 text-xs font-medium">
-            <span className="font-semibold truncate max-w-[120px] sm:max-w-[180px]">
-              {currentBranch?.code || "BR"} - {currentBranch?.name}
+          <div className="flex items-center gap-1.5 text-xs font-medium shrink-0">
+            <span className="font-semibold truncate max-w-[75px] xl:max-w-[140px]">
+              <span className="hidden xl:inline">{currentBranch?.code || "BR"} - </span>
+              {currentBranch?.name}
             </span>
 
             <span className="text-muted-foreground">•</span>
@@ -1007,7 +1022,7 @@ export default function PosPage() {
                   if (reg) handleSelectRegister(reg);
                 }}
                 aria-label={locale === "bn" ? "রেজিস্টার নির্বাচন" : "Select Register"}
-                className="h-7 text-xs font-semibold bg-muted/50 border border-input rounded-md px-2 focus:outline-none focus:ring-1 focus:ring-primary"
+                className="h-7 text-xs font-semibold bg-muted/50 border border-input rounded-md px-1.5 max-w-[95px] sm:max-w-[130px] focus:outline-none focus:ring-1 focus:ring-primary"
                 data-testid="register-select"
               >
                 {registers.map((r) => (
@@ -1023,16 +1038,29 @@ export default function PosPage() {
 
           {/* Shift status badge */}
           {activeShift ? (
-            <Badge variant="default" className="text-[10px] py-0 px-2 font-medium flex items-center gap-1 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-none shrink-0 whitespace-nowrap">
+            <Badge
+              variant="default"
+              data-testid="shift-status-badge"
+              className="text-[10px] py-1 px-2 font-medium flex items-center gap-1 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-none shrink-0 whitespace-nowrap"
+            >
               <Unlock className="h-3 w-3 shrink-0" />
               <span>
-                {locale === "bn" ? "শিফট চলমান" : "Shift Open"} ({new Date(activeShift.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                <span className="hidden sm:inline">{locale === "bn" ? "শিফট " : "Shift "}</span>
+                <span>{locale === "bn" ? "চলমান" : "Open"}</span>
+                <span className="hidden md:inline"> ({new Date(activeShift.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})</span>
               </span>
             </Badge>
           ) : (
-            <Badge variant="outline" className="text-[10px] py-0 px-2 font-medium flex items-center gap-1 border-dashed shrink-0 whitespace-nowrap">
+            <Badge
+              variant="outline"
+              data-testid="shift-status-badge"
+              className="text-[10px] py-1 px-2 font-medium flex items-center gap-1 border-dashed shrink-0 whitespace-nowrap"
+            >
               <Lock className="h-3 w-3 shrink-0" />
-              <span>{locale === "bn" ? "শিফট বন্ধ" : "Shift Closed"}</span>
+              <span>
+                <span className="hidden sm:inline">{locale === "bn" ? "শিফট " : "Shift "}</span>
+                <span>{locale === "bn" ? "বন্ধ" : "Closed"}</span>
+              </span>
             </Badge>
           )}
         </div>
@@ -1047,18 +1075,65 @@ export default function PosPage() {
             </div>
           )}
 
-          {/* Cashier Name & Limit */}
-          <div className="hidden lg:flex flex-col text-right leading-tight pr-1 shrink-0">
-            <span className="text-xs font-semibold text-foreground truncate max-w-[120px] xl:max-w-[160px]">
-              {user.name}
-            </span>
-            <span
-              data-testid="cashier-discount-limit"
-              className="text-[10px] text-muted-foreground font-mono whitespace-nowrap"
+          {/* Cashier Name & Menu (Interactive, moves discount limit inside at narrow widths) */}
+          <div className="relative shrink-0" ref={cashierMenuRef}>
+            <button
+              type="button"
+              data-testid="cashier-name-block"
+              onClick={() => setIsCashierMenuOpen((prev) => !prev)}
+              className="flex items-center gap-1.5 h-8 px-2 rounded-md bg-muted/40 hover:bg-muted/70 border border-border/50 transition-colors text-left"
+              title={locale === "bn" ? "ক্যাশিয়ার তথ্য" : "Cashier details"}
             >
+              <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span
+                data-testid="cashier-name"
+                className="text-xs font-medium text-foreground truncate max-w-[70px] sm:max-w-[100px]"
+              >
+                {user.name}
+              </span>
+            </button>
+
+            {/* Cashier Dropdown Menu (Contains discount limit on narrow screens) */}
+            {isCashierMenuOpen && (
+              <div
+                data-testid="cashier-menu-dropdown"
+                className="absolute right-0 top-full mt-1.5 w-56 bg-card border border-border rounded-xl shadow-xl p-3 z-50 text-xs space-y-2 animate-in fade-in"
+              >
+                <div className="border-b border-border pb-2">
+                  <p className="font-semibold text-foreground">{user.name}</p>
+                  <p className="text-[11px] text-muted-foreground">{user.email}</p>
+                  <Badge variant="outline" className="mt-1 text-[10px]">
+                    {user.roles?.join(", ") || (user.isOwner ? "Owner" : "Staff")}
+                  </Badge>
+                </div>
+                <div className="py-1">
+                  <span className="text-muted-foreground block text-[11px] mb-1">
+                    {strings.pos.discountLimit}
+                  </span>
+                  <span
+                    data-testid="cashier-discount-limit"
+                    className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-semibold bg-primary/10 text-primary border border-primary/20"
+                  >
+                    {user?.isOwner || user?.roles?.includes("Owner") || maxDiscountPercent === null
+                      ? locale === "bn" ? "সীমাহীন" : "No limit"
+                      : `${maxDiscountPercent}%`}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Standalone Discount Limit badge on medium/large widths (>= 640px) */}
+          <div
+            data-testid="cashier-discount-limit"
+            className="hidden sm:inline-flex items-center h-8 px-2 rounded-md text-[10px] font-mono font-medium bg-primary/10 text-primary border border-primary/20 shrink-0 whitespace-nowrap"
+          >
+            <span className="hidden xl:inline">{strings.pos.discountLimit}: </span>
+            <span className="xl:hidden">{locale === "bn" ? "সীমা: " : "Limit: "}</span>
+            <span>
               {user?.isOwner || user?.roles?.includes("Owner") || maxDiscountPercent === null
-                ? `${strings.pos.discountLimit}: ${locale === "bn" ? "সীমাহীন" : "No limit"}`
-                : `${strings.pos.discountLimit}: ${maxDiscountPercent}%`}
+                ? locale === "bn" ? "সীমাহীন" : "No limit"
+                : `${maxDiscountPercent}%`}
             </span>
           </div>
 
@@ -1073,8 +1148,8 @@ export default function PosPage() {
                 data-testid="cash-movement-button"
                 title={strings.pos.cashManagement}
               >
-                <ArrowRightLeft className="h-3.5 w-3.5 sm:mr-1" />
-                <span className="hidden sm:inline">{strings.pos.cashManagement}</span>
+                <ArrowRightLeft className="h-3.5 w-3.5 2xl:mr-1" />
+                <span className="hidden 2xl:inline">{strings.pos.cashManagement}</span>
               </Button>
 
               <Button
@@ -1085,8 +1160,8 @@ export default function PosPage() {
                 data-testid="shift-sales-button"
                 title={locale === "bn" ? "শিফট বিক্রি" : "Shift Sales"}
               >
-                <Receipt className="h-3.5 w-3.5 sm:mr-1" />
-                <span className="hidden sm:inline">{locale === "bn" ? "বিক্রি তালিকা" : "Sales"}</span>
+                <Receipt className="h-3.5 w-3.5 2xl:mr-1" />
+                <span className="hidden 2xl:inline">{locale === "bn" ? "বিক্রি তালিকা" : "Sales"}</span>
               </Button>
 
               <Button
@@ -1097,8 +1172,8 @@ export default function PosPage() {
                 data-testid="close-shift-button"
                 title={strings.pos.closeShift}
               >
-                <Lock className="h-3.5 w-3.5 sm:mr-1" />
-                <span className="hidden sm:inline">{strings.pos.closeShift}</span>
+                <Lock className="h-3.5 w-3.5 2xl:mr-1" />
+                <span className="hidden 2xl:inline">{strings.pos.closeShift}</span>
               </Button>
             </div>
           ) : (
@@ -1137,7 +1212,7 @@ export default function PosPage() {
             size="icon"
             onClick={() => setIsShortcutsOpen(true)}
             aria-label={strings.pos.shortcuts}
-            className="h-8 w-8 text-muted-foreground"
+            className="h-8 w-8 text-muted-foreground hidden sm:inline-flex"
             title={strings.pos.shortcuts}
           >
             <Keyboard className="h-4 w-4" />
@@ -1167,11 +1242,11 @@ export default function PosPage() {
           {canAccessAdmin && (
             <Link
               href="/dashboard"
-              className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md border border-border text-xs font-medium hover:bg-muted transition-colors"
+              className="inline-flex items-center gap-1 h-8 px-2 rounded-md border border-border text-xs font-medium hover:bg-muted transition-colors"
               title={strings.pos.backToAdmin}
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              <span className="hidden xl:inline">{strings.pos.backToAdmin}</span>
+              <span className="hidden 2xl:inline">{strings.pos.backToAdmin}</span>
             </Link>
           )}
         </div>

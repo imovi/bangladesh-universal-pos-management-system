@@ -771,6 +771,40 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - Global Integrity Guard: 46 tests passed on Chromium (all 23 routes in BN and EN).
   - GitHub Actions CI Run: [43854236046](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43854236046) (Commit `199976d`) — **Status: completed, Conclusion: success (Green)**.
 
+---
+
+## Phase 1C: Returns & Exchanges, Due Sales, Stock Transfers, Barcode Labels
+
+### Item 0: POS Header Layout Fix (1366, 1024, 375 px)
+
+- **Start Time:** 2026-11-16 19:35 +06:00
+- **End Time:** 2026-11-16 20:00 +06:00
+- **What Was Built & Fixed:**
+  1. **POS Header Responsive Redesign (`apps/admin/src/app/pos/page.tsx`):**
+     - Shift status badge (`[data-testid="shift-status-badge"]`): added `shrink-0` and responsive text formatting (`hidden sm:inline` for shift prefix, `hidden md:inline` for time) to prevent container inflation on narrower viewports.
+     - Cashier block (`[data-testid="cashier-name-block"]`): converted into an interactive menu button with click-outside dismissal and truncated cashier name (`max-w-[70px] sm:max-w-[100px]`).
+     - Cashier discount limit (`[data-testid="cashier-discount-limit"]`):
+       - On wide screens (>= 640px): standalone dedicated pill in the right container with compact responsive label (`hidden xl:inline` for full label, `xl:hidden` for compact label).
+       - On narrow screens (< 640px / 375px): standalone pill is hidden, and discount limit is seamlessly nested inside the cashier dropdown menu (`data-testid="cashier-menu-dropdown"`).
+     - Header buttons layout:
+       - Shift action buttons (Cash Management, Shift Sales, Close Shift) text labels set to `hidden 2xl:inline`, rendering as clean icon buttons on 1024px and 1366px viewports to eliminate horizontal collision.
+       - Keyboard shortcuts button hidden on mobile (`hidden sm:inline-flex`).
+       - Store name truncated on tablet (`hidden xl:inline`), freeing 140px on 1024px viewports.
+  2. **Playwright Bounding Box Non-Overlap Verification (`apps/admin/e2e/pos-header-layout.spec.ts`):**
+     - Visits `/pos` across 3 viewports: Desktop (1366×768), Tablet (1024×768), and Mobile (375×667).
+     - Calculates bounding boxes for `shift-status-badge`, `cashier-name-block`, and `cashier-discount-limit`.
+     - Strictly asserts that no two elements' bounding boxes overlap (`doBoxesOverlap` returns `false`).
+     - Verifies that at 375px mobile, opening the cashier menu correctly reveals the discount limit without colliding with the header shift badge.
+- **Decisions Made & Why:**
+  - Shift action buttons were consuming >350px on 1366px screens due to full Bengali text strings ("ক্যাশ ব্যবস্থাপনা", "বিক্রি তালিকা", "শিফট বন্ধ করুন"). Setting labels to `hidden 2xl:inline` provides >220px of spacing on 1366px and >130px on 1024px, completely removing element crowding.
+  - On 375px mobile screens, keyboard shortcuts dialog button is hidden since touch devices do not have physical F2/F4/F8/F9 keys.
+- **Dependencies Added:** None.
+- **Verification:**
+  - Admin Lint: 0 warnings, 0 errors.
+  - Admin Build: 35 routes compiled cleanly.
+  - `pos-header-layout.spec.ts`: Passed across all 3 viewports (1366, 1024, 375 px).
+
+
 
 
 

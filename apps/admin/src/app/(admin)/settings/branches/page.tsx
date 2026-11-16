@@ -68,6 +68,15 @@ export default function BranchesSettingsPage() {
     loadBranches();
   }, []);
 
+  useEffect(() => {
+    if (!isDialogOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsDialogOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isDialogOpen]);
+
   const openCreateDialog = () => {
     setEditingBranch(null);
     setFormName("");

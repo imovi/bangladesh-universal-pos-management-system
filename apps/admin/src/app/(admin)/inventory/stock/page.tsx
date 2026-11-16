@@ -274,7 +274,11 @@ export default function StockLevelsPage() {
                 setPage(1);
               }}
             >
-              <SelectTrigger className="h-9 text-xs sm:text-sm" data-testid="stock-branch-select">
+              <SelectTrigger
+                className="h-9 text-xs sm:text-sm"
+                data-testid="stock-branch-select"
+                aria-label={strings.selectEmpty.allBranches}
+              >
                 <SelectValue placeholder={strings.selectEmpty.allBranches} />
               </SelectTrigger>
               <SelectContent>

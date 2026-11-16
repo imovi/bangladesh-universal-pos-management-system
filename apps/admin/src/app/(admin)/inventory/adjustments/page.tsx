@@ -165,8 +165,13 @@ export default function StockAdjustmentsPage() {
   return (
     <div className="space-y-6 max-w-5xl">
         <div className="flex items-center gap-3">
-          <Link href="/inventory/stock">
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+          <Link href="/inventory/stock" aria-label={strings.inventory.title || "Back to stock"}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              aria-label={strings.inventory.title || "Back to stock"}
+            >
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
@@ -208,8 +213,10 @@ export default function StockAdjustmentsPage() {
             <CardContent className="space-y-4">
               {/* Branch */}
               <div className="space-y-2">
-                <Label className="text-xs font-semibold">{strings.inventory.selectBranch} *</Label>
+                <Label htmlFor="adjustBranchSelect" className="text-xs font-semibold">{strings.inventory.selectBranch} *</Label>
                 <select
+                  id="adjustBranchSelect"
+                  aria-label={strings.inventory.selectBranch}
                   data-testid="adjust-branch-select"
                   value={selectedBranchId}
                   onChange={(e) => {

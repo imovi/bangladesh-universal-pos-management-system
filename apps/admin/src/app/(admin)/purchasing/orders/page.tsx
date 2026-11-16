@@ -165,6 +165,7 @@ export default function PurchaseOrdersPage() {
         </div>
 
         <select
+          aria-label={strings.selectEmpty.allStatuses}
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
           className="h-10 px-3 rounded-md border border-input bg-background text-sm w-full sm:w-auto"

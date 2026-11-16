@@ -137,6 +137,7 @@ export default function AuditLogsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
             <select
+              aria-label={locale === "bn" ? "অ্যাকশন ফিল্টার" : "Filter by action"}
               value={actionFilter}
               data-testid="audit-action-filter"
               onChange={(e) => {
@@ -155,6 +156,7 @@ export default function AuditLogsPage() {
             </select>
 
             <select
+              aria-label={locale === "bn" ? "বিভাগ ফিল্টার" : "Filter by entity"}
               value={entityFilter}
               data-testid="audit-entity-filter"
               onChange={(e) => {

@@ -51,7 +51,10 @@ export function DataTablePagination({
                 onPageChange(1);
               }}
             >
-              <SelectTrigger className="h-7 w-16 text-xs px-2">
+              <SelectTrigger
+                className="h-7 w-16 text-xs px-2"
+                aria-label={strings.common.showing || "Items per page"}
+              >
                 <SelectValue placeholder={String(pageSize)} />
               </SelectTrigger>
               <SelectContent>

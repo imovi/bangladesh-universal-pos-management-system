@@ -127,7 +127,6 @@ export function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
           size="sm"
           onClick={() => setLocale(locale === "bn" ? "en" : "bn")}
           className="flex items-center gap-1.5 h-8 px-2 sm:px-2.5 text-xs font-semibold shrink-0"
-          aria-label={strings.language.toggle}
         >
           <Globe className="h-4 w-4" />
           <span className="hidden sm:inline">{locale === "bn" ? "English" : "বাংলা"}</span>

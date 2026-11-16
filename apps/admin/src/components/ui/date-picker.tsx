@@ -45,7 +45,7 @@ export function DatePicker({
         <Button
           variant="outline"
           disabled={disabled}
-          aria-label={ariaLabel || "Choose date"}
+          {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
           className={cn(
             "h-9 px-3 justify-start text-left font-normal text-xs md:text-sm flex items-center gap-2",
             !value && "text-muted-foreground",
@@ -123,7 +123,7 @@ export function DateRangePicker({
         <Button
           variant="outline"
           disabled={disabled}
-          aria-label={ariaLabel || "Choose date range"}
+          {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
           className={cn(
             "h-9 px-3 justify-start text-left font-normal text-xs md:text-sm flex items-center gap-2",
             (!startDate || !endDate) && "text-muted-foreground",

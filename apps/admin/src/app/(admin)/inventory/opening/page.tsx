@@ -223,8 +223,13 @@ export default function OpeningStockPage() {
   return (
     <div className="space-y-6 max-w-5xl">
         <div className="flex items-center gap-3">
-          <Link href="/inventory/stock">
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+          <Link href="/inventory/stock" aria-label={strings.inventory.title || "Back to stock"}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              aria-label={strings.inventory.title || "Back to stock"}
+            >
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>

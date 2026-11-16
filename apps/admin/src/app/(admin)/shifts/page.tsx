@@ -192,7 +192,7 @@ export default function ShiftsPage() {
                 setPage(1);
               }}
             >
-              <SelectTrigger className="h-9 text-xs sm:text-sm">
+              <SelectTrigger className="h-9 text-xs sm:text-sm" aria-label={strings.selectEmpty.allBranches}>
                 <SelectValue placeholder={strings.selectEmpty.allBranches} />
               </SelectTrigger>
               <SelectContent>
@@ -217,7 +217,7 @@ export default function ShiftsPage() {
                 setPage(1);
               }}
             >
-              <SelectTrigger className="h-9 text-xs sm:text-sm">
+              <SelectTrigger className="h-9 text-xs sm:text-sm" aria-label={strings.selectEmpty.allRegisters}>
                 <SelectValue placeholder={strings.selectEmpty.allRegisters} />
               </SelectTrigger>
               <SelectContent>
@@ -242,7 +242,7 @@ export default function ShiftsPage() {
                 setPage(1);
               }}
             >
-              <SelectTrigger className="h-9 text-xs sm:text-sm">
+              <SelectTrigger className="h-9 text-xs sm:text-sm" aria-label={strings.selectEmpty.allStatuses}>
                 <SelectValue placeholder={strings.selectEmpty.allStatuses} />
               </SelectTrigger>
               <SelectContent>

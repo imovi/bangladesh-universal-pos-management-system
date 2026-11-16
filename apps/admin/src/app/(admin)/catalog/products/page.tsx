@@ -123,7 +123,7 @@ export default function ProductsPage() {
                     setPage(1);
                   }}
                 >
-                  <SelectTrigger className="h-9 text-xs sm:text-sm">
+                  <SelectTrigger className="h-9 text-xs sm:text-sm" aria-label={strings.selectEmpty.allCategories}>
                     <SelectValue placeholder={strings.selectEmpty.allCategories} />
                   </SelectTrigger>
                   <SelectContent>
@@ -243,8 +243,8 @@ export default function ProductsPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                          <Link href={`/catalog/products/${product.id}`}>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <Link href={`/catalog/products/${product.id}`} aria-label={`${strings.common.edit}: ${product.name}`}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`${strings.common.edit}: ${product.name}`}>
                               <Edit2 className="h-3.5 w-3.5" />
                             </Button>
                           </Link>

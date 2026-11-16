@@ -241,7 +241,7 @@ export default function RegistersPage() {
             value={branchFilter}
             onValueChange={(val) => setBranchFilter(val)}
           >
-            <SelectTrigger className="h-9 text-xs sm:text-sm">
+            <SelectTrigger className="h-9 text-xs sm:text-sm" aria-label={strings.selectEmpty.allBranches}>
               <SelectValue placeholder={strings.selectEmpty.allBranches} />
             </SelectTrigger>
             <SelectContent>

@@ -298,6 +298,7 @@ export default function UsersSettingsPage() {
               />
             </div>
             <select
+              aria-label={locale === "bn" ? "রোল ফিল্টার" : "Filter by role"}
               value={selectedRoleFilter}
               onChange={(e) => setSelectedRoleFilter(e.target.value)}
               className="h-9 px-3 text-xs rounded-md border border-input bg-background"

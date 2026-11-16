@@ -627,6 +627,45 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - `npm --workspace=@universal-pos/admin run lint`: 0 warnings, 0 errors across 79 files.
   - `npm --workspace=@universal-pos/admin run build`: Clean production build with 35 static/dynamic routes.
   - Playwright E2E: All 44 tests passed (1.2m) against `universal_pos_e2e`.
+  - GitHub Actions CI Run: 43829435127 (Commit `3d5c815`) — **Status: completed, Conclusion: success (Green)**.
+
+---
+
+## Milestone A9: Finish & Final Hardening (WCAG 2.2 AA Accessibility Audit, Responsive Checks, and Admin Documentation)
+
+- **Start Time:** 2026-11-16 14:15 +06:00
+- **End Time:** 2026-11-16 14:50 +06:00
+- **What Was Built:**
+  1. **Documentation (`apps/admin/README.md`):**
+     - Comprehensive developer guide covering directory layout, single route-group AppShell architecture, full-screen `/pos` counter mode, design system tokens, step-by-step guides for adding new pages/translations, and testing/isolation protocols.
+  2. **Automated WCAG 2.2 AA Accessibility Audit across 23 Routes:**
+     - Created `apps/admin/e2e/final-audit.spec.ts` running Axe automated accessibility testing across every admin and counter route:
+       - `/dashboard`, `/catalog/products`, `/catalog/categories`, `/inventory/stock`, `/inventory/opening`, `/inventory/adjustments`, `/inventory/low-stock`, `/purchasing/suppliers`, `/purchasing/orders`, `/purchasing/receipts`, `/sales`, `/customers`, `/registers`, `/shifts`, `/reports/sales`, `/reports/profit`, `/reports/stock`, `/settings/shop`, `/settings/branches`, `/settings/roles`, `/settings/users`, `/settings/audit`, `/pos`.
+     - Resolved all WCAG critical and serious violations:
+       - Accessible name mismatch (WCAG 2.1 SC 2.5.3) on language switcher button, `DatePicker`, and `DateRangePicker` by aligning accessible names with visible text.
+       - Missing accessible labels on combobox/select triggers and native select elements (`stock-branch-select`, `adjustBranchSelect`, role filter, status filters, table pagination page size).
+       - Added discernible labels to icon-only action buttons (product edit, role delete, inventory back links).
+  3. **Keyboard Navigation Verification:**
+     - Login form tab order (tenant slug -> email -> password -> submit button).
+     - Modal dialog dismissal via global `Escape` key event listener.
+     - Counter POS `F2` keyboard shortcut focusing the barcode search input.
+  4. **Responsive 375px Mobile Verification:**
+     - Verified zero horizontal document blowouts (`scrollWidth <= innerWidth`) across `/dashboard`, `/catalog/products`, `/sales`, `/settings/shop`, and `/pos`.
+  5. **Final Comprehensive Screenshot Suite under `docs/screenshots/final/`:**
+     - Desktop light theme (1440×900): `desktop-dashboard.png`, `desktop-products.png`, `desktop-stock.png`, `desktop-sales.png`, `desktop-settings-shop.png`, `desktop-settings-roles.png`, `desktop-reports-sales.png`.
+     - Desktop dark theme (1440×900): `dark-dashboard.png`, `dark-sales.png`.
+     - Mobile (375×667): `mobile-dashboard.png`, `mobile-sales.png`.
+     - Tablet (1024×768): `tablet-dashboard.png`.
+     - English locale: `desktop-en-dashboard.png`.
+- **Decisions Made & Why:**
+  - In `apps/admin/e2e/final-audit.spec.ts`, set `test.setTimeout(120000)` on the 23-route Axe audit test to avoid false-positive test timeouts during comprehensive page-by-page accessibility scans.
+  - Aligned accessible names on date pickers and toggle buttons directly with their visible text to satisfy WCAG 2.1 SC 2.5.3 (Label in Name).
+- **Dependencies Added:** None.
+- **Verification & CI Run Result:**
+  - `npm --workspace=@universal-pos/admin test`: 6 test files, 30 passed.
+  - `npm --workspace=@universal-pos/admin run lint`: 0 warnings, 0 errors.
+  - Playwright E2E: All 48 tests passed (1.8m) on `universal_pos_e2e`.
+
 
 
 

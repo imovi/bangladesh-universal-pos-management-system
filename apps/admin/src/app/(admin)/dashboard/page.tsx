@@ -183,7 +183,6 @@ export default function DashboardPage() {
           <DatePicker
             value={selectedDate}
             onChange={(d) => setSelectedDate(d)}
-            aria-label="Business date"
           />
 
           <Button

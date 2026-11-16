@@ -665,6 +665,53 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - `npm --workspace=@universal-pos/admin test`: 6 test files, 30 passed.
   - `npm --workspace=@universal-pos/admin run lint`: 0 warnings, 0 errors.
   - Playwright E2E: All 48 tests passed (1.8m) on `universal_pos_e2e`.
+  - GitHub Actions CI Run: 43834582271 (Commit `9015050`) — **Status: completed, Conclusion: success (Green)**.
+
+---
+
+## Backend Fix 4: Remove Broad Read Policies of `pos_system`
+
+- **Start Time:** 2026-11-16 14:55 +06:00
+- **End Time:** 2026-11-16 15:15 +06:00
+- **What Was Built:**
+  1. **Privilege Audit & Query Inventory:**
+     - Audited all queries run by `SystemDbService`:
+       - `findTenantBySlug(slug)`: Requires `SELECT` on `public.tenants`.
+       - `findTenantById(id)`: Requires `SELECT` on `public.tenants`.
+       - `findRefreshTokenByHash(hash)`: Requires `SELECT` on `public.refresh_tokens`.
+       - `revokeAllUserRefreshTokens(userId)`: Requires `UPDATE` on `public.refresh_tokens`.
+       - `updateTenantSettings(...)`: Operates under `pos_app` role with tenant RLS context.
+       - `createTenantWithInitialData(...)`: Requires inserting new Tenant, Branch, Roles, Role Permissions, User, User Roles, User Branches, and Audit Log.
+     - Confirmed that `branches`, `roles`, `role_permissions`, `users`, `user_roles`, `user_branches`, and `audit_logs` require **INSERT-only** permissions during signup and **never** require `SELECT` permissions for `pos_system`.
+  2. **Database Migration (`20261116160000_fix4_narrow_pos_system_policies`):**
+     - Dropped all 7 broad `USING (true)` read policies:
+       - `DROP POLICY IF EXISTS system_signup_select_branches ON public.branches;`
+       - `DROP POLICY IF EXISTS system_signup_select_roles ON public.roles;`
+       - `DROP POLICY IF EXISTS system_signup_select_role_permissions ON public.role_permissions;`
+       - `DROP POLICY IF EXISTS system_signup_select_users ON public.users;`
+       - `DROP POLICY IF EXISTS system_signup_select_user_roles ON public.user_roles;`
+       - `DROP POLICY IF EXISTS system_signup_select_user_branches ON public.user_branches;`
+       - `DROP POLICY IF EXISTS system_signup_select_audit_logs ON public.audit_logs;`
+     - Revoked `SELECT` privileges from `pos_system` on all 7 tables:
+       - `REVOKE SELECT ON TABLE public.branches, public.roles, public.role_permissions, public.users, public.user_roles, public.user_branches, public.audit_logs FROM pos_system;`
+  3. **Application Refactoring in `SystemDbService`:**
+     - Refactored `createTenantWithInitialData` to generate UUID v7 primary keys directly in the application layer (`branchId = uuidv7()`, `roleId = uuidv7()`, `ownerUserId = uuidv7()`, `auditLogId = uuidv7()`).
+     - Switched from `.create(...)` (which invokes PostgreSQL `INSERT ... RETURNING *` requiring `SELECT` permissions) to `.createMany(...)` which emits clean `INSERT INTO ...` without a `RETURNING` clause.
+  4. **Regression Tests (`apps/api/test/fix4-narrow-pos-system.spec.ts`):**
+     - Added test asserting that connecting as `pos_runtime` and switching to `pos_system` strictly denies `SELECT` on all 7 tables with PostgreSQL 42501 `permission denied`.
+     - Added test verifying tenant signup through `createTenantWithInitialData` succeeds cleanly without `SELECT` permissions on the 7 tables, and subsequent lookup by slug via `findTenantBySlug` succeeds.
+     - Verified all auth flows (signup, login, refresh, logout) continue to pass.
+- **Decisions Made & Why:**
+  - `pos_system` retains `SELECT` only on `tenants` (for slug and ID lookups) and `refresh_tokens` (for hash lookups). All other tenant tables are completely inaccessible for read operations to `pos_system`.
+  - Switched to `createMany` for tenant provisioning to avoid PostgreSQL's requirement of `SELECT` privilege when executing queries with `RETURNING *`.
+- **Dependencies Added:** None.
+- **Verification & CI Run Result:**
+  - `npm --workspace=@universal-pos/api test`: 40 test files, 218 passed.
+  - `npm --workspace=@universal-pos/admin test`: 6 test files, 30 passed.
+  - `npm run lint`: 0 warnings, 0 errors across all workspaces.
+  - `npm run build`: Successful builds for shared, admin (35 routes), and api.
+  - Playwright E2E: All 48 tests passed (1.8m) on `universal_pos_e2e`.
+
 
 
 

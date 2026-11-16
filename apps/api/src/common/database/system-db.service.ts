@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from './prisma.service.js';
 import { Prisma } from '@prisma/client';
+import { v7 as uuidv7 } from 'uuid';
 
 export interface CreateTenantSignupData {
   companyName: string;
@@ -128,103 +129,150 @@ export class SystemDbService {
         },
       });
 
-      // 2. Create primary Branch
-      const branch = await tx.branch.create({
-        data: {
-          tenantId: tenant.id,
-          name: data.branch.name,
-          code: data.branch.code,
-          address: data.branch.address || null,
-          isActive: true,
-        },
+      // 2. Create primary Branch (using application-generated ID and createMany to avoid RETURNING/SELECT)
+      const branchId = uuidv7();
+      await tx.branch.createMany({
+        data: [
+          {
+            id: branchId,
+            tenantId: tenant.id,
+            name: data.branch.name,
+            code: data.branch.code,
+            address: data.branch.address || null,
+            isActive: true,
+          },
+        ],
       });
 
-      // 3. Seed System Roles and their permissions
+      // 3. Seed System Roles and their permissions (using createMany without SELECT/RETURNING)
       let ownerRoleId: string | undefined;
+      const roleRecords: Array<{
+        id: string;
+        tenantId: string;
+        name: string;
+        isSystem: boolean;
+        maxDiscountPercent: number;
+      }> = [];
+      const roleIdMap = new Map<string, string>();
 
       for (const roleDef of data.roles) {
-        const createdRole = await tx.role.create({
-          data: {
-            tenantId: tenant.id,
-            name: roleDef.name,
-            isSystem: roleDef.isSystem,
-            maxDiscountPercent: roleDef.maxDiscountPercent ?? 0,
-          },
+        const roleId = uuidv7();
+        roleIdMap.set(roleDef.name, roleId);
+        roleRecords.push({
+          id: roleId,
+          tenantId: tenant.id,
+          name: roleDef.name,
+          isSystem: roleDef.isSystem,
+          maxDiscountPercent: roleDef.maxDiscountPercent ?? 0,
         });
 
         if (roleDef.name === 'Owner') {
-          ownerRoleId = createdRole.id;
+          ownerRoleId = roleId;
         }
+      }
 
-        if (roleDef.permissions.length > 0) {
-          await tx.rolePermission.createMany({
-            data: roleDef.permissions.map((key) => ({
-              tenantId: tenant.id,
-              roleId: createdRole.id,
-              permissionKey: key,
-            })),
+      if (roleRecords.length > 0) {
+        await tx.role.createMany({
+          data: roleRecords,
+        });
+      }
+
+      const rolePermissionRecords: Array<{
+        id: string;
+        tenantId: string;
+        roleId: string;
+        permissionKey: string;
+      }> = [];
+
+      for (const roleDef of data.roles) {
+        const roleId = roleIdMap.get(roleDef.name)!;
+        for (const key of roleDef.permissions) {
+          rolePermissionRecords.push({
+            id: uuidv7(),
+            tenantId: tenant.id,
+            roleId,
+            permissionKey: key,
           });
         }
       }
 
-      // 4. Create Owner User
-      const ownerUser = await tx.user.create({
-        data: {
-          tenantId: tenant.id,
-          name: data.owner.name,
-          email: data.owner.email,
-          phone: data.owner.phone || null,
-          passwordHash: data.owner.passwordHash,
-          pinHash: data.owner.pinHash || null,
-          isActive: true,
-        },
+      if (rolePermissionRecords.length > 0) {
+        await tx.rolePermission.createMany({
+          data: rolePermissionRecords,
+        });
+      }
+
+      // 4. Create Owner User (using application-generated ID and createMany)
+      const ownerUserId = uuidv7();
+      await tx.user.createMany({
+        data: [
+          {
+            id: ownerUserId,
+            tenantId: tenant.id,
+            name: data.owner.name,
+            email: data.owner.email,
+            phone: data.owner.phone || null,
+            passwordHash: data.owner.passwordHash,
+            pinHash: data.owner.pinHash || null,
+            isActive: true,
+          },
+        ],
       });
 
       // 5. Assign Owner Role to Owner User
       if (ownerRoleId) {
-        await tx.userRole.create({
-          data: {
-            tenantId: tenant.id,
-            userId: ownerUser.id,
-            roleId: ownerRoleId,
-          },
+        await tx.userRole.createMany({
+          data: [
+            {
+              id: uuidv7(),
+              tenantId: tenant.id,
+              userId: ownerUserId,
+              roleId: ownerRoleId,
+            },
+          ],
         });
       }
 
       // 6. Assign User to primary Branch
-      await tx.userBranch.create({
-        data: {
-          tenantId: tenant.id,
-          userId: ownerUser.id,
-          branchId: branch.id,
-        },
+      await tx.userBranch.createMany({
+        data: [
+          {
+            id: uuidv7(),
+            tenantId: tenant.id,
+            userId: ownerUserId,
+            branchId,
+          },
+        ],
       });
 
       // 7. Initial Audit Log
-      await tx.auditLog.create({
-        data: {
-          tenantId: tenant.id,
-          actorUserId: ownerUser.id,
-          action: 'tenant.signup',
-          entityType: 'Tenant',
-          entityId: tenant.id,
-          after: {
+      await tx.auditLog.createMany({
+        data: [
+          {
+            id: uuidv7(),
             tenantId: tenant.id,
-            name: tenant.name,
-            slug: tenant.slug,
-            businessType: tenant.businessType,
+            actorUserId: ownerUserId,
+            action: 'tenant.signup',
+            entityType: 'Tenant',
+            entityId: tenant.id,
+            after: {
+              tenantId: tenant.id,
+              name: tenant.name,
+              slug: tenant.slug,
+              businessType: tenant.businessType,
+            },
+            ip: data.ip,
           },
-          ip: data.ip,
-        },
+        ],
       });
 
       return {
         tenantId: tenant.id,
         slug: tenant.slug,
         companyName: tenant.name,
-        branchId: branch.id,
-        ownerId: ownerUser.id,
-        ownerEmail: ownerUser.email,
+        branchId,
+        ownerId: ownerUserId,
+        ownerEmail: data.owner.email,
       };
     });
   }

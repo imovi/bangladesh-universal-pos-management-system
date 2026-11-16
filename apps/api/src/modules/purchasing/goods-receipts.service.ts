@@ -136,6 +136,7 @@ export class GoodsReceiptsService {
     grnId: string,
     grnNumber: string,
     dto: CreateGoodsReceiptDto,
+    supplierId?: string,
     userId?: string,
   ) {
     return tx.goodsReceipt.create({
@@ -143,10 +144,12 @@ export class GoodsReceiptsService {
         id: grnId,
         tenantId,
         grnNumber,
+        supplierId: supplierId || null,
         purchaseOrderId: dto.purchaseOrderId,
         branchId: dto.branchId,
         receivedByUserId: userId,
         notes: dto.notes,
+        receivedAt: dto.receivedAt || new Date(),
         items: {
           create: dto.items.map((item) => ({
             id: uuidv7(),
@@ -173,6 +176,16 @@ export class GoodsReceiptsService {
         dto.grnNumber || (await this.generateGrnNumber(tenantId, tx));
       const grnId = uuidv7();
 
+      let resolvedSupplierId = dto.supplierId;
+      if (dto.purchaseOrderId) {
+        const po = await tx.purchaseOrder.findUnique({
+          where: { id: dto.purchaseOrderId },
+        });
+        if (po) {
+          resolvedSupplierId = po.supplierId;
+        }
+      }
+
       await this.processReceiptItems(tenantId, tx, dto.branchId, dto.items);
       const goodsReceipt = await this.insertGoodsReceipt(
         tenantId,
@@ -180,6 +193,7 @@ export class GoodsReceiptsService {
         grnId,
         grnNumber,
         dto,
+        resolvedSupplierId,
         userId,
       );
 
@@ -229,6 +243,7 @@ export class GoodsReceiptsService {
       const grn = await tx.goodsReceipt.findUnique({
         where: { id },
         include: {
+          supplier: { select: { id: true, name: true } },
           branch: true,
           purchaseOrder: true,
           items: {
@@ -248,6 +263,97 @@ export class GoodsReceiptsService {
         throw new BadRequestException("Goods receipt not found");
       }
       return grn;
+    });
+  }
+
+  async findMany(
+    tenantId: string,
+    query: {
+      supplierId?: string;
+      purchaseOrderId?: string;
+      branchId?: string;
+      startDate?: string;
+      endDate?: string;
+      search?: string;
+      sortBy?: string;
+      sortOrder?: "asc" | "desc";
+      page?: number;
+      limit?: number;
+    },
+  ) {
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const where: Prisma.GoodsReceiptWhereInput = { tenantId };
+
+      if (query.supplierId) {
+        where.OR = [
+          { supplierId: query.supplierId },
+          { purchaseOrder: { supplierId: query.supplierId } },
+        ];
+      }
+      if (query.purchaseOrderId) {
+        where.purchaseOrderId = query.purchaseOrderId;
+      }
+      if (query.branchId) {
+        where.branchId = query.branchId;
+      }
+      if (query.startDate || query.endDate) {
+        where.receivedAt = {};
+        if (query.startDate) {
+          where.receivedAt.gte = new Date(query.startDate);
+        }
+        if (query.endDate) {
+          where.receivedAt.lte = new Date(query.endDate);
+        }
+      }
+      if (query.search) {
+        where.grnNumber = { contains: query.search, mode: "insensitive" };
+      }
+
+      const page = Math.max(1, query.page || 1);
+      const limit = Math.min(100, Math.max(1, query.limit || 50));
+      const skip = (page - 1) * limit;
+
+      const allowedSortFields = ["receivedAt", "grnNumber", "createdAt"];
+      const sortBy = allowedSortFields.includes(query.sortBy || "")
+        ? (query.sortBy as string)
+        : "receivedAt";
+      const sortOrder: Prisma.SortOrder = query.sortOrder === "asc" ? "asc" : "desc";
+
+      const [total, items] = await Promise.all([
+        tx.goodsReceipt.count({ where }),
+        tx.goodsReceipt.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { [sortBy]: sortOrder },
+          include: {
+            supplier: { select: { id: true, name: true } },
+            purchaseOrder: { select: { id: true, poNumber: true, supplierId: true } },
+            branch: { select: { id: true, name: true, code: true } },
+            items: {
+              include: {
+                variant: {
+                  select: {
+                    id: true,
+                    sku: true,
+                    product: { select: { id: true, name: true } },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      ]);
+
+      return {
+        items,
+        meta: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
     });
   }
 }

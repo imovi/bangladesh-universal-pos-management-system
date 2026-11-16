@@ -126,6 +126,34 @@ describe("Common Filters & Interceptors", () => {
         }),
       );
     });
+
+    it("whitelists allowed extra error fields and filters out untrusted fields", () => {
+      const { host, res } = createMockHost();
+      const exception = new BadRequestException({
+        code: "DISCOUNT_LIMIT_EXCEEDED",
+        message: "Discount exceeds limit",
+        limitBp: 500,
+        attemptedBp: 1000,
+        untrustedSecret: "super-secret-internal-state",
+      });
+
+      filter.catch(exception, host);
+
+      expect(res.status).toHaveBeenCalledWith(HttpStatus.BAD_REQUEST);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({
+            code: "DISCOUNT_LIMIT_EXCEEDED",
+            message: "Discount exceeds limit",
+            limitBp: 500,
+            attemptedBp: 1000,
+          }),
+        }),
+      );
+      const callArgs = res.json.mock.calls[0][0];
+      expect(callArgs.error.untrustedSecret).toBeUndefined();
+    });
   });
 
   describe("JwtAuthGuard", () => {

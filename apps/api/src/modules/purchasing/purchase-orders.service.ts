@@ -207,6 +207,9 @@ export class PurchaseOrdersService {
       supplierId?: string;
       branchId?: string;
       status?: string;
+      search?: string;
+      sortBy?: string;
+      sortOrder?: "asc" | "desc";
       page?: number;
       limit?: number;
     },
@@ -216,10 +219,25 @@ export class PurchaseOrdersService {
       if (query.supplierId) where.supplierId = query.supplierId;
       if (query.branchId) where.branchId = query.branchId;
       if (query.status) where.status = query.status;
+      if (query.search) {
+        where.poNumber = { contains: query.search, mode: "insensitive" };
+      }
 
       const page = Math.max(1, query.page || 1);
       const limit = Math.min(100, Math.max(1, query.limit || 50));
       const skip = (page - 1) * limit;
+
+      const allowedSortFields = [
+        "poNumber",
+        "createdAt",
+        "orderedAt",
+        "expectedAt",
+        "totalEstimatedMinor",
+      ];
+      const sortBy = allowedSortFields.includes(query.sortBy || "")
+        ? (query.sortBy as string)
+        : "createdAt";
+      const sortOrder: Prisma.SortOrder = query.sortOrder === "asc" ? "asc" : "desc";
 
       const [total, items] = await Promise.all([
         tx.purchaseOrder.count({ where }),
@@ -231,7 +249,7 @@ export class PurchaseOrdersService {
             supplier: { select: { id: true, name: true } },
             items: true,
           },
-          orderBy: { createdAt: "desc" },
+          orderBy: { [sortBy]: sortOrder },
         }),
       ]);
 

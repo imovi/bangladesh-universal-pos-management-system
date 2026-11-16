@@ -86,6 +86,9 @@ export class PurchaseOrdersController {
     @Query("supplierId") supplierId?: string,
     @Query("branchId") branchId?: string,
     @Query("status") status?: string,
+    @Query("search") search?: string,
+    @Query("sortBy") sortBy?: string,
+    @Query("sortOrder") sortOrder?: "asc" | "desc",
     @Query("page") page?: string,
     @Query("limit") limit?: string,
   ) {
@@ -93,6 +96,9 @@ export class PurchaseOrdersController {
       supplierId,
       branchId,
       status,
+      search,
+      sortBy,
+      sortOrder,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
     });

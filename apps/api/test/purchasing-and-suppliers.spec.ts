@@ -223,6 +223,7 @@ describe("M4: Suppliers & Purchasing Integration Tests", () => {
       .get(`/api/v1/inventory/levels?branchId=${branchId}&variantId=${variantId}`)
       .set("Authorization", `Bearer ${ownerToken}`);
     expect(Number(levelRes.body.data[0].qty)).toBe(60);
+    expect(levelRes.body.meta.pagination).toBeDefined();
 
     // Verify variant costMinor updated to new weighted average: 26000
     const varRes = await request(app.getHttpServer())

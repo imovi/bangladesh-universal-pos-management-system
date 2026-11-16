@@ -122,6 +122,7 @@ export class SystemDbService {
           settings: (data.settings as Prisma.InputJsonValue) || {
             currency: 'BDT',
             language: 'bn',
+            timezone: 'Asia/Dhaka',
             taxRate: 5,
           },
         },

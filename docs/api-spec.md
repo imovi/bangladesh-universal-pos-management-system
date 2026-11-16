@@ -60,11 +60,13 @@ All responses strictly follow the standardized envelope:
 - `POST /api/v1/auth/refresh`: Exchanges refresh token for new access/refresh pair.
 - `POST /api/v1/auth/logout`: Revokes refresh token.
 - `GET /api/v1/auth/me`: Retrieves current authenticated session and permissions.
+- `GET /api/v1/settings`: Retrieves tenant name and settings (timezone, currency, prices_include_tax, allow_negative_stock, receipt_header, receipt_footer). Accessible by Owner and Manager (`tenant.read`).
+- `PATCH /api/v1/settings`: Updates tenant name and settings. Requires Owner (`tenant.update`). Validated with strict schema (unknown keys rejected). `timezone` must be valid IANA identifier. Currency cannot be changed once tenant has any sale (returns HTTP 409 Conflict).
 
 ### 3.2 Branches, Users & Roles
 - `GET /api/v1/branches`: List tenant branches.
 - `POST /api/v1/branches`: Create new branch.
-- `GET /api/v1/users`: List users in tenant.
+- `GET /api/v1/users`: List users in tenant with filters (`search`, `roleId`, `branchId`, `isActive`, `sortBy`, `sortOrder`, pagination).
 - `POST /api/v1/users`: Create user and assign roles/branches.
 - `GET /api/v1/roles`: List roles with permissions and `maxDiscountPercent`.
 - `POST /api/v1/roles`: Create custom role with permissions and `maxDiscountPercent`.
@@ -72,25 +74,41 @@ All responses strictly follow the standardized envelope:
 
 ### 3.3 Catalog & Variants
 - `GET|POST /api/v1/categories`: Hierarchical categories.
+- `GET /api/v1/categories/:id`: Get category details with parent and children.
+- `PATCH /api/v1/categories/:id`: Update category name, parentId, isActive. Rejects self-parent or descendant-as-parent with HTTP 422. Rejects duplicate name with HTTP 409.
 - `GET|POST /api/v1/brands`: Brand master list.
+- `GET /api/v1/brands/:id`: Get brand details.
+- `PATCH /api/v1/brands/:id`: Update brand name and isActive. Rejects duplicate name with HTTP 409.
 - `GET|POST /api/v1/collections`: Seasonal/style collections.
+- `GET /api/v1/collections/:id`: Get collection details.
+- `PATCH /api/v1/collections/:id`: Update collection name and isActive. Rejects duplicate name with HTTP 409.
+- `GET|POST /api/v1/tax-classes`: Tax class master list.
+- `GET /api/v1/tax-classes/:id`: Get tax class details.
+- `PATCH /api/v1/tax-classes/:id`: Update tax class. Setting `isDefault: true` clears previous default in same transaction. Deactivating default tax class returns HTTP 409 Conflict.
 - `POST /api/v1/products`: Create product with options (Size, Color), generates variant Cartesian product.
-- `GET /api/v1/products`: List products with pagination and filters.
+- `GET /api/v1/products`: List products with pagination, search (name, SKU, barcode), filters (`categoryId`, `brandId`, `collectionId`, `isActive` defaulting to `true`), and whitelist sort.
 - `GET /api/v1/products/:id`: Get full product with variants and options.
 - `GET /api/v1/variants/lookup`: Find variant by exact SKU or barcode.
 - `GET /api/v1/variants/:id`: Get variant details (costs masked for Cashier role).
+- `PATCH /api/v1/variants/:id`: Update variant priceMinor, costMinor, reorderLevel, isActive. Requires non-negative integers.
+- `POST /api/v1/variants/:id/barcodes`: Add barcode to variant.
+- `DELETE /api/v1/variants/:id/barcodes/:barcodeId`: Remove barcode. Returns HTTP 404 if barcode does not belong to that variant.
 - `POST /api/v1/variants/bulk-price-update`: Batch update retail prices.
 
 ### 3.4 Inventory Ledger
 - `POST /api/v1/inventory/movements`: Atomic stock adjustments (`damage`, `loss`, `internal_use`, etc.).
 - `POST /api/v1/inventory/opening-stock`: Seed initial opening inventory levels.
-- `GET /api/v1/inventory/levels`: Current on-hand stock levels by branch and variant.
+- `GET /api/v1/inventory/levels`: Current on-hand stock levels by branch and variant, with pagination, search, low-stock filter, and whitelist sort.
+- `GET /api/v1/inventory/low-stock`: Filter items where on-hand quantity is below reorder level.
 - `GET /api/v1/inventory/movements`: Immutable historical stock ledger.
 
 ### 3.5 Purchasing & Suppliers
-- `GET|POST /api/v1/suppliers`: Supplier directory.
-- `GET|POST /api/v1/purchase-orders`: Create and list purchase orders.
+- `GET|POST /api/v1/suppliers`: Supplier directory with search, pagination, and whitelist sort.
+- `GET /api/v1/suppliers/:id/balance`: Current supplier balance, total purchases received, and total payments made.
+- `GET /api/v1/suppliers/:id/statement`: Chronological statement of receipts and payments with opening balance carry-forward across pagination and date ranges.
+- `GET|POST /api/v1/purchase-orders`: Create and list purchase orders with filters and whitelist sort.
 - `PATCH /api/v1/purchase-orders/:id/status`: Transition PO state (`draft` -> `ordered` -> `cancelled`).
+- `GET /api/v1/goods-receipts`: List goods receipts filterable by `supplierId`, `purchaseOrderId`, `branchId`, date range, search, and whitelist sort.
 - `POST /api/v1/goods-receipts`: Post goods receipt against PO or direct delivery. Automatically increments stock and updates weighted average cost.
 - `POST /api/v1/supplier-payments`: Record payment to supplier against invoices.
 

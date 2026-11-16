@@ -134,7 +134,12 @@ export const CreateCategorySchema = z.object({
 });
 export type CreateCategoryDto = z.infer<typeof CreateCategorySchema>;
 
-export const UpdateCategorySchema = CreateCategorySchema.partial();
+export const UpdateCategorySchema = z.object({
+  name: z.string().trim().min(2).max(100).optional(),
+  parentId: z.string().uuid().optional().nullable(),
+  parentCategoryId: z.string().uuid().optional().nullable(),
+  isActive: z.boolean().optional(),
+});
 export type UpdateCategoryDto = z.infer<typeof UpdateCategorySchema>;
 
 export const CreateBrandSchema = z.object({
@@ -142,7 +147,10 @@ export const CreateBrandSchema = z.object({
 });
 export type CreateBrandDto = z.infer<typeof CreateBrandSchema>;
 
-export const UpdateBrandSchema = CreateBrandSchema.partial();
+export const UpdateBrandSchema = z.object({
+  name: z.string().trim().min(2).max(100).optional(),
+  isActive: z.boolean().optional(),
+});
 export type UpdateBrandDto = z.infer<typeof UpdateBrandSchema>;
 
 export const CreateCollectionSchema = z.object({
@@ -150,7 +158,10 @@ export const CreateCollectionSchema = z.object({
 });
 export type CreateCollectionDto = z.infer<typeof CreateCollectionSchema>;
 
-export const UpdateCollectionSchema = CreateCollectionSchema.partial();
+export const UpdateCollectionSchema = z.object({
+  name: z.string().trim().min(2).max(100).optional(),
+  isActive: z.boolean().optional(),
+});
 export type UpdateCollectionDto = z.infer<typeof UpdateCollectionSchema>;
 
 export const CreateTaxClassSchema = z.object({
@@ -160,8 +171,38 @@ export const CreateTaxClassSchema = z.object({
 });
 export type CreateTaxClassDto = z.infer<typeof CreateTaxClassSchema>;
 
-export const UpdateTaxClassSchema = CreateTaxClassSchema.partial();
+export const UpdateTaxClassSchema = z.object({
+  name: z.string().trim().min(2).max(100).optional(),
+  rateBp: z.number().int().min(0).max(10000).optional(),
+  isDefault: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+});
 export type UpdateTaxClassDto = z.infer<typeof UpdateTaxClassSchema>;
+
+export const UpdateVariantSchema = z.object({
+  priceMinor: z.coerce.number().int().min(0).optional(),
+  costMinor: z.coerce.number().int().min(0).optional(),
+  reorderLevel: z.coerce.number().min(0).optional(),
+  isActive: z.boolean().optional(),
+});
+export type UpdateVariantDto = z.infer<typeof UpdateVariantSchema>;
+
+export const UpdateTenantSettingsSchema = z.object({
+  name: z.string().trim().min(2).max(100).optional(),
+  timezone: z.string().trim().refine((val) => {
+    try {
+      return Intl.supportedValuesOf("timeZone").includes(val);
+    } catch {
+      return false;
+    }
+  }, { message: "Invalid IANA time zone" }).optional(),
+  prices_include_tax: z.boolean().optional(),
+  allow_negative_stock: z.boolean().optional(),
+  currency: z.string().trim().length(3).optional(),
+  receipt_header: z.string().trim().max(500).optional(),
+  receipt_footer: z.string().trim().max(500).optional(),
+}).strict();
+export type UpdateTenantSettingsDto = z.infer<typeof UpdateTenantSettingsSchema>;
 
 export const ProductOptionInputSchema = z.object({
   name: z.string().trim().min(1).max(50),
@@ -294,10 +335,12 @@ export const GoodsReceiptItemInputSchema = z.object({
 });
 
 export const CreateGoodsReceiptSchema = z.object({
+  supplierId: z.string().uuid().optional(),
   purchaseOrderId: z.string().uuid().optional(),
   branchId: z.string().uuid(),
   grnNumber: z.string().trim().min(1).max(50).optional(),
   notes: z.string().trim().max(500).optional(),
+  receivedAt: z.coerce.date().optional(),
   items: z.array(GoodsReceiptItemInputSchema).min(1),
 });
 export type CreateGoodsReceiptDto = z.infer<typeof CreateGoodsReceiptSchema>;

@@ -67,6 +67,10 @@ export class AuditService {
       entityType?: string;
       action?: string;
       actorUserId?: string;
+      startDate?: string;
+      endDate?: string;
+      sortBy?: string;
+      sortOrder?: "asc" | "desc";
     },
   ) {
     const page = Math.max(1, Number(query.page) || 1);
@@ -80,13 +84,25 @@ export class AuditService {
       ...(query.actorUserId ? { actorUserId: query.actorUserId } : {}),
     };
 
+    if (query.startDate || query.endDate) {
+      where.createdAt = {};
+      if (query.startDate) where.createdAt.gte = new Date(query.startDate);
+      if (query.endDate) where.createdAt.lte = new Date(query.endDate);
+    }
+
+    const allowedSortFields = ["createdAt", "action", "entityType"];
+    const sortBy = allowedSortFields.includes(query.sortBy || "")
+      ? (query.sortBy as string)
+      : "createdAt";
+    const sortOrder: Prisma.SortOrder = query.sortOrder === "asc" ? "asc" : "desc";
+
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const [items, total] = await Promise.all([
         tx.auditLog.findMany({
           where,
           skip,
           take: limit,
-          orderBy: { createdAt: "desc" },
+          orderBy: { [sortBy]: sortOrder },
         }),
         tx.auditLog.count({ where }),
       ]);

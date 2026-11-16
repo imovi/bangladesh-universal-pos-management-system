@@ -291,8 +291,13 @@ export class InventoryService {
     query: {
       branchId?: string;
       variantId?: string;
+      search?: string;
       lowStock?: boolean;
       negative?: boolean;
+      sortBy?: string;
+      sortOrder?: "asc" | "desc";
+      page?: number;
+      limit?: number;
     },
   ) {
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
@@ -302,8 +307,14 @@ export class InventoryService {
       if (query.negative) {
         where.qty = { lt: new Prisma.Decimal(0) };
       }
+      if (query.search) {
+        where.OR = [
+          { variant: { sku: { contains: query.search, mode: "insensitive" } } },
+          { variant: { product: { name: { contains: query.search, mode: "insensitive" } } } },
+        ];
+      }
 
-      const levels = await tx.stockLevel.findMany({
+      const allLevels = await tx.stockLevel.findMany({
         where,
         include: {
           variant: {
@@ -320,15 +331,48 @@ export class InventoryService {
         orderBy: { updatedAt: "desc" },
       });
 
+      let filtered = allLevels;
       if (query.lowStock) {
-        return levels.filter(
+        filtered = allLevels.filter(
           (l) =>
             l.variant.reorderLevel !== null &&
             Number(l.qty) <= Number(l.variant.reorderLevel),
         );
       }
 
-      return levels;
+      const allowedSortFields = ["qty", "updatedAt"];
+      const sortBy = allowedSortFields.includes(query.sortBy || "")
+        ? (query.sortBy as string)
+        : "updatedAt";
+      const sortAsc = query.sortOrder === "asc";
+
+      if (sortBy === "qty") {
+        filtered.sort((a, b) =>
+          sortAsc ? Number(a.qty) - Number(b.qty) : Number(b.qty) - Number(a.qty),
+        );
+      } else {
+        filtered.sort((a, b) =>
+          sortAsc
+            ? a.updatedAt.getTime() - b.updatedAt.getTime()
+            : b.updatedAt.getTime() - a.updatedAt.getTime(),
+        );
+      }
+
+      const page = Math.max(1, query.page || 1);
+      const limit = Math.min(100, Math.max(1, query.limit || 50));
+      const skip = (page - 1) * limit;
+
+      const items = filtered.slice(skip, skip + limit);
+
+      return {
+        items,
+        pagination: {
+          total: filtered.length,
+          page,
+          limit,
+          totalPages: Math.ceil(filtered.length / limit),
+        },
+      };
     });
   }
 

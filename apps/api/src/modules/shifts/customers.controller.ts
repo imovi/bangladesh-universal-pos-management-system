@@ -85,11 +85,15 @@ export class CustomersController {
   async findMany(
     @Req() req: any,
     @Query("search") search?: string,
+    @Query("sortBy") sortBy?: string,
+    @Query("sortOrder") sortOrder?: "asc" | "desc",
     @Query("page") page?: string,
     @Query("limit") limit?: string,
   ) {
     return this.customersService.findMany(req.user.tenantId, {
       search,
+      sortBy,
+      sortOrder,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
     });

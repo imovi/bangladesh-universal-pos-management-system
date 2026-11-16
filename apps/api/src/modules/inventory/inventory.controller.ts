@@ -76,14 +76,24 @@ export class InventoryController {
     @Req() req: any,
     @Query("branchId") branchId?: string,
     @Query("variantId") variantId?: string,
+    @Query("search") search?: string,
     @Query("lowStock") lowStock?: string,
     @Query("negative") negative?: string,
+    @Query("sortBy") sortBy?: string,
+    @Query("sortOrder") sortOrder?: "asc" | "desc",
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
   ) {
     return this.inventoryService.getStockLevels(req.user.tenantId, {
       branchId,
       variantId,
+      search,
       lowStock: lowStock === "true",
       negative: negative === "true",
+      sortBy,
+      sortOrder,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
     });
   }
 
@@ -92,10 +102,20 @@ export class InventoryController {
   async getLowStock(
     @Req() req: any,
     @Query("branchId") branchId?: string,
+    @Query("search") search?: string,
+    @Query("sortBy") sortBy?: string,
+    @Query("sortOrder") sortOrder?: "asc" | "desc",
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
   ) {
     return this.inventoryService.getStockLevels(req.user.tenantId, {
       branchId,
+      search,
       lowStock: true,
+      sortBy,
+      sortOrder,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
     });
   }
 

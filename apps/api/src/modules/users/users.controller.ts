@@ -33,12 +33,23 @@ export class UsersController {
     @CurrentUser() user: JwtPayload,
     @Query("page") page?: number,
     @Query("limit") limit?: number,
+    @Query("search") search?: string,
+    @Query("roleId") roleId?: string,
+    @Query("branchId") branchId?: string,
+    @Query("isActive") isActive?: string,
+    @Query("sortBy") sortBy?: string,
+    @Query("sortOrder") sortOrder?: "asc" | "desc",
   ) {
-    return this.usersService.findMany(
-      user.tenantId,
-      Number(page) || 1,
-      Number(limit) || 20,
-    );
+    return this.usersService.findMany(user.tenantId, {
+      page: Number(page) || 1,
+      limit: Number(limit) || 20,
+      search,
+      roleId,
+      branchId,
+      isActive,
+      sortBy,
+      sortOrder,
+    });
   }
 
   @Get(":id")

@@ -20,6 +20,10 @@ export class AuditController {
     @Query("entityType") entityType?: string,
     @Query("action") action?: string,
     @Query("actorUserId") actorUserId?: string,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
+    @Query("sortBy") sortBy?: string,
+    @Query("sortOrder") sortOrder?: "asc" | "desc",
   ) {
     return this.auditService.findMany(user.tenantId, {
       page,
@@ -27,6 +31,10 @@ export class AuditController {
       entityType,
       action,
       actorUserId,
+      startDate,
+      endDate,
+      sortBy,
+      sortOrder,
     });
   }
 }

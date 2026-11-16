@@ -7,6 +7,7 @@ import {
 import { Prisma } from "@prisma/client";
 import { SystemDbService } from "../../common/database/system-db.service.js";
 import { TenantContextService } from "../../common/database/tenant-context.service.js";
+import { AuditService } from "../audit/audit.service.js";
 import argon2 from "argon2";
 import {
   TenantSignupDto,
@@ -21,6 +22,7 @@ export class TenantsService {
   constructor(
     private readonly systemDb: SystemDbService,
     private readonly tenantContext: TenantContextService,
+    private readonly auditService: AuditService,
   ) {}
 
   async signup(payload: TenantSignupDto, ip?: string) {
@@ -83,10 +85,39 @@ export class TenantsService {
     });
   }
 
+  async getSettings(tenantId: string) {
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const tenant = await tx.tenant.findUnique({
+        where: { id: tenantId },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          businessType: true,
+          settings: true,
+        },
+      });
+      if (!tenant) throw new NotFoundException("Tenant not found");
+      const currentSettings = (tenant.settings as Record<string, unknown>) || {};
+      return {
+        ...tenant,
+        settings: {
+          currency: "BDT",
+          timezone: "Asia/Dhaka",
+          prices_include_tax: false,
+          allow_negative_stock: false,
+          ...currentSettings,
+        },
+      };
+    });
+  }
+
   async updateSettings(
     tenantId: string,
     settings: Record<string, unknown>,
     name?: string,
+    userId?: string,
+    ip?: string,
   ) {
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const tenant = await tx.tenant.findUnique({
@@ -95,8 +126,18 @@ export class TenantsService {
       });
       if (!tenant) throw new NotFoundException("Tenant not found");
       const currentSettings = (tenant.settings as Record<string, unknown>) || {};
+
+      if (settings.currency && settings.currency !== currentSettings.currency) {
+        const saleCount = await tx.sale.count({ where: { tenantId } });
+        if (saleCount > 0) {
+          throw new ConflictException(
+            "Cannot change currency after sales have been recorded",
+          );
+        }
+      }
+
       const mergedSettings = { ...currentSettings, ...settings };
-      return tx.tenant.update({
+      const updated = await tx.tenant.update({
         where: { id: tenantId },
         data: {
           settings: mergedSettings as Prisma.InputJsonValue,
@@ -104,6 +145,24 @@ export class TenantsService {
         },
         select: { id: true, name: true, slug: true, settings: true },
       });
+
+      if (userId) {
+        await this.auditService.log(
+          {
+            tenantId,
+            actorUserId: userId,
+            action: "tenant.settings_update",
+            entityType: "tenant",
+            entityId: tenantId,
+            before: { name: tenant.name, settings: currentSettings },
+            after: { name: updated.name, settings: mergedSettings },
+            ip,
+          },
+          tx,
+        );
+      }
+
+      return updated;
     });
   }
 }

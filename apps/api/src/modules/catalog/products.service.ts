@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { TenantContextService } from "../../common/database/tenant-context.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import {
@@ -195,21 +196,62 @@ export class ProductsService {
   }
 
   /**
-   * Finds all products with search and pagination.
+   * Finds all products with search, filters, whitelist sort, and pagination.
    */
-  async findAll(tenantId: string, query: { search?: string; page?: number; limit?: number }) {
+  async findAll(
+    tenantId: string,
+    query: {
+      search?: string;
+      categoryId?: string;
+      brandId?: string;
+      collectionId?: string;
+      isActive?: string;
+      sortBy?: string;
+      sortOrder?: "asc" | "desc";
+      page?: number;
+      limit?: number;
+    },
+  ) {
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const page = Math.max(Number(query.page) || 1, 1);
       const limit = Math.min(Math.max(Number(query.limit) || 20, 1), 100);
       const skip = (page - 1) * limit;
 
-      const where: any = { tenantId, isActive: true };
+      const where: any = { tenantId };
+
+      if (query.isActive === "false" || query.isActive === (false as any)) {
+        where.isActive = false;
+      } else if (query.isActive === "all") {
+        // no isActive constraint
+      } else {
+        where.isActive = true;
+      }
+
+      if (query.categoryId) where.categoryId = query.categoryId;
+      if (query.brandId) where.brandId = query.brandId;
+      if (query.collectionId) where.collectionId = query.collectionId;
+
       if (query.search) {
         where.OR = [
           { name: { contains: query.search, mode: "insensitive" } },
           { variants: { some: { sku: { contains: query.search, mode: "insensitive" } } } },
+          {
+            variants: {
+              some: {
+                barcodes: {
+                  some: { barcode: { contains: query.search, mode: "insensitive" } },
+                },
+              },
+            },
+          },
         ];
       }
+
+      const allowedSortFields = ["name", "createdAt", "updatedAt"];
+      const sortBy = allowedSortFields.includes(query.sortBy || "")
+        ? (query.sortBy as string)
+        : "createdAt";
+      const sortOrder: Prisma.SortOrder = query.sortOrder === "asc" ? "asc" : "desc";
 
       const [items, total] = await Promise.all([
         tx.product.findMany({
@@ -225,7 +267,7 @@ export class ProductsService {
           },
           skip,
           take: limit,
-          orderBy: { createdAt: "desc" },
+          orderBy: { [sortBy]: sortOrder },
         }),
         tx.product.count({ where }),
       ]);

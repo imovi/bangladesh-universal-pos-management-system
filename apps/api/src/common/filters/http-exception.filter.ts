@@ -11,6 +11,17 @@ import { v7 as uuidv7 } from "uuid";
 import { ZodError } from "zod";
 import { ApiEnvelope } from "@universal-pos/shared";
 
+const ALLOWED_ERROR_EXTRA_FIELDS = new Set([
+  "limitBp",
+  "attemptedBp",
+  "details",
+  "errors",
+  "serverTotalMinor",
+  "clientTotalMinor",
+  "breakdown",
+  "lineErrors",
+]);
+
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
@@ -25,7 +36,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     let code = "INTERNAL_SERVER_ERROR";
     let message = "An unexpected error occurred";
     let details: Array<{ field?: string; issue: string }> | undefined;
-    let extraFields: Record<string, unknown> = {};
+    const extraFields: Record<string, unknown> = {};
 
     if (exception instanceof ZodError) {
       status = HttpStatus.BAD_REQUEST;
@@ -59,7 +70,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
             details: _d,
             ...rest
           } = errorObj;
-          extraFields = rest;
+          for (const [key, value] of Object.entries(rest)) {
+            if (ALLOWED_ERROR_EXTRA_FIELDS.has(key) && value !== undefined) {
+              extraFields[key] = value;
+            }
+          }
         }
       }
     } else if (exception instanceof Error) {

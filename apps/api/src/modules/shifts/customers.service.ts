@@ -136,7 +136,13 @@ export class CustomersService {
 
   async findMany(
     tenantId: string,
-    query: { search?: string; page?: number; limit?: number },
+    query: {
+      search?: string;
+      sortBy?: string;
+      sortOrder?: "asc" | "desc";
+      page?: number;
+      limit?: number;
+    },
   ) {
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const where: Prisma.CustomerWhereInput = { tenantId };
@@ -151,13 +157,19 @@ export class CustomersService {
       const limit = Math.min(100, Math.max(1, query.limit || 50));
       const skip = (page - 1) * limit;
 
+      const allowedSortFields = ["name", "createdAt", "totalSpentMinor", "totalVisits"];
+      const sortBy = allowedSortFields.includes(query.sortBy || "")
+        ? (query.sortBy as string)
+        : "createdAt";
+      const sortOrder: Prisma.SortOrder = query.sortOrder === "asc" ? "asc" : "desc";
+
       const [total, items] = await Promise.all([
         tx.customer.count({ where }),
         tx.customer.findMany({
           where,
           skip,
           take: limit,
-          orderBy: { createdAt: "desc" },
+          orderBy: { [sortBy]: sortOrder },
         }),
       ]);
 

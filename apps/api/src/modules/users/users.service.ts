@@ -3,6 +3,7 @@ import {
   ConflictException,
   NotFoundException,
 } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { TenantContextService } from "../../common/database/tenant-context.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import argon2 from "argon2";
@@ -15,13 +16,55 @@ export class UsersService {
     private readonly auditService: AuditService,
   ) {}
 
-  async findMany(tenantId: string, page = 1, limit = 20) {
+  async findMany(
+    tenantId: string,
+    query: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      roleId?: string;
+      branchId?: string;
+      isActive?: boolean | string;
+      sortBy?: string;
+      sortOrder?: "asc" | "desc";
+    } = {},
+  ) {
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
     const skip = (page - 1) * limit;
 
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const where: Prisma.UserWhereInput = { tenantId };
+
+      if (query.search) {
+        where.OR = [
+          { name: { contains: query.search, mode: "insensitive" } },
+          { email: { contains: query.search, mode: "insensitive" } },
+          { phone: { contains: query.search } },
+        ];
+      }
+
+      if (query.roleId) {
+        where.userRoles = { some: { roleId: query.roleId } };
+      }
+
+      if (query.branchId) {
+        where.userBranches = { some: { branchId: query.branchId } };
+      }
+
+      if (query.isActive !== undefined) {
+        where.isActive = query.isActive === true || query.isActive === "true";
+      }
+
+      const allowedSortFields = ["name", "email", "createdAt"];
+      const sortBy = allowedSortFields.includes(query.sortBy || "")
+        ? (query.sortBy as string)
+        : "createdAt";
+      const sortOrder: Prisma.SortOrder = query.sortOrder === "asc" ? "asc" : "desc";
+
       const [items, total] = await Promise.all([
         tx.user.findMany({
-          where: { tenantId },
+          where,
           select: {
             id: true,
             email: true,
@@ -43,9 +86,9 @@ export class UsersService {
           },
           skip,
           take: limit,
-          orderBy: { createdAt: "desc" },
+          orderBy: { [sortBy]: sortOrder },
         }),
-        tx.user.count({ where: { tenantId } }),
+        tx.user.count({ where }),
       ]);
 
       return {

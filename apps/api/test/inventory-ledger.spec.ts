@@ -144,6 +144,7 @@ describe("M3: Inventory Ledger Integration Tests", () => {
 
     expect(Number(vALevel.qty)).toBe(50);
     expect(Number(vBLevel.qty)).toBe(30);
+    expect(levelsRes.body.meta.pagination).toBeDefined();
   });
 
   it("POST /inventory/adjustment requires reason and permissions", async () => {
@@ -176,6 +177,7 @@ describe("M3: Inventory Ledger Integration Tests", () => {
       .get(`/api/v1/inventory/levels?branchId=${branchAId}&variantId=${variantAId}`)
       .set("Authorization", `Bearer ${ownerTokenA}`);
     expect(Number(checkRes.body.data[0].qty)).toBe(45);
+    expect(checkRes.body.meta.pagination).toBeDefined();
   });
 
   it("pos_app CANNOT UPDATE or DELETE on stock_movements (append-only ledger)", async () => {
@@ -225,6 +227,7 @@ describe("M3: Inventory Ledger Integration Tests", () => {
       .set("Authorization", `Bearer ${ownerTokenA}`);
 
     expect(Number(checkRes.body.data[0].qty)).toBe(40);
+    expect(checkRes.body.meta.pagination).toBeDefined();
   });
 
   it("invariant: stock_levels.qty equals sum of movements.qty_delta after randomized operations", async () => {
@@ -310,5 +313,6 @@ describe("M3: Inventory Ledger Integration Tests", () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.meta.pagination).toBeDefined();
   });
 });

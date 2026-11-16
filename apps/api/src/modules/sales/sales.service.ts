@@ -359,24 +359,62 @@ export class SalesService {
   }
 
   async findMany(
-    tenantId: string, query: { branchId?: string; shiftId?: string; status?: string; page?: number; limit?: number },
+    tenantId: string,
+    query: {
+      branchId?: string;
+      shiftId?: string;
+      status?: string;
+      cashierId?: string;
+      paymentMethod?: string;
+      search?: string;
+      startDate?: string;
+      endDate?: string;
+      sortBy?: string;
+      sortOrder?: "asc" | "desc";
+      page?: number;
+      limit?: number;
+    },
   ) {
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const where: Prisma.SaleWhereInput = { tenantId };
       if (query.branchId) where.branchId = query.branchId;
       if (query.shiftId) where.shiftId = query.shiftId;
       if (query.status) where.status = query.status;
+      if (query.cashierId) where.cashierUserId = query.cashierId;
+      if (query.paymentMethod) {
+        where.payments = { some: { paymentMethod: query.paymentMethod } };
+      }
+      if (query.search) {
+        where.invoiceNumber = { contains: query.search, mode: "insensitive" };
+      }
+      if (query.startDate || query.endDate) {
+        where.createdAt = {};
+        if (query.startDate) where.createdAt.gte = new Date(query.startDate);
+        if (query.endDate) where.createdAt.lte = new Date(query.endDate);
+      }
 
       const page = Math.max(1, query.page || 1);
       const limit = Math.min(100, Math.max(1, query.limit || 50));
       const skip = (page - 1) * limit;
 
+      const allowedSortFields = ["createdAt", "invoiceNumber", "totalMinor"];
+      const sortBy = allowedSortFields.includes(query.sortBy || "")
+        ? (query.sortBy as string)
+        : "createdAt";
+      const sortOrder: Prisma.SortOrder = query.sortOrder === "asc" ? "asc" : "desc";
+
       const [total, items] = await Promise.all([
         tx.sale.count({ where }),
         tx.sale.findMany({
-          where, skip, take: limit,
-          include: { items: true, payments: true, customer: { select: { id: true, name: true, phone: true } } },
-          orderBy: { createdAt: "desc" },
+          where,
+          skip,
+          take: limit,
+          include: {
+            items: true,
+            payments: true,
+            customer: { select: { id: true, name: true, phone: true } },
+          },
+          orderBy: { [sortBy]: sortOrder },
         }),
       ]);
       return { items, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };

@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
+  Delete,
   Param,
   Body,
   Query,
@@ -14,7 +16,11 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard.js";
 import { PermissionsGuard } from "../../common/guards/permissions.guard.js";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator.js";
 import { VariantsService } from "./variants.service.js";
-import { PERMISSIONS, CreateBarcodeSchema } from "@universal-pos/shared";
+import {
+  PERMISSIONS,
+  CreateBarcodeSchema,
+  UpdateVariantSchema,
+} from "@universal-pos/shared";
 
 @Controller("variants")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -63,6 +69,32 @@ export class VariantsController {
     return clone;
   }
 
+  @Patch(":id")
+  @RequirePermission(PERMISSIONS.CATALOG_MANAGE)
+  async update(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @Ip() ip: string,
+  ) {
+    const parse = UpdateVariantSchema.safeParse(body);
+    if (!parse.success) {
+      throw new BadRequestException({
+        code: "VALIDATION_ERROR",
+        message: "Invalid variant update input",
+        details: parse.error.flatten(),
+      });
+    }
+
+    return this.variantsService.update(
+      req.user.tenantId,
+      id,
+      parse.data,
+      req.user.userId || req.user.id,
+      ip,
+    );
+  }
+
   @Post(":id/barcodes")
   @RequirePermission(PERMISSIONS.CATALOG_MANAGE)
   async addBarcode(
@@ -85,7 +117,24 @@ export class VariantsController {
       tenantId,
       variantId,
       parse.data,
-      req.user.id,
+      req.user.userId || req.user.id,
+      ip,
+    );
+  }
+
+  @Delete(":id/barcodes/:barcodeId")
+  @RequirePermission(PERMISSIONS.CATALOG_MANAGE)
+  async removeBarcode(
+    @Req() req: any,
+    @Param("id") variantId: string,
+    @Param("barcodeId") barcodeId: string,
+    @Ip() ip: string,
+  ) {
+    return this.variantsService.removeBarcode(
+      req.user.tenantId,
+      variantId,
+      barcodeId,
+      req.user.userId || req.user.id,
       ip,
     );
   }

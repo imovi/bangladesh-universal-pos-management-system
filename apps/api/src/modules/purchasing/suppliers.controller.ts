@@ -44,7 +44,7 @@ export class SuppliersController {
     return this.suppliersService.create(
       req.user.tenantId,
       parse.data,
-      req.user.userId,
+      req.user.userId || req.user.id,
       ip,
     );
   }
@@ -69,9 +69,33 @@ export class SuppliersController {
       req.user.tenantId,
       id,
       parse.data,
-      req.user.userId,
+      req.user.userId || req.user.id,
       ip,
     );
+  }
+
+  @Get(":id/balance")
+  @RequirePermission(PERMISSIONS.PURCHASE_READ)
+  async getBalance(@Req() req: any, @Param("id") id: string) {
+    return this.suppliersService.getBalance(req.user.tenantId, id);
+  }
+
+  @Get(":id/statement")
+  @RequirePermission(PERMISSIONS.PURCHASE_READ)
+  async getStatement(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.suppliersService.getStatement(req.user.tenantId, id, {
+      startDate,
+      endDate,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
   }
 
   @Get(":id")
@@ -85,11 +109,15 @@ export class SuppliersController {
   async findMany(
     @Req() req: any,
     @Query("search") search?: string,
+    @Query("sortBy") sortBy?: string,
+    @Query("sortOrder") sortOrder?: "asc" | "desc",
     @Query("page") page?: string,
     @Query("limit") limit?: string,
   ) {
     return this.suppliersService.findMany(req.user.tenantId, {
       search,
+      sortBy,
+      sortOrder,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
     });

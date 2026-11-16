@@ -3,9 +3,10 @@ import {
   NotFoundException,
   ConflictException,
 } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { TenantContextService } from "../../common/database/tenant-context.service.js";
 import { AuditService } from "../audit/audit.service.js";
-import { CreateBarcodeDto } from "@universal-pos/shared";
+import { CreateBarcodeDto, UpdateVariantDto } from "@universal-pos/shared";
 
 @Injectable()
 export class VariantsService {
@@ -89,9 +90,9 @@ export class VariantsService {
   async addBarcode(tenantId: string, variantId: string, dto: CreateBarcodeDto, userId?: string, ip?: string) {
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const variant = await tx.productVariant.findUnique({
-        where: { id: variantId, tenantId },
+        where: { id: variantId },
       });
-      if (!variant) {
+      if (!variant || variant.tenantId !== tenantId) {
         throw new NotFoundException(`Variant with ID ${variantId} not found`);
       }
 
@@ -132,6 +133,83 @@ export class VariantsService {
       });
 
       return created;
+    });
+  }
+
+  async removeBarcode(
+    tenantId: string,
+    variantId: string,
+    barcodeId: string,
+    userId?: string,
+    ip?: string,
+  ) {
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const barcode = await tx.variantBarcode.findUnique({
+        where: { id: barcodeId },
+      });
+
+      if (!barcode || barcode.tenantId !== tenantId || barcode.variantId !== variantId) {
+        throw new NotFoundException("Barcode not found for this variant");
+      }
+
+      await tx.variantBarcode.delete({
+        where: { id: barcodeId },
+      });
+
+      await this.auditService.log(tx, {
+        tenantId,
+        actorUserId: userId,
+        action: "variant.barcode_remove",
+        entityType: "VariantBarcode",
+        entityId: barcodeId,
+        before: barcode,
+        ip,
+      });
+
+      return { success: true, id: barcodeId };
+    });
+  }
+
+  async update(
+    tenantId: string,
+    id: string,
+    dto: UpdateVariantDto,
+    userId?: string,
+    ip?: string,
+  ) {
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const existing = await tx.productVariant.findUnique({
+        where: { id },
+      });
+      if (!existing || existing.tenantId !== tenantId) {
+        throw new NotFoundException("Variant not found");
+      }
+
+      const updated = await tx.productVariant.update({
+        where: { id },
+        data: {
+          priceMinor: dto.priceMinor !== undefined ? BigInt(dto.priceMinor) : undefined,
+          costMinor: dto.costMinor !== undefined ? BigInt(dto.costMinor) : undefined,
+          reorderLevel:
+            dto.reorderLevel !== undefined
+              ? new Prisma.Decimal(dto.reorderLevel)
+              : undefined,
+          isActive: dto.isActive,
+        },
+      });
+
+      await this.auditService.log(tx, {
+        tenantId,
+        actorUserId: userId,
+        action: "variant.update",
+        entityType: "ProductVariant",
+        entityId: id,
+        before: existing,
+        after: updated,
+        ip,
+      });
+
+      return updated;
     });
   }
 

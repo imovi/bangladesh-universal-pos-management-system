@@ -70,6 +70,7 @@ export type SystemRole = (typeof SYSTEM_ROLES)[keyof typeof SYSTEM_ROLES];
 export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
   [SYSTEM_ROLES.OWNER]: Object.values(PERMISSIONS),
   [SYSTEM_ROLES.MANAGER]: [
+    PERMISSIONS.TENANT_READ,
     PERMISSIONS.BRANCH_READ,
     PERMISSIONS.USER_READ,
     PERMISSIONS.ROLE_READ,

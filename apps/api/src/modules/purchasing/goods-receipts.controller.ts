@@ -4,6 +4,7 @@ import {
   Post,
   Param,
   Body,
+  Query,
   UseGuards,
   Req,
   Ip,
@@ -43,9 +44,38 @@ export class GoodsReceiptsController {
     return this.goodsReceiptsService.create(
       req.user.tenantId,
       parse.data,
-      req.user.userId,
+      req.user.userId || req.user.id,
       ip,
     );
+  }
+
+  @Get()
+  @RequirePermission(PERMISSIONS.PURCHASE_READ)
+  async findMany(
+    @Req() req: any,
+    @Query("supplierId") supplierId?: string,
+    @Query("purchaseOrderId") purchaseOrderId?: string,
+    @Query("branchId") branchId?: string,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
+    @Query("search") search?: string,
+    @Query("sortBy") sortBy?: string,
+    @Query("sortOrder") sortOrder?: "asc" | "desc",
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.goodsReceiptsService.findMany(req.user.tenantId, {
+      supplierId,
+      purchaseOrderId,
+      branchId,
+      startDate,
+      endDate,
+      search,
+      sortBy,
+      sortOrder,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
   }
 
   @Get(":id")

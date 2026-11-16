@@ -84,7 +84,7 @@ export function SizeColorGrid({
   }
 
   return (
-    <div className={cn("space-y-3", className)}>
+    <div className={cn("space-y-3", className)} data-testid="size-color-grid">
       {/* Batch Application Toolbar */}
       {!readOnly && (
         <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-lg bg-muted/40 border text-xs">
@@ -92,6 +92,7 @@ export function SizeColorGrid({
             {mode === "price" ? "সবগুলোতে মূল্য বসান (Taka):" : "সবগুলোতে পরিমাণ বসান:"}
           </span>
           <Input
+            data-testid="grid-bulk-input"
             type="number"
             value={applyValue}
             onChange={(e) => setApplyValue(e.target.value)}
@@ -100,6 +101,7 @@ export function SizeColorGrid({
             min={0}
           />
           <Button
+            data-testid="grid-bulk-apply-btn"
             type="button"
             size="sm"
             variant="secondary"

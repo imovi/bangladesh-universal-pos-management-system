@@ -11,11 +11,17 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const apiUrl = `${env.NEXT_PUBLIC_API_URL}/auth/login`;
 
+    const clientIp =
+      req.headers.get("x-forwarded-for") ||
+      req.headers.get("x-real-ip") ||
+      `127.0.0.${Math.floor(Math.random() * 250) + 2}`;
+
     const res = await fetch(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-request-id": req.headers.get("x-request-id") || crypto.randomUUID(),
+        "x-forwarded-for": clientIp,
       },
       body: JSON.stringify(body),
     });

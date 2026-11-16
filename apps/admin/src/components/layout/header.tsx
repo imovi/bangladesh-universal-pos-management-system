@@ -29,31 +29,31 @@ export function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
   return (
     <header className="h-16 border-b border-border bg-card/80 backdrop-blur px-4 md:px-6 flex items-center justify-between sticky top-0 z-30">
       {/* Left: Mobile hamburger + Branch selector */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <Button
           data-testid="mobile-menu-button"
           variant="ghost"
           size="icon"
           onClick={onOpenMobile}
-          className="md:hidden h-9 w-9"
+          className="md:hidden h-9 w-9 shrink-0"
           aria-label="Open menu"
         >
           <Menu className="h-5 w-5" />
         </Button>
 
         {/* Branch Selector */}
-        <div className="relative">
+        <div className="relative min-w-0">
           <Button
             variant="outline"
             size="sm"
             onClick={() => setIsBranchMenuOpen(!isBranchMenuOpen)}
-            className="flex items-center gap-2 h-9 px-3 text-xs md:text-sm font-medium"
+            className="flex items-center gap-1.5 sm:gap-2 h-9 px-2 sm:px-3 text-xs md:text-sm font-medium max-w-[140px] sm:max-w-[220px] md:max-w-none"
           >
-            <Building2 className="h-4 w-4 text-muted-foreground" />
-            <span className="font-semibold truncate max-w-[140px] md:max-w-[220px]">
+            <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="font-semibold truncate">
               {currentBranch ? `${currentBranch.code} - ${currentBranch.name}` : strings.common.allBranches}
             </span>
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground ml-1" />
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground ml-1 shrink-0" />
           </Button>
 
           {isBranchMenuOpen && (
@@ -106,18 +106,18 @@ export function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
       </div>
 
       {/* Right Controls: Language, Theme, User Menu */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
         {/* Language Switcher */}
         <Button
           data-testid="language-toggle"
           variant="ghost"
           size="sm"
           onClick={() => setLocale(locale === "bn" ? "en" : "bn")}
-          className="flex items-center gap-1.5 h-8 px-2.5 text-xs font-semibold"
+          className="flex items-center gap-1.5 h-8 px-2 sm:px-2.5 text-xs font-semibold shrink-0"
           aria-label={strings.language.toggle}
         >
           <Globe className="h-4 w-4" />
-          <span>{locale === "bn" ? "English" : "বাংলা"}</span>
+          <span className="hidden sm:inline">{locale === "bn" ? "English" : "বাংলা"}</span>
         </Button>
 
         {/* Theme Switcher */}
@@ -126,7 +126,7 @@ export function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
           variant="ghost"
           size="icon"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          className="h-8 w-8"
+          className="h-8 w-8 shrink-0"
           aria-label={strings.theme.toggle}
         >
           {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}

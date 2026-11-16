@@ -20,7 +20,12 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post("login")
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle({
+    default: {
+      limit: Number(process.env.AUTH_THROTTLE_LIMIT) || 5,
+      ttl: 60000,
+    },
+  })
   @HttpCode(HttpStatus.OK)
   async login(@Body() body: LoginDto, @Req() req: Request) {
     const ip =
@@ -29,7 +34,12 @@ export class AuthController {
   }
 
   @Post("refresh")
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Throttle({
+    default: {
+      limit: Number(process.env.REFRESH_THROTTLE_LIMIT) || 10,
+      ttl: 60000,
+    },
+  })
   @HttpCode(HttpStatus.OK)
   async refresh(@Body() body: RefreshTokenDto) {
     return this.authService.refresh(body);

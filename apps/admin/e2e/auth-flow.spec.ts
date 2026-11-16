@@ -141,7 +141,7 @@ test.describe("Milestone A2: Sign-in, Session, and App Shell E2E", () => {
     });
 
     // Toggle dark mode on mobile header
-    await page.locator('[data-testid="theme-toggle"]').click();
+    await page.locator('[data-testid="theme-toggle"]').first().click();
     await page.waitForTimeout(300);
     await page.screenshot({
       path: path.join(SCREENSHOT_DIR, "mobile-dark-shell.png"),

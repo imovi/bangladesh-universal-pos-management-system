@@ -45,7 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentBranch, setCurrentBranchState] = useState<BranchInfo | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const isRefreshingRef = useRef<boolean>(false);
+  const refreshPromiseRef = useRef<Promise<string | null> | null>(null);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -63,36 +63,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const executeRefreshToken = async (): Promise<string | null> => {
-    if (isRefreshingRef.current) return null;
-    isRefreshingRef.current = true;
-    try {
-      const res = await fetch("/api/auth/refresh", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-pos-client": "admin",
-        },
-      });
-
-      if (!res.ok) {
-        setAccessToken(null);
-        setUser(null);
-        return null;
-      }
-
-      const body = await res.json();
-      if (body.success && body.data?.accessToken) {
-        const token = body.data.accessToken;
-        setAccessToken(token);
-        scheduleSilentRefresh(body.data.expiresIn || 900);
-        return token;
-      }
-      return null;
-    } catch {
-      return null;
-    } finally {
-      isRefreshingRef.current = false;
+    if (refreshPromiseRef.current) {
+      return refreshPromiseRef.current;
     }
+
+    refreshPromiseRef.current = (async () => {
+      try {
+        const res = await fetch("/api/auth/refresh", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-pos-client": "admin",
+          },
+        });
+
+        if (!res.ok) {
+          setAccessToken(null);
+          setUser(null);
+          return null;
+        }
+
+        const body = await res.json();
+        if (body.success && body.data?.accessToken) {
+          const token = body.data.accessToken;
+          setAccessToken(token);
+          scheduleSilentRefresh(body.data.expiresIn || 900);
+          return token;
+        }
+        return null;
+      } catch {
+        return null;
+      } finally {
+        refreshPromiseRef.current = null;
+      }
+    })();
+
+    return refreshPromiseRef.current;
   };
 
   const fetchUserProfile = async (token: string): Promise<AuthUser | null> => {
@@ -230,14 +236,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const fullUrl = path.startsWith("http") ? path : `${env.NEXT_PUBLIC_API_URL}${path}`;
     const headers = new Headers(options.headers || {});
     headers.set("Content-Type", headers.get("Content-Type") || "application/json");
-    if (accessToken) {
-      headers.set("Authorization", `Bearer ${accessToken}`);
+
+    let activeToken = accessToken;
+    if (!activeToken) {
+      activeToken = await executeRefreshToken();
+    }
+
+    if (activeToken) {
+      headers.set("Authorization", `Bearer ${activeToken}`);
     }
 
     let response = await fetch(fullUrl, { ...options, headers });
 
     // Handle 401 with silent token refresh once
-    if (response.status === 401 && accessToken) {
+    if (response.status === 401) {
       const newToken = await executeRefreshToken();
       if (newToken) {
         headers.set("Authorization", `Bearer ${newToken}`);

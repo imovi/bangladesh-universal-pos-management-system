@@ -15,6 +15,12 @@ async function bootstrap() {
   // Prefix: /api/v1
   app.setGlobalPrefix("api/v1");
 
+  // Trust proxy for reverse proxies and Next.js route handlers
+  const expressApp = app.getHttpAdapter().getInstance();
+  if (expressApp && typeof expressApp.set === "function") {
+    expressApp.set("trust proxy", true);
+  }
+
   // Interceptors & Exception Filters
   app.useGlobalInterceptors(new TransformInterceptor());
   app.useGlobalFilters(new HttpExceptionFilter());

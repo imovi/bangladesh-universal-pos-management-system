@@ -146,3 +146,56 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - `npm test`: 4 test files passed in admin (12/12 tests), 32 test files passed in api (204/204 tests).
   - Playwright E2E: `products-flow.spec.ts` passed.
 
+---
+
+## Milestone A4: Stock and Inventory Management
+
+- **Start Time:** 2026-11-16T06:48:00+06:00
+- **End Time:** 2026-11-16T07:25:00+06:00
+- **What Was Built:**
+  1. **Stock Levels Table (`/inventory/stock`):**
+     - Paginated stock levels table with search by variant SKU, barcode, or product name.
+     - Branch filter with automatic tenant branch options.
+     - Low stock toggle filter.
+     - Color-coded stock badges (green: good, yellow: low stock, red: out of stock).
+     - Inline Quick Adjust dialog supporting counted vs delta adjustments with mandatory reason.
+     - Movement history modal displaying recent stock ledger movements (opening, adjustment, sale, purchase, transfer) with timestamp, actor, and quantity delta.
+  2. **Low-Stock Alert Center (`/inventory/low-stock`):**
+     - Filtered dashboard view of products below or near reorder points.
+     - Urgency indicators (Critical: Out of Stock, Warning: Below Reorder Point).
+     - Quick stock adjustment dialog directly accessible from each row.
+  3. **Opening Stock Entry Screen (`/inventory/opening`):**
+     - SizeColorGrid integration for rapid multi-variant opening inventory entry.
+     - Branch selector and product selector.
+     - Bulk fill tool across active cells.
+     - Unit cost input with conversion to poisha.
+     - Submits to `POST /inventory/opening-stock`.
+  4. **Stock Adjustments & Audit (`/inventory/adjustments`):**
+     - Comprehensive stock adjustment form with counted vs delta mode.
+     - Before/after stock preview before applying changes.
+     - Mandatory adjustment reason input.
+     - Recent adjustments audit table.
+  5. **Dialog Component (`apps/admin/src/components/ui/dialog.tsx`):**
+     - Accessible modal dialog component with backdrop blur, keyboard navigation, and escape dismiss.
+  6. **Automated Verification & E2E:**
+     - Playwright E2E test `apps/admin/e2e/inventory-flow.spec.ts`:
+       - Logs in as owner.
+       - Navigates to `/inventory/opening`.
+       - Selects product and sets opening stock (20 units per cell) through SizeColorGrid with bulk fill.
+       - Verifies opening stock entry success banner.
+       - Navigates to `/inventory/stock`, opens quick adjustment dialog, and adjusts stock count by -4 with mandatory reason.
+       - Opens movement history dialog and verifies both `adjustment` (-4) and `opening` (+20) movements are present.
+     - Verified both Desktop Chromium and Mobile Chrome (Pixel 5) viewports.
+- **Decisions Made & Why:**
+  - Standardized API response unwrapping: `json.data` is an array directly on `/inventory/levels` and `/products`, while `/inventory/movements` returns `{ items, meta }`. Handled both seamlessly with `Array.isArray(json.data) ? json.data : (json.data?.items || [])`.
+  - In `header.tsx`, compacted branch selector and hidden language text on small mobile viewports to prevent pointer intercept overlap on 375px screens.
+  - In `apps/api/src/modules/auth/auth.controller.ts`, configured `limit: Number(process.env.AUTH_THROTTLE_LIMIT) || 5` so E2E test runs can configure throttle headroom via environment variables while keeping production and unit tests strictly bound to 5 req/min.
+- **Dependencies Added:** None.
+- **Skipped:** None.
+- **Verification & CI Run Result:**
+  - `npm run build`: Clean builds across all workspaces.
+  - `npm run lint`: 0 warnings, 0 errors.
+  - `npm test`: 12 passed in admin, 204 passed in api.
+  - Playwright E2E: All 14 tests passed across Chromium and Mobile Chrome (32.1s).
+
+

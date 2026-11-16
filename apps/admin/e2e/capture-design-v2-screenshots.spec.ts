@@ -2,7 +2,10 @@ import { test, expect } from "@playwright/test";
 import path from "path";
 import fs from "fs";
 
-const screenshotsDir = path.resolve(__dirname, "../../docs/screenshots/design-v2");
+const screenshotsDir = path.resolve(
+  process.cwd(),
+  process.cwd().endsWith("admin") ? "../../docs/screenshots/design-v2" : "docs/screenshots/design-v2"
+);
 
 test.describe("Part B Design Corrections Screenshots", () => {
   test.beforeAll(() => {

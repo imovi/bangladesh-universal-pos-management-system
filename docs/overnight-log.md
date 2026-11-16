@@ -89,3 +89,60 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - `npm run lint`: 0 warnings, 0 errors.
   - `npm test`: 3 passed in admin, 36 passed in api (all green).
   - `npm run test:e2e`: 5/5 Playwright tests passed.
+
+---
+
+## Milestone A3: Products and Catalog Management
+
+- **Start Time:** 2026-11-16T06:25:00+06:00
+- **End Time:** 2026-11-16T06:45:00+06:00
+- **What Was Built:**
+  1. **Reusable Size-and-Colour Grid Component:**
+     - Created `apps/admin/src/components/common/size-color-grid.tsx` supporting:
+       - 2D grid matrix with sizes as columns and colours as rows.
+       - Per-row and per-column totals plus overall grand total calculation.
+       - Disabled/excluded cell toggling (for nonexistent size/colour combinations).
+       - Bulk-fill tool to apply a single price or quantity value across all active cells.
+       - Responsive wrapper with horizontal scrolling for large matrices.
+       - Accessible markup with `caption` and `aria-label`s.
+     - Backed by comprehensive unit test suite in `apps/admin/test/size-color-grid.spec.tsx` (4 tests: render, cell edits, bulk fill, disabled cell exclusions).
+  2. **Product Creation (`/catalog/products/new`):**
+     - Single-product vs multi-variant product toggle.
+     - Dynamic option values builder (sizes, colours, cuts).
+     - Live interactive matrix preview allowing per-variant price/cost initialization and cell toggling.
+     - Automatic variant Cartesian product generation sending `variants` payload directly to `POST /catalog/products`.
+     - Validated via `CreateProductSchema` from `@universal-pos/shared`.
+  3. **Product Detail & Variant Management (`/catalog/products/[id]`):**
+     - Stock matrix view rendering real-time variant stock levels with color-coded badges (green: good stock, yellow: low stock, red: out of stock).
+     - Variant table with SKU, option values, retail price, cost price (gated by `catalog.cost_view` permission), and barcodes.
+     - Individual variant retail price update modal (`PATCH /catalog/variants/:id`).
+     - Bulk price update modal applying a price or delta across all variants of the product simultaneously.
+     - Barcode management dialog: add barcodes (`POST /catalog/variants/:id/barcodes`) and delete barcodes (`DELETE /catalog/variants/:id/barcodes/:barcode`).
+  4. **Product Catalog Directory (`/catalog/products`):**
+     - Paginated product list with search by product name, SKU, or variant barcode.
+     - Category and active/inactive filtering.
+     - Direct links to product detail and creation.
+  5. **Catalog Metadata Hub (`/catalog/categories`):**
+     - Tabbed view managing Categories, Brands, Collections, and Tax Classes.
+     - Inline create modal and edit modal with full form validation.
+     - Category parent selector preventing circular references.
+     - Default tax class indicator and assignment.
+  6. **Automated Verification & E2E:**
+     - Playwright E2E test in `apps/admin/e2e/products-flow.spec.ts`:
+       - Logs in as owner.
+       - Creates a shirt with 4 sizes (S, M, L, XL) × 3 colours (Black, Navy, White), generating 12 variants.
+       - Opens product detail and verifies all 12 variants.
+       - Edits a variant price and verifies instant UI reflection.
+       - Adds a custom barcode to the variant.
+       - Navigates back to product catalog, searches by the new barcode, and verifies product is retrieved.
+- **Decisions Made & Why:**
+  - Added `data-testid="variant-row"` to ensure unambiguous selector scoping between the stock grid summary table and the detailed variant rows in E2E tests.
+  - Used `@universal-pos/shared` schemas for validation, ensuring backend and frontend consistency without duplicating rules.
+- **Dependencies Added:** None.
+- **Skipped:** None.
+- **Verification & CI Run Result:**
+  - `npm run build`: Success across all workspaces.
+  - `npm run lint`: 0 errors, 0 warnings.
+  - `npm test`: 4 test files passed in admin (12/12 tests), 32 test files passed in api (204/204 tests).
+  - Playwright E2E: `products-flow.spec.ts` passed.
+

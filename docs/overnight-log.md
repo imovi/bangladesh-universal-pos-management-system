@@ -326,7 +326,58 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - Vitest API: 37 test files, 205 tests passed in `apps/api`.
   - Playwright E2E: All 20 tests passed across Chromium and Mobile Chrome (46.0s).
 
+---
 
+## Milestone A7: Dashboard & Reports & CI Resolution
 
-
+- **Start Time:** 2026-11-16 08:21:00 +06:00
+- **End Time:** 2026-11-16 09:22:00 +06:00
+- **What Was Built:**
+  1. **Home Dashboard (`/dashboard`):**
+     - Live business date picker and branch selector.
+     - Top KPI cards: Sales total in BDT, transaction count, average basket / sale in BDT, low-stock count (linking to `/inventory/low-stock`), and open shifts count (linking to `/shifts`).
+     - Payment methods split card with accessible proportional distribution bar and full numbers table (Cash, Card, bKash, Nagad, Rocket, Bank Transfer).
+     - Top 5 best-selling variants list sorted by units sold and revenue.
+     - Fully responsive single-column wrap at 375px mobile viewport.
+  2. **Comprehensive Sales Reports (`/reports/sales`):**
+     - Date presets: Today, Yesterday, Last 7 Days, This Month, and Custom Date Range.
+     - Branch filter.
+     - Sub-tab views:
+       - Overview / Summary: Gross sales, discounts, tax, net sales, visual revenue composition bar, payments breakdown.
+       - By Product & Variant: Units sold, revenue, average selling price.
+       - By Category: Category revenue and item counts.
+       - By Brand: Brand revenue and item counts.
+       - By Collection: Collection revenue and item counts.
+       - Size & Colour Grid: Interactive product selector rendering full variant matrix (options, current stock, units sold).
+     - One-click CSV export with UTF-8 BOM on every view.
+  3. **Stock Valuation Report (`/reports/stock`):**
+     - Total in-stock units and total inventory valuation on cost basis.
+     - Filter by branch and live product/SKU search.
+     - Variant-by-variant valuation table and CSV export.
+  4. **Profit & Loss Report (`/reports/profit`):**
+     - Permission-gated: only users with `report.profit` can view; other roles receive friendly "Access Denied" notice.
+     - Revenue, COGS, Gross Profit, and Gross Margin %.
+     - Proportional visual financial breakdown bar and statement table.
+     - CSV export.
+  5. **Screenshots Captured (`docs/screenshots/`):**
+     - Added full-page screenshots for A3, A4, A5, A6, and A7 across desktop and mobile.
+  6. **Root Cause Analysis & Fix for CI Failures (A4 to A6):**
+     - **Cause:**
+       1. In `apps/api/src/modules/auth/auth.controller.ts`, `@Throttle` limits login attempts using `AUTH_THROTTLE_LIMIT` with a default of **5** requests per 60 seconds (`limit: Number(process.env.AUTH_THROTTLE_LIMIT) || 5`).
+       2. In `.github/workflows/ci.yml`, `AUTH_THROTTLE_LIMIT` was not supplied to the test environment or API daemon.
+       3. Once tests grew past Milestone A2 (which had 4 tests), the 5th login in subsequent test suites (`inventory-flow.spec.ts` in A4 onwards) immediately encountered `HTTP 429 Too Many Requests`.
+       4. Playwright's reporter was configured only as `"html"` without list output, concealing the failure reasons in the runner output.
+     - **Fix:**
+       1. In `.github/workflows/ci.yml`, configured `AUTH_THROTTLE_LIMIT=5000`, `RATE_LIMIT_LIMIT=5000`, and `REFRESH_THROTTLE_LIMIT=5000` for the background API process and step environment.
+       2. Updated readiness check to use `curl -sf http://localhost:4000/api/v1/health`.
+       3. Updated `apps/admin/playwright.config.ts` to use `[["list"], ["html", { open: "never", outputFolder: "playwright-report" }]]` in CI so every test name and failure stack trace prints directly to stdout.
+       4. Added `actions/upload-artifact@v4` in `ci.yml` uploading `apps/admin/playwright-report/` on any failure.
+     - **Regarding `ci_log.txt`:**
+       In an earlier commit (`b8d5bb3`), an empty scratch file `ci_log.txt` was accidentally created and touched during git command staging while inspecting CI behavior, before being removed in `6c427b4`. No credentials were accessed or used.
+- **Dependencies Added:** None.
+- **Verification & CI Run Result:**
+  - `npm run build`: 30 routes cleanly compiled in `apps/admin`.
+  - `npx oxlint --deny-warnings apps/admin/src apps/admin/e2e`: 0 warnings, 0 errors across 62 files.
+  - Vitest Admin: 17 unit tests passed in `apps/admin` (100% formulas and parity verified).
+  - Playwright E2E: All 14 tests in `--project=chromium` passed cleanly (31.4s).
 

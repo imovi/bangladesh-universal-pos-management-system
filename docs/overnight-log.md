@@ -198,4 +198,51 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - `npm test`: 12 passed in admin, 204 passed in api.
   - Playwright E2E: All 14 tests passed across Chromium and Mobile Chrome (32.1s).
 
+---
+
+## Milestone A5: Purchasing (Suppliers, Purchase Orders, Goods Receipts & Payments)
+- **Start Time:** 2026-11-16 07:15:00 +06:00
+- **End Time:** 2026-11-16 07:56:00 +06:00
+- **What Was Built:**
+  1. **Suppliers Management (`/purchasing/suppliers`):**
+     - Full suppliers listing with balance badges, contact details, address, and live search.
+     - Create and Edit supplier modal adhering to `CreateSupplierSchema` from `@universal-pos/shared`.
+     - Live supplier balance computation pulling from `GET /suppliers/:id/balance`.
+     - Transaction statement modal (`GET /suppliers/:id/statement`) displaying opening balance, individual GRN bills & payment credits, and dynamic running balances.
+     - Record supplier payment modal (`POST /supplier-payments`) with payment method selection (`cash`, `bank_transfer`, `cheque`, `mobile_banking`), reference, notes, and instant supplier balance reconciliation.
+  2. **Purchase Orders (`/purchasing/orders`, `/purchasing/orders/new`, `/purchasing/orders/[id]`):**
+     - Orders list with search, status filtering (`draft`, `ordered`, `partially_received`, `received`, `cancelled`), and supplier/branch badges.
+     - PO creation page with supplier selection, branch selection, expected date, and multi-line item builder with live cost calculation.
+     - PO detail page with status transition buttons (`Mark Ordered`, `Cancel Order`, `Receive Goods`) and print-friendly styling (`@media print`).
+  3. **Goods Receipts / GRN (`/purchasing/receipts`, `/purchasing/receipts/new`, `/purchasing/receipts/[id]`):**
+     - Goods receipts listing with search, branch, supplier, PO reference, and total landed cost.
+     - Receive goods form supporting PO reference (prefilling remaining items: `qtyOrdered - qtyReceived`) or direct receipt without a prior PO.
+     - Clear notice informing operators that receiving stock updates current inventory and recalculated weighted average cost.
+     - GRN detail page with print-ready Goods Receipt Note layout and signature placeholders for store keeper and receiving officer.
+  4. **Bilingual Localization:**
+     - Added comprehensive purchasing translations in `apps/admin/src/i18n/bn.ts` and `apps/admin/src/i18n/en.ts` with 100% leaf parity verified by unit tests.
+  5. **Automated Verification & E2E:**
+     - Playwright E2E test `apps/admin/e2e/purchasing-flow.spec.ts`:
+       - Signs in as owner.
+       - Creates new supplier `Dhaka Fabrics <timestamp>` and verifies zero balance.
+       - Creates purchase order for 20 units @ 450 Tk, verifies estimated total `৳ 9,000.00`.
+       - Transitions PO status from `draft` to `ordered`.
+       - Receives partial goods (10 units) against PO via GRN, verifying stock and PO status updates to `partially_received`.
+       - Navigates back to suppliers, verifies supplier balance reflects `৳ 4,500.00`.
+       - Records payment of `৳ 2,500.00` (cash, ref `PAY-001`), immediately verifying balance reflects `৳ 2,000.00`.
+       - Opens statement modal, verifying both bill (GRN) and payment appear with correct running balances.
+     - All 16 Playwright E2E tests passing on both Chromium and Mobile Chrome (Pixel 5).
+- **Decisions Made & Why:**
+  - Debounced supplier search (250ms) and added request-currency cancellation flags in `suppliers/page.tsx` to prevent overlapping balance fetches and throttler exhaustion.
+  - Guarded screenshot capture in `auth-flow.spec.ts` to desktop Chromium to prevent Windows file-handle contention on duplicate test passes.
+- **Dependencies Added:** None.
+- **Skipped:** None.
+- **Verification & CI Run Result:**
+  - `npm run build`: 23 routes cleanly compiled in `apps/admin`.
+  - `npx oxlint --deny-warnings apps/admin/src`: 0 warnings, 0 errors across 44 files.
+  - Vitest Admin: 12 passed in `apps/admin`.
+  - Vitest API: 36 test files, 204 tests passed in `apps/api`.
+  - Playwright E2E: All 16 tests passed across Chromium and Mobile Chrome (39.3s).
+
+
 

@@ -19,7 +19,9 @@ test.describe("Milestone A2: Sign-in, Session, and App Shell E2E", () => {
 
   test("signs in as Owner, verifies app shell, captures screenshots, and logs out", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    const isDesktop = testInfo.project.name === "chromium";
+
     // 1. Visit Login Page at Desktop Viewport (1440x900)
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/login");
@@ -27,18 +29,22 @@ test.describe("Milestone A2: Sign-in, Session, and App Shell E2E", () => {
     await expect(page.locator("h3")).toContainText("দোকানের ব্যাক অফিসে লগইন");
 
     // Capture Desktop Light Login
-    await page.screenshot({
-      path: path.join(SCREENSHOT_DIR, "desktop-light-login.png"),
-      fullPage: true,
-    });
+    if (isDesktop) {
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, "desktop-light-login.png"),
+        fullPage: true,
+      });
+    }
 
     // Toggle to Dark Mode on Login
     await page.locator('[data-testid="theme-toggle"]').click();
     await page.waitForTimeout(300);
-    await page.screenshot({
-      path: path.join(SCREENSHOT_DIR, "desktop-dark-login.png"),
-      fullPage: true,
-    });
+    if (isDesktop) {
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, "desktop-dark-login.png"),
+        fullPage: true,
+      });
+    }
 
     // Toggle back to Light Mode
     await page.locator('[data-testid="theme-toggle"]').click();
@@ -55,18 +61,22 @@ test.describe("Milestone A2: Sign-in, Session, and App Shell E2E", () => {
     await expect(page.locator("h1")).toContainText("ড্যাশবোর্ড");
 
     // Capture Desktop Light Shell (Dashboard)
-    await page.screenshot({
-      path: path.join(SCREENSHOT_DIR, "desktop-light-shell.png"),
-      fullPage: true,
-    });
+    if (isDesktop) {
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, "desktop-light-shell.png"),
+        fullPage: true,
+      });
+    }
 
     // Toggle Dark Mode in Dashboard
     await page.locator('[data-testid="theme-toggle"]').click();
     await page.waitForTimeout(300);
-    await page.screenshot({
-      path: path.join(SCREENSHOT_DIR, "desktop-dark-shell.png"),
-      fullPage: true,
-    });
+    if (isDesktop) {
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, "desktop-dark-shell.png"),
+        fullPage: true,
+      });
+    }
 
     // Toggle back to Light
     await page.locator('[data-testid="theme-toggle"]').click();
@@ -75,18 +85,22 @@ test.describe("Milestone A2: Sign-in, Session, and App Shell E2E", () => {
     // 3. Visit List Screen (Products Catalog)
     await page.goto("/catalog/products");
     await expect(page.locator("h1")).toContainText("পণ্য ব্যবস্থাপনা");
-    await page.screenshot({
-      path: path.join(SCREENSHOT_DIR, "desktop-light-list.png"),
-      fullPage: true,
-    });
+    if (isDesktop) {
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, "desktop-light-list.png"),
+        fullPage: true,
+      });
+    }
 
     // 4. Visit Form Screen (Shop Settings)
     await page.goto("/settings/shop");
     await expect(page.locator("h1")).toContainText("দোকানের সেটিংস");
-    await page.screenshot({
-      path: path.join(SCREENSHOT_DIR, "desktop-light-form.png"),
-      fullPage: true,
-    });
+    if (isDesktop) {
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, "desktop-light-form.png"),
+        fullPage: true,
+      });
+    }
 
     // 5. Test Language Switcher
     await page.locator('[data-testid="language-toggle"]').click();
@@ -107,23 +121,28 @@ test.describe("Milestone A2: Sign-in, Session, and App Shell E2E", () => {
 
   test("mobile viewport (375px) renders drawer shell and responsive layout", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    const isDesktop = testInfo.project.name === "chromium";
     await page.setViewportSize({ width: 375, height: 667 });
 
     // Login page mobile
     await page.goto("/login");
-    await page.screenshot({
-      path: path.join(SCREENSHOT_DIR, "mobile-light-login.png"),
-      fullPage: true,
-    });
+    if (isDesktop) {
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, "mobile-light-login.png"),
+        fullPage: true,
+      });
+    }
 
     // Dark mode mobile login
     await page.locator('[data-testid="theme-toggle"]').click();
     await page.waitForTimeout(300);
-    await page.screenshot({
-      path: path.join(SCREENSHOT_DIR, "mobile-dark-login.png"),
-      fullPage: true,
-    });
+    if (isDesktop) {
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, "mobile-dark-login.png"),
+        fullPage: true,
+      });
+    }
     await page.locator('[data-testid="theme-toggle"]').click();
 
     // Login as owner on mobile
@@ -135,18 +154,22 @@ test.describe("Milestone A2: Sign-in, Session, and App Shell E2E", () => {
     await page.waitForURL("**/dashboard", { timeout: 15000 });
 
     // Capture Mobile Light Shell
-    await page.screenshot({
-      path: path.join(SCREENSHOT_DIR, "mobile-light-shell.png"),
-      fullPage: true,
-    });
+    if (isDesktop) {
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, "mobile-light-shell.png"),
+        fullPage: true,
+      });
+    }
 
     // Toggle dark mode on mobile header
     await page.locator('[data-testid="theme-toggle"]').first().click();
     await page.waitForTimeout(300);
-    await page.screenshot({
-      path: path.join(SCREENSHOT_DIR, "mobile-dark-shell.png"),
-      fullPage: true,
-    });
+    if (isDesktop) {
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, "mobile-dark-shell.png"),
+        fullPage: true,
+      });
+    }
 
     // Open mobile drawer
     await page.locator('[data-testid="mobile-menu-button"]').click();

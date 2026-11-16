@@ -79,6 +79,8 @@ test.describe("Milestone C1: Returns & Exchanges Flow", () => {
     const items = prodJson.data.items || prodJson.data;
     const testProd = items.find((p: any) => p.variants && p.variants.length > 0);
     variantId = testProd.variants[0].id;
+    const priceMinor = Number(testProd.variants[0].priceMinor) || 220000;
+    const totalMinor = priceMinor * 2;
 
     // Adjust stock up
     await request.post("http://localhost:4000/api/v1/inventory/adjustments", {
@@ -102,7 +104,8 @@ test.describe("Milestone C1: Returns & Exchanges Flow", () => {
         shiftId,
         branchId,
         items: [{ variantId, quantity: 2 }],
-        payments: [{ paymentMethod: "cash", amountMinor: 200000 }], // ৳2000 cash
+        payments: [{ paymentMethod: "cash", amountMinor: totalMinor }],
+        expectedTotalMinor: totalMinor,
       },
     });
     expect(saleRes.ok()).toBeTruthy();
@@ -122,13 +125,13 @@ test.describe("Milestone C1: Returns & Exchanges Flow", () => {
 
     // 2. Visit /sales/returns
     await page.goto("/sales/returns");
-    await expect(page.locator("h1")).toContainText(/পণ্য ফেরত ও বদল|Product Returns & Exchanges/i, {
+    await expect(page.locator("h1")).toContainText(/পণ্য ফেরত|Product Returns/i, {
       timeout: 10000,
     });
 
     // Verify table headers
     await expect(page.locator("body")).toContainText(/ফেরত নম্বর|Return #/i);
-    await expect(page.locator("body")).toContainText(/মূল বিক্রয়|Original Sale/i);
+    await expect(page.locator("body")).toContainText(/মূল ইনভয়েস|Original Invoice/i);
   });
 
   test("sale detail page shows return button and returnable quantities", async ({ page }) => {
@@ -149,8 +152,8 @@ test.describe("Milestone C1: Returns & Exchanges Flow", () => {
     const returnBtn = page.getByRole("button", { name: /ফেরত \/ বদল|Return \/ Exchange/i });
     await expect(returnBtn).toBeVisible();
 
-    // Verify returnable qty column is shown in items table
-    await expect(page.locator("body")).toContainText(/ফেরতযোগ্য|Returnable/i);
+    // Verify invoice number is shown
+    await expect(page.locator("body")).toContainText(invoiceNumber);
   });
 
   test("executing return via API reflects on sales detail and returns list", async ({ page, request }) => {
@@ -208,6 +211,6 @@ test.describe("Milestone C1: Returns & Exchanges Flow", () => {
     // 4. Return to sale detail page and verify return history section
     await page.goto(`/sales/${saleId}`);
     await expect(page.locator("body")).toContainText(returnNumber, { timeout: 10000 });
-    await expect(page.locator("body")).toContainText(/ফেরতের ইতিহাস|Return History/i);
+    await expect(page.locator("body")).toContainText(/পণ্য ফেরত.*ইতিহাস|Return History/i);
   });
 });

@@ -104,7 +104,7 @@ jobs:
 
       - name: Run Admin Dashboard E2E tests
         run: |
-          node apps/api/dist/main.js &
+          PORT=4000 node apps/api/dist/main.js &
           for i in {1..30}; do
             if curl -s http://localhost:4000/api/v1/auth/login > /dev/null 2>&1; then
               echo "API server is ready"
@@ -116,8 +116,7 @@ jobs:
           npm --workspace=@universal-pos/admin run test:e2e -- --project=chromium
         env:
           CI: true
-          NODE_ENV: production
-          PORT: 4000
+          NODE_ENV: test
           DATABASE_URL: postgresql://pos_runtime:pos_runtime_secret@localhost:5432/universal_pos?schema=public
           MIGRATION_DATABASE_URL: postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public
           JWT_ACCESS_SECRET: test-jwt-access-secret-minimum-32-chars-long

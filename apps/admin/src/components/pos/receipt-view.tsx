@@ -52,6 +52,8 @@ export interface ReceiptData {
   totalMinor: number;
   paidMinor: number;
   changeMinor: number;
+  dueMinor?: number;
+  customerTotalDueMinor?: number;
   payments: Array<{
     paymentMethod: string;
     amountMinor: number;
@@ -302,10 +304,28 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
               <span className="tabular-nums whitespace-nowrap">{formatMoney(p.amountMinor)}</span>
             </div>
           ))}
+          {receipt.payments.length > 0 && (
+            <div className="flex justify-between font-semibold pt-1 border-t border-gray-200">
+              <span>{locale === "bn" ? "মোট পরিশোধ:" : "Total Paid:"}</span>
+              <span className="tabular-nums whitespace-nowrap">{formatMoney(receipt.paidMinor)}</span>
+            </div>
+          )}
           {receipt.changeMinor > 0 && (
             <div className="flex justify-between font-semibold pt-1">
               <span>{strings.pos.change}:</span>
               <span className="tabular-nums whitespace-nowrap">{formatMoney(receipt.changeMinor)}</span>
+            </div>
+          )}
+          {(receipt.dueMinor ?? 0) > 0 && (
+            <div className="flex justify-between font-bold text-amber-800 pt-1">
+              <span>{locale === "bn" ? "এই ভাউচারে বাকি:" : "Due on Invoice:"}</span>
+              <span className="tabular-nums whitespace-nowrap">{formatMoney(receipt.dueMinor!)}</span>
+            </div>
+          )}
+          {receipt.customerTotalDueMinor !== undefined && receipt.customerTotalDueMinor > 0 && (
+            <div className="flex justify-between font-bold text-red-600 pt-1 border-t border-dashed border-gray-300">
+              <span>{locale === "bn" ? "গ্রাহকের মোট বকেয়া:" : "Total Customer Due:"}</span>
+              <span className="tabular-nums whitespace-nowrap">{formatMoney(receipt.customerTotalDueMinor)}</span>
             </div>
           )}
         </div>

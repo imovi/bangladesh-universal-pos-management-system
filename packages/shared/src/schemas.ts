@@ -375,11 +375,30 @@ export const CreateCustomerSchema = z.object({
   email: z.string().email().optional().or(z.literal("")),
   address: z.string().trim().max(255).optional(),
   notes: z.string().trim().max(500).optional(),
+  creditLimitMinor: z.coerce.number().int().min(0).default(0).optional(),
 });
 export type CreateCustomerDto = z.infer<typeof CreateCustomerSchema>;
 
 export const UpdateCustomerSchema = CreateCustomerSchema.partial();
 export type UpdateCustomerDto = z.infer<typeof UpdateCustomerSchema>;
+
+export const CreateCustomerPaymentSchema = z.object({
+  id: z.string().uuid().optional(),
+  shiftId: z.string().uuid(),
+  amountMinor: z.coerce.number().int().positive("Payment amount must be greater than zero"),
+  paymentMethod: z.enum(["cash", "card", "bkash", "nagad", "rocket", "bank_transfer", "other"]),
+  reference: z.string().trim().max(100).optional(),
+  notes: z.string().trim().max(500).optional(),
+});
+export type CreateCustomerPaymentDto = z.infer<typeof CreateCustomerPaymentSchema>;
+
+export const CustomerStatementQuerySchema = z.object({
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+export type CustomerStatementQueryDto = z.infer<typeof CustomerStatementQuerySchema>;
 
 export const CreateRegisterSchema = z.object({
   branchId: z.string().uuid(),

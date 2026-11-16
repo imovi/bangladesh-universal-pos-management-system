@@ -111,6 +111,35 @@ export default function PosPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer>({
     name: strings.pos.walkInCustomer,
   });
+  const [customerBalance, setCustomerBalance] = useState<{
+    currentDueMinor: number;
+    creditLimitMinor: number;
+    availableCreditMinor: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!selectedCustomer.id) {
+      setCustomerBalance(null);
+      return;
+    }
+    let active = true;
+    apiFetch(`/customers/${selectedCustomer.id}/balance`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (active && data.success && data.data) {
+          setCustomerBalance({
+            currentDueMinor: Number(data.data.currentDueMinor || 0),
+            creditLimitMinor: Number(data.data.creditLimitMinor || 0),
+            availableCreditMinor: Number(data.data.availableCreditMinor || 0),
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [selectedCustomer.id, apiFetch]);
+
   const [billDiscount, setBillDiscount] = useState<CartLineDiscount | undefined>(undefined);
   const [saleNotes, setSaleNotes] = useState<string>("");
   const [heldCarts, setHeldCarts] = useState<HeldCart[]>([]);
@@ -955,6 +984,15 @@ export default function PosPage() {
         totalMinor: cartTotals.totalMinor,
         paidMinor: payments.reduce((sum, p) => sum + p.amountMinor, 0),
         changeMinor: Math.max(0, payments.reduce((sum, p) => sum + p.amountMinor, 0) - cartTotals.totalMinor),
+        dueMinor: createdSale?.dueMinor !== undefined
+          ? Number(createdSale.dueMinor)
+          : Math.max(0, cartTotals.totalMinor - payments.reduce((sum, p) => sum + p.amountMinor, 0)),
+        customerTotalDueMinor: selectedCustomer.id
+          ? (customerBalance?.currentDueMinor ?? Number(selectedCustomer.currentDueMinor || 0)) +
+            (createdSale?.dueMinor !== undefined
+              ? Number(createdSale.dueMinor)
+              : Math.max(0, cartTotals.totalMinor - payments.reduce((sum, p) => sum + p.amountMinor, 0)))
+          : undefined,
         payments,
       };
 
@@ -1632,10 +1670,15 @@ export default function PosPage() {
               size="sm"
               onClick={() => setIsCustomerOpen(true)}
               data-testid="customer-button"
-              className="h-8 px-2.5 text-xs font-medium max-w-[200px] truncate"
+              className="h-8 px-2.5 text-xs font-medium max-w-[220px] truncate"
             >
               <User className="h-3.5 w-3.5 mr-1.5 text-primary shrink-0" />
               <span className="truncate">{selectedCustomer.name}</span>
+              {(customerBalance?.currentDueMinor ?? Number(selectedCustomer.currentDueMinor || 0)) > 0 && (
+                <span className="ml-1.5 px-1 py-0.5 bg-destructive/15 text-destructive text-[10px] rounded font-mono font-semibold shrink-0">
+                  {formatMoney(customerBalance?.currentDueMinor ?? Number(selectedCustomer.currentDueMinor || 0))}
+                </span>
+              )}
             </Button>
 
             {/* Hold, Return & Clear Cart Actions */}
@@ -1950,6 +1993,21 @@ export default function PosPage() {
         isExchange={Boolean(exchangeContext)}
         onCompleteSale={handleCompleteSale}
         isSubmitting={isCompletingSale}
+        customer={
+          selectedCustomer.id
+            ? {
+                id: selectedCustomer.id,
+                name: selectedCustomer.name,
+                phone: selectedCustomer.phone || "",
+                creditLimitMinor:
+                  customerBalance?.creditLimitMinor ?? Number(selectedCustomer.creditLimitMinor || 0),
+              }
+            : null
+        }
+        canSellCredit={hasPermission("sale.credit")}
+        customerDueMinor={
+          customerBalance?.currentDueMinor ?? Number(selectedCustomer.currentDueMinor || 0)
+        }
       />
 
       {/* Return & Exchange Modal (F6) */}

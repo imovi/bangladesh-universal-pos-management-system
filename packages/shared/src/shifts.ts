@@ -27,6 +27,12 @@ export interface ShiftCashMovementInput {
 export interface ShiftReturnInput {
   refundMethod: string;
   totalRefundMinor: bigint | number;
+  reason?: string | null;
+}
+
+export interface ShiftCustomerPaymentInput {
+  paymentMethod: string;
+  amountMinor: bigint | number;
 }
 
 export interface ShiftCalculationInput {
@@ -34,6 +40,7 @@ export interface ShiftCalculationInput {
   cashMovements: ShiftCashMovementInput[];
   sales: ShiftSaleInput[];
   returns?: ShiftReturnInput[];
+  customerPayments?: ShiftCustomerPaymentInput[];
 }
 
 export interface ShiftCashCalculationResult {
@@ -49,6 +56,9 @@ export interface ShiftCashCalculationResult {
   totalRefundsMinor: bigint;
   cashRefundsMinor: bigint;
   returnsCount: number;
+  totalCustomerPaymentsMinor?: bigint;
+  cashCustomerPaymentsMinor?: bigint;
+  customerPaymentsCount?: number;
   /** @deprecated Use paymentMethodTotalsMinor.card */
   cardSalesMinor: bigint;
   /** @deprecated Use paymentMethodTotalsMinor.bkash */
@@ -121,19 +131,47 @@ function aggregateReturns(returns?: ShiftReturnInput[]) {
   for (const r of returns) {
     returnsCount++;
     const amt = BigInt(r.totalRefundMinor);
+    let dueReduced = 0n;
+    if (r.reason && r.reason.includes("due_reduced:")) {
+      const match = r.reason.match(/due_reduced:(\d+)/);
+      if (match) {
+        dueReduced = BigInt(match[1]);
+      }
+    }
+    const actualRefund = amt > dueReduced ? amt - dueReduced : 0n;
+
     totalRefunds += amt;
-    refundMethodTotals[r.refundMethod] = (refundMethodTotals[r.refundMethod] || 0n) + amt;
+    refundMethodTotals[r.refundMethod] = (refundMethodTotals[r.refundMethod] || 0n) + actualRefund;
     if (r.refundMethod === "cash") {
-      cashRefunds += amt;
+      cashRefunds += actualRefund;
     }
   }
 
   return { totalRefunds, cashRefunds, returnsCount, refundMethodTotals };
 }
 
+function aggregateCustomerPayments(payments?: ShiftCustomerPaymentInput[]) {
+  let totalPayments = 0n;
+  let cashPayments = 0n;
+  const methodTotals: Record<string, bigint> = {};
+
+  if (!payments) return { totalPayments, cashPayments, paymentsCount: 0, methodTotals };
+
+  for (const cp of payments) {
+    const amt = BigInt(cp.amountMinor);
+    totalPayments += amt;
+    methodTotals[cp.paymentMethod] = (methodTotals[cp.paymentMethod] || 0n) + amt;
+    if (cp.paymentMethod === "cash") {
+      cashPayments += amt;
+    }
+  }
+
+  return { totalPayments, cashPayments, paymentsCount: payments.length, methodTotals };
+}
+
 /**
  * Computes expected cash from the ground up:
- * expectedCash = openingCash + cashPaymentsOfCompletedSales - changeGiven - cashRefunds - cashOut + cashIn.
+ * expectedCash = openingCash + cashPaymentsOfCompletedSales - changeGiven - cashRefunds + cashCustomerPayments - cashOut + cashIn.
  */
 export function calculateShiftCashTotals(
   input: ShiftCalculationInput,
@@ -142,6 +180,7 @@ export function calculateShiftCashTotals(
   const salesAgg = aggregateSales(input.sales);
   const movAgg = aggregateMovements(input.cashMovements);
   const retAgg = aggregateReturns(input.returns);
+  const payAgg = aggregateCustomerPayments(input.customerPayments);
 
   // Subtract refunds from paymentMethodTotalsMinor
   for (const [method, refundAmt] of Object.entries(retAgg.refundMethodTotals)) {
@@ -151,8 +190,16 @@ export function calculateShiftCashTotals(
     }
   }
 
+  // Add customer payments to paymentMethodTotalsMinor
+  for (const [method, payAmt] of Object.entries(payAgg.methodTotals)) {
+    const m = method as SalePaymentMethod;
+    if (m in salesAgg.paymentMethodTotals) {
+      salesAgg.paymentMethodTotals[m] += payAmt;
+    }
+  }
+
   const netCashSales = salesAgg.cashPayments - salesAgg.changeGiven - retAgg.cashRefunds;
-  const netCashFlow = netCashSales + movAgg.cashIn - movAgg.cashOut;
+  const netCashFlow = netCashSales + payAgg.cashPayments + movAgg.cashIn - movAgg.cashOut;
   const expectedCash = openingCash + netCashFlow;
 
   return {
@@ -168,6 +215,9 @@ export function calculateShiftCashTotals(
     totalRefundsMinor: retAgg.totalRefunds,
     cashRefundsMinor: retAgg.cashRefunds,
     returnsCount: retAgg.returnsCount,
+    totalCustomerPaymentsMinor: payAgg.totalPayments,
+    cashCustomerPaymentsMinor: payAgg.cashPayments,
+    customerPaymentsCount: payAgg.paymentsCount,
     cardSalesMinor: salesAgg.cardSales,
     bkashSalesMinor: salesAgg.bkashSales,
     otherSalesMinor: salesAgg.otherSales,

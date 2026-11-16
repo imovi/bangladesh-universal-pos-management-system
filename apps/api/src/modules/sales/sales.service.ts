@@ -11,12 +11,16 @@ import { InventoryService } from "../inventory/inventory.service.js";
 import { CreateSaleDto, VoidSaleDto, calculateSaleTotals, formatDateKey } from "@universal-pos/shared";
 import { validateDiscountsNonNegative, enforceDiscountAndOverrideLimits } from "./sales-discount.helper.js";
 import { computeSalePayloadHash, matchesSalePayload } from "./sales-hash.helper.js";
+import { CustomersService } from "../shifts/customers.service.js";
 
 @Injectable()
 export class SalesService {
   constructor(
-    private readonly tenantContext: TenantContextService, private readonly auditService: AuditService,
-    private readonly inventoryService: InventoryService, private readonly systemDb: SystemDbService,
+    private readonly tenantContext: TenantContextService,
+    private readonly auditService: AuditService,
+    private readonly inventoryService: InventoryService,
+    private readonly systemDb: SystemDbService,
+    private readonly customersService: CustomersService,
   ) {}
 
   private async generateInvoiceNumber(
@@ -131,20 +135,23 @@ export class SalesService {
     }
 
     const paidMinor = dto.payments.reduce((sum, p) => sum + BigInt(p.amountMinor), 0n);
-    if (paidMinor < calculated.totalMinor) {
-      throw new BadRequestException(`Insufficient payment: paid ${paidMinor}, required ${calculated.totalMinor}`);
+    let changeMinor = 0n;
+    let dueMinor = 0n;
+
+    if (paidMinor > calculated.totalMinor) {
+      changeMinor = paidMinor - calculated.totalMinor;
+      const cashPaidMinor = dto.payments.filter((p) => p.paymentMethod === "cash").reduce((s, p) => s + BigInt(p.amountMinor), 0n);
+      if (changeMinor > cashPaidMinor) {
+        throw new UnprocessableEntityException({
+          code: "NON_CASH_OVERPAYMENT_PROHIBITED",
+          message: "Non-cash payments cannot generate cash change",
+        });
+      }
+    } else if (paidMinor < calculated.totalMinor) {
+      dueMinor = calculated.totalMinor - paidMinor;
     }
 
-    const cashPaidMinor = dto.payments.filter((p) => p.paymentMethod === "cash").reduce((s, p) => s + BigInt(p.amountMinor), 0n);
-    const changeMinor = paidMinor - calculated.totalMinor;
-    if (changeMinor > cashPaidMinor) {
-      throw new UnprocessableEntityException({
-        code: "NON_CASH_OVERPAYMENT_PROHIBITED",
-        message: "Non-cash payments cannot generate cash change",
-      });
-    }
-
-    return { calculated, paidMinor, changeMinor };
+    return { calculated, paidMinor, changeMinor, dueMinor };
   }
 
   private async checkIdempotency(
@@ -172,7 +179,7 @@ export class SalesService {
 
   private async executeSaleInsert(
     tx: Prisma.TransactionClient, tenantId: string, dto: CreateSaleDto,
-    meta: { saleId: string; inv: string; calc: any; paid: bigint; change: bigint; userId: string; costMap: Map<string, bigint>; originalPrices: (bigint | null)[]; payloadHash: string },
+    meta: { saleId: string; inv: string; calc: any; paid: bigint; change: bigint; due: bigint; userId: string; costMap: Map<string, bigint>; originalPrices: (bigint | null)[]; payloadHash: string },
   ) {
     return tx.sale.create({
       data: {
@@ -180,7 +187,7 @@ export class SalesService {
         branchId: dto.branchId, cashierUserId: meta.userId, customerId: dto.customerId,
         status: "completed", subtotalMinor: meta.calc.grossMinor, discountMinor: meta.calc.totalDiscountMinor,
         taxMinor: meta.calc.taxMinor, totalMinor: meta.calc.totalMinor, paidMinor: meta.paid,
-        changeMinor: meta.change, notes: dto.notes, requestPayloadHash: meta.payloadHash,
+        changeMinor: meta.change, dueMinor: meta.due, notes: dto.notes, requestPayloadHash: meta.payloadHash,
         items: { create: this.buildSaleItemsData(tenantId, meta.calc.lines, meta.costMap, meta.originalPrices) },
         payments: {
           create: dto.payments.map((p) => ({ id: uuidv7(), tenantId, paymentMethod: p.paymentMethod, amountMinor: BigInt(p.amountMinor), reference: p.reference })),
@@ -279,7 +286,40 @@ export class SalesService {
         const { shift, defaultTaxRateBp, variants } = await this.loadShiftAndVariants(tx, tenantId, dto);
         const variantMap = new Map(variants.map((v) => [v.id, v]));
         const { lineInputs, originalPrices } = this.resolveItemPricingAndTaxes(dto.items, variantMap, defaultTaxRateBp, user);
-        const { calculated, paidMinor, changeMinor } = this.computeAndValidateTotals(dto, lineInputs, pricesIncludeTax);
+        const { calculated, paidMinor, changeMinor, dueMinor } = this.computeAndValidateTotals(dto, lineInputs, pricesIncludeTax);
+
+        if (dueMinor > 0n) {
+          if (!dto.customerId) {
+            throw new BadRequestException("Customer is required for credit / due sales");
+          }
+          const canSellCredit = Boolean(
+            user?.isOwner ||
+              user?.permissions?.includes("sale.credit") ||
+              user?.permissions?.includes("*"),
+          );
+          if (!canSellCredit) {
+            throw new ForbiddenException("Credit sales require sale.credit permission");
+          }
+          const balance = await this.customersService.getBalance(tenantId, dto.customerId, tx);
+          const currentDueMinor = balance.currentDueMinor;
+          const creditLimitMinor = balance.creditLimitMinor;
+          const willExceed = (BigInt(currentDueMinor) + dueMinor) > BigInt(creditLimitMinor);
+          const canOverrideCredit = Boolean(
+            user?.isOwner ||
+              user?.permissions?.includes("sale.credit.override") ||
+              user?.permissions?.includes("*"),
+          );
+          if (willExceed && !canOverrideCredit) {
+            throw new ConflictException({
+              code: "CREDIT_LIMIT_EXCEEDED",
+              message: `Customer credit limit exceeded. Limit: ৳${(creditLimitMinor / 100).toFixed(2)}, Current Due: ৳${(currentDueMinor / 100).toFixed(2)}, Attempted Due: ৳${(Number(dueMinor) / 100).toFixed(2)}`,
+              limitMinor: creditLimitMinor,
+              currentDueMinor,
+              attemptedDueMinor: Number(dueMinor),
+            });
+          }
+        }
+
         const ov = await enforceDiscountAndOverrideLimits(
           tx, userId, tenantId, dto, lineInputs, user,
           { grossMinor: calculated.grossMinor, totalDiscountMinor: calculated.totalDiscountMinor },
@@ -290,7 +330,7 @@ export class SalesService {
         const costMap = new Map(variants.map((v) => [v.id, v.costMinor]));
 
         const sale = await this.executeSaleInsert(tx, tenantId, dto, {
-          saleId, inv, calc: calculated, paid: paidMinor, change: changeMinor,
+          saleId, inv, calc: calculated, paid: paidMinor, change: changeMinor, due: dueMinor,
           userId, costMap, originalPrices, payloadHash,
         });
 

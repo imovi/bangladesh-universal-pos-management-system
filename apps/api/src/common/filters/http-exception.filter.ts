@@ -14,6 +14,9 @@ import { ApiEnvelope } from "@universal-pos/shared";
 const ALLOWED_ERROR_EXTRA_FIELDS = new Set([
   "limitBp",
   "attemptedBp",
+  "limitMinor",
+  "currentDueMinor",
+  "attemptedDueMinor",
   "details",
   "errors",
   "serverTotalMinor",

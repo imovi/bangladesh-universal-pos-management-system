@@ -5,12 +5,15 @@ import { useTranslation } from "@/i18n/context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatMoney } from "@/lib/utils";
 import { X, Search, UserPlus, Check, User } from "lucide-react";
 
 export interface SelectedCustomer {
   id?: string;
   name: string;
   phone?: string;
+  creditLimitMinor?: number;
+  currentDueMinor?: number;
 }
 
 interface CustomerDialogProps {
@@ -229,7 +232,13 @@ export function CustomerDialog({
                       key={c.id}
                       type="button"
                       onClick={() => {
-                        onSelectCustomer({ id: c.id, name: c.name, phone: c.phone });
+                        onSelectCustomer({
+                          id: c.id,
+                          name: c.name,
+                          phone: c.phone,
+                          creditLimitMinor: Number(c.creditLimitMinor || 0),
+                          currentDueMinor: Number(c.currentDueMinor || 0),
+                        });
                         onClose();
                       }}
                       className="w-full text-left p-2.5 text-xs hover:bg-muted transition-colors flex justify-between items-center"
@@ -238,7 +247,18 @@ export function CustomerDialog({
                         <div className="font-semibold">{c.name}</div>
                         <div className="text-muted-foreground font-mono text-[11px]">{c.phone}</div>
                       </div>
-                      <Check className="h-3.5 w-3.5 text-primary opacity-0 group-hover:opacity-100" />
+                      <div className="flex flex-col items-end text-right">
+                        {Number(c.currentDueMinor || 0) > 0 && (
+                          <span className="text-[11px] font-mono font-semibold text-destructive">
+                            {locale === "bn" ? "বকেয়া: " : "Due: "}{formatMoney(Number(c.currentDueMinor))}
+                          </span>
+                        )}
+                        {Number(c.creditLimitMinor || 0) > 0 && (
+                          <span className="text-[10px] font-mono text-muted-foreground">
+                            {locale === "bn" ? "সীমা: " : "Limit: "}{formatMoney(Number(c.creditLimitMinor))}
+                          </span>
+                        )}
+                      </div>
                     </button>
                   ))}
                 </div>

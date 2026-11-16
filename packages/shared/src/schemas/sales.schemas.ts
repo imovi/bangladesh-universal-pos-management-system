@@ -38,7 +38,7 @@ export const CreateSaleSchema = z.object({
   customerId: z.string().uuid().optional(),
   billDiscount: LineDiscountInputSchema.optional(),
   items: z.array(SaleItemInputSchema).min(1, "Sale must have at least one line item"),
-  payments: z.array(SalePaymentInputSchema).min(1, "At least one payment is required"),
+  payments: z.array(SalePaymentInputSchema).default([]),
   notes: z.string().trim().max(500).optional(),
   expectedTotalMinor: z.coerce.number().int().min(0),
 });

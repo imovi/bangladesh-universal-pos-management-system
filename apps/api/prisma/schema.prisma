@@ -49,6 +49,9 @@ model Tenant {
   receiptCounters    ReceiptCounter[]
   documentCounters   DocumentCounter[]
   returnCounters     ReturnCounter[]
+  customerPayments           CustomerPayment[]
+  customerPaymentAllocations CustomerPaymentAllocation[]
+  customerPaymentCounters    CustomerPaymentCounter[]
 
   @@map("tenants")
 }
@@ -73,6 +76,8 @@ model Branch {
   shifts         Shift[]
   sales          Sale[]
   saleReturns    SaleReturn[]
+  customerPayments        CustomerPayment[]
+  customerPaymentCounters CustomerPaymentCounter[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -102,6 +107,7 @@ model User {
   salesVoided   Sale[]         @relation("SaleVoidedBy")
   returnsCreated SaleReturn[]  @relation("ReturnCashier")
   returnsOverridden SaleReturn[] @relation("ReturnOverrideUser")
+  customerPaymentsReceived CustomerPayment[] @relation("CustomerPaymentReceivedBy")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -620,11 +626,13 @@ model Customer {
   notes           String?
   totalSpentMinor BigInt   @default(0) @map("total_spent_minor")
   totalVisits     Int      @default(0) @map("total_visits")
+  creditLimitMinor BigInt  @default(0) @map("credit_limit_minor")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  sales  Sale[]
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sales    Sale[]
+  payments CustomerPayment[]
 
   @@unique([tenantId, phone])
   @@index([tenantId])
@@ -680,6 +688,7 @@ model Shift {
   cashMovements CashMovement[]
   sales         Sale[]
   returns       SaleReturn[]
+  customerPayments CustomerPayment[]
 
   @@index([tenantId])
   @@index([registerId])
@@ -721,6 +730,7 @@ model Sale {
   taxMinor         BigInt    @default(0) @map("tax_minor")
   totalMinor       BigInt    @map("total_minor")
   paidMinor        BigInt    @map("paid_minor")
+  dueMinor         BigInt    @default(0) @map("due_minor")
   changeMinor      BigInt    @default(0) @map("change_minor")
   notes            String?
   requestPayloadHash String? @map("request_payload_hash") @db.VarChar(64)
@@ -739,6 +749,7 @@ model Sale {
   payments    SalePayment[]
   returns     SaleReturn[]  @relation("SaleReturns")
   exchangeReturns SaleReturn[] @relation("ExchangeSaleReturn")
+  customerPaymentAllocations CustomerPaymentAllocation[]
 
   @@unique([tenantId, invoiceNumber])
   @@index([tenantId])
@@ -906,6 +917,71 @@ model ReturnCounter {
   @@index([tenantId])
   @@index([registerId])
   @@map("return_counters")
+}
+
+model CustomerPayment {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  customerId       String   @map("customer_id") @db.Uuid
+  shiftId          String   @map("shift_id") @db.Uuid
+  branchId         String   @map("branch_id") @db.Uuid
+  receivedByUserId String   @map("received_by_user_id") @db.Uuid
+  paymentNumber    String   @map("payment_number")
+  amountMinor      BigInt   @map("amount_minor")
+  paymentMethod    String   @map("payment_method")
+  reference        String?
+  notes            String?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  tenant       Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer     Customer                    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  shift        Shift                       @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  branch       Branch                      @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  receivedUser User                        @relation("CustomerPaymentReceivedBy", fields: [receivedByUserId], references: [id], onDelete: Restrict)
+  allocations  CustomerPaymentAllocation[]
+
+  @@unique([tenantId, paymentNumber])
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([shiftId])
+  @@index([branchId])
+  @@index([createdAt])
+  @@map("customer_payments")
+}
+
+model CustomerPaymentAllocation {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  paymentId   String   @map("payment_id") @db.Uuid
+  saleId      String   @map("sale_id") @db.Uuid
+  amountMinor BigInt   @map("amount_minor")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payment CustomerPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  sale    Sale            @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([paymentId])
+  @@index([saleId])
+  @@map("customer_payment_allocations")
+}
+
+model CustomerPaymentCounter {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  branchId  String   @map("branch_id") @db.Uuid
+  dateKey   String   @map("date_key")
+  lastSeq   Int      @default(0) @map("last_seq")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, branchId, dateKey])
+  @@index([tenantId])
+  @@index([branchId])
+  @@map("customer_payment_counters")
 }
 
 

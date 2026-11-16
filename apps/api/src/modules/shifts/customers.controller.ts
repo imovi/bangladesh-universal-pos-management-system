@@ -6,6 +6,7 @@ import {
   Param,
   Body,
   Query,
+  Headers,
   UseGuards,
   Req,
   Ip,
@@ -19,6 +20,8 @@ import {
   PERMISSIONS,
   CreateCustomerSchema,
   UpdateCustomerSchema,
+  CreateCustomerPaymentSchema,
+  CustomerStatementQuerySchema,
 } from "@universal-pos/shared";
 
 @Controller("customers")
@@ -66,6 +69,58 @@ export class CustomersController {
     }
 
     return this.customersService.update(
+      req.user.tenantId,
+      id,
+      parse.data,
+      req.user.sub || req.user.userId || req.user.id,
+      ip,
+    );
+  }
+
+  @Get(":id/balance")
+  @RequirePermission(PERMISSIONS.CUSTOMER_READ)
+  async getBalance(@Req() req: any, @Param("id") id: string) {
+    return this.customersService.getBalance(req.user.tenantId, id);
+  }
+
+  @Get(":id/statement")
+  @RequirePermission(PERMISSIONS.CUSTOMER_READ)
+  async getStatement(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Query() query: any,
+  ) {
+    const parse = CustomerStatementQuerySchema.safeParse(query);
+    if (!parse.success) {
+      throw new BadRequestException({
+        code: "VALIDATION_ERROR",
+        errors: parse.error.flatten(),
+      });
+    }
+    return this.customersService.getStatement(req.user.tenantId, id, parse.data);
+  }
+
+  @Post(":id/payments")
+  @RequirePermission(PERMISSIONS.CUSTOMER_PAYMENT)
+  async createPayment(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() body: any,
+    @Ip() ip: string,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ) {
+    const payload = {
+      ...body,
+      id: body?.id || idempotencyKey || undefined,
+    };
+    const parse = CreateCustomerPaymentSchema.safeParse(payload);
+    if (!parse.success) {
+      throw new BadRequestException({
+        code: "VALIDATION_ERROR",
+        errors: parse.error.flatten(),
+      });
+    }
+    return this.customersService.createPayment(
       req.user.tenantId,
       id,
       parse.data,

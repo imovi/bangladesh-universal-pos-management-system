@@ -36,6 +36,9 @@ interface PaymentDialogProps {
   onCompleteSale: (payments: PaymentItemInput[], refundMethod?: string) => Promise<void>;
   isSubmitting: boolean;
   isExchange?: boolean;
+  customer?: { id: string; name: string; phone: string; creditLimitMinor?: number } | null;
+  canSellCredit?: boolean;
+  customerDueMinor?: number;
 }
 
 const PAYMENT_METHODS = [
@@ -54,6 +57,9 @@ export function PaymentDialog({
   onCompleteSale,
   isSubmitting,
   isExchange,
+  customer,
+  canSellCredit,
+  customerDueMinor,
 }: PaymentDialogProps) {
   const { strings, locale } = useTranslation();
   const [exchangeRefundMethod, setExchangeRefundMethod] = useState<string>("cash");
@@ -141,6 +147,8 @@ export function PaymentDialog({
       : []),
   ];
 
+  const isCreditAllowed = Boolean(customer && canSellCredit);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isExchangeRefund || isExchangeEven) {
@@ -148,7 +156,11 @@ export function PaymentDialog({
       return;
     }
     const validPayments = payments.filter((p) => p.amountMinor > 0);
-    if (!calculation.isCovered || !calculation.isValid || isSubmitting || validPayments.length === 0) return;
+    if (!isCreditAllowed) {
+      if (!calculation.isCovered || !calculation.isValid || isSubmitting || validPayments.length === 0) return;
+    } else {
+      if (!calculation.isValid || isSubmitting) return;
+    }
     await onCompleteSale(validPayments);
   };
 
@@ -387,7 +399,7 @@ export function PaymentDialog({
             </div>
           )}
 
-          {!calculation.isCovered && calculation.balanceDueMinor > 0 && (
+          {!calculation.isCovered && calculation.balanceDueMinor > 0 && !isCreditAllowed && (
             <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
               <AlertCircle className="h-4 w-4 shrink-0" />
               <span>
@@ -395,6 +407,41 @@ export function PaymentDialog({
                   ? `সম্পূর্ণ পেমেন্ট প্রয়োজন। এখনো বাকি: ৳${(calculation.balanceDueMinor / 100).toFixed(2)}`
                   : `Full payment required. Remaining due: ৳${(calculation.balanceDueMinor / 100).toFixed(2)}`}
               </span>
+            </div>
+          )}
+
+          {!calculation.isCovered && calculation.balanceDueMinor > 0 && isCreditAllowed && (
+            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                  <CreditCard className="h-4 w-4" />
+                  {locale === "bn" ? "ধারে / বাকিতে বিক্রি (Credit Sale)" : "Sale on Credit (Baki)"}
+                </span>
+                <span className="font-bold text-amber-800 dark:text-amber-300 font-mono text-sm">
+                  {formatMoney(calculation.balanceDueMinor)}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground pt-1 border-t border-amber-500/20">
+                <div>
+                  <span>{locale === "bn" ? "পূর্ববর্তী বাকি:" : "Current Due:"} </span>
+                  <span className="font-mono font-semibold text-foreground">{formatMoney(customerDueMinor || 0)}</span>
+                </div>
+                <div className="text-right">
+                  <span>{locale === "bn" ? "ক্রেডিট সীমা:" : "Credit Limit:"} </span>
+                  <span className="font-mono font-semibold text-foreground">{formatMoney(customer?.creditLimitMinor || 0)}</span>
+                </div>
+                <div className="col-span-2 flex justify-between font-medium">
+                  <span>{locale === "bn" ? "এই বিক্রির পর মোট বকেয়া হবে:" : "Total due after this sale:"} </span>
+                  <span className="font-mono font-bold text-amber-700 dark:text-amber-400">
+                    {formatMoney((customerDueMinor || 0) + calculation.balanceDueMinor)}
+                  </span>
+                </div>
+              </div>
+              {(customerDueMinor || 0) + calculation.balanceDueMinor > (customer?.creditLimitMinor || 0) && (
+                <div className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">
+                  ⚠️ {locale === "bn" ? "সতর্কতা: এটি গ্রাহকের অনুমোদিত ক্রেডিট সীমা অতিক্রম করছে (অনুমোদনের প্রয়োজন হতে পারে)" : "Warning: This exceeds the customer's credit limit (override required)"}
+                </div>
+              )}
             </div>
           )}
             </>
@@ -409,14 +456,18 @@ export function PaymentDialog({
           <Button
             onClick={handleSubmit}
             data-testid="confirm-payment-button"
-            disabled={!calculation.isCovered || !calculation.isValid || isSubmitting}
-            className="px-6 h-10 font-semibold"
+            disabled={(!calculation.isCovered && !isCreditAllowed) || !calculation.isValid || isSubmitting}
+            className={`px-6 h-10 font-semibold ${
+              !calculation.isCovered && isCreditAllowed ? "bg-amber-600 hover:bg-amber-700 text-white" : ""
+            }`}
           >
             {isSubmitting ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 <span>{strings.common.loading}</span>
               </>
+            ) : !calculation.isCovered && isCreditAllowed ? (
+              <span>{locale === "bn" ? "বাকি বিক্রয় সম্পন্ন করুন" : "Complete Credit Sale"}</span>
             ) : (
               <span>{strings.pos.completeSale}</span>
             )}

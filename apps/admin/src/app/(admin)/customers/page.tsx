@@ -44,6 +44,8 @@ interface CustomerRecord {
   email?: string | null;
   address?: string | null;
   notes?: string | null;
+  creditLimitMinor?: number;
+  currentDueMinor?: number;
   totalSpentMinor: number;
   totalVisits: number;
   createdAt: string;
@@ -57,6 +59,8 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<string>("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [totalCount, setTotalCount] = useState(0);
@@ -71,6 +75,7 @@ export default function CustomersPage() {
     email: "",
     address: "",
     notes: "",
+    creditLimit: "0",
   });
   const [modalLoading, setModalLoading] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
@@ -82,6 +87,8 @@ export default function CustomersPage() {
       setErrorMessage(null);
       const queryParams = new URLSearchParams();
       if (search) queryParams.set("search", search);
+      if (sortBy) queryParams.set("sortBy", sortBy);
+      if (sortOrder) queryParams.set("sortOrder", sortOrder);
       queryParams.set("page", page.toString());
       queryParams.set("limit", pageSize.toString());
 
@@ -103,7 +110,7 @@ export default function CustomersPage() {
     } finally {
       setLoading(false);
     }
-  }, [apiFetch, search, page, pageSize, strings.common.error]);
+  }, [apiFetch, search, sortBy, sortOrder, page, pageSize, strings.common.error]);
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -114,7 +121,7 @@ export default function CustomersPage() {
 
   const openCreateModal = () => {
     setEditingId(null);
-    setFormData({ name: "", phone: "", email: "", address: "", notes: "" });
+    setFormData({ name: "", phone: "", email: "", address: "", notes: "", creditLimit: "0" });
     setModalError(null);
     setModalSuccess(false);
     setShowModal(true);
@@ -128,6 +135,7 @@ export default function CustomersPage() {
       email: c.email || "",
       address: c.address || "",
       notes: c.notes || "",
+      creditLimit: ((c.creditLimitMinor || 0) / 100).toString(),
     });
     setModalError(null);
     setModalSuccess(false);
@@ -144,6 +152,7 @@ export default function CustomersPage() {
       email: formData.email.trim() || undefined,
       address: formData.address.trim() || undefined,
       notes: formData.notes.trim() || undefined,
+      creditLimitMinor: Math.max(0, Math.round((parseFloat(formData.creditLimit) || 0) * 100)),
     };
 
     if (!editingId) {
@@ -207,8 +216,8 @@ export default function CustomersPage() {
       </div>
 
       {/* Filter / Search Bar */}
-      <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
-        <div className="max-w-md relative">
+      <div className="bg-card border border-border p-4 rounded-xl shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="max-w-md w-full relative">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             value={search}
@@ -219,6 +228,25 @@ export default function CustomersPage() {
             placeholder={strings.customers.searchPlaceholder}
             className="pl-9 h-9 text-xs sm:text-sm"
           />
+        </div>
+
+        <div className="flex items-center gap-2 self-end sm:self-auto">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">{locale === "bn" ? "সাজান:" : "Sort:"}</span>
+          <select
+            value={`${sortBy}-${sortOrder}`}
+            onChange={(e) => {
+              const [sb, so] = e.target.value.split("-") as [string, "asc" | "desc"];
+              setSortBy(sb);
+              setSortOrder(so);
+              setPage(1);
+            }}
+            className="h-9 px-2.5 text-xs rounded-md border border-input bg-background text-foreground"
+          >
+            <option value="createdAt-desc">{locale === "bn" ? "সর্বশেষ যুক্ত" : "Newest"}</option>
+            <option value="name-asc">{locale === "bn" ? "নাম (A-Z)" : "Name (A-Z)"}</option>
+            <option value="dueBalance-desc">{locale === "bn" ? "বাকি বেশি থেকে কম" : "Due (Highest first)"}</option>
+            <option value="dueBalance-asc">{locale === "bn" ? "বাকি কম থেকে বেশি" : "Due (Lowest first)"}</option>
+          </select>
         </div>
       </div>
 
@@ -234,30 +262,32 @@ export default function CustomersPage() {
           <TableHeader>
             <TableRow>
               <TableHead>{strings.customers.name}</TableHead>
-              <TableHead className="w-40">{strings.customers.phone}</TableHead>
-              <TableHead className="w-56">{strings.customers.email}</TableHead>
-              <TableHead className="text-right w-28">{strings.customers.totalVisits}</TableHead>
-              <TableHead className="text-right w-36">{strings.customers.totalSpent}</TableHead>
+              <TableHead className="w-36">{strings.customers.phone}</TableHead>
+              <TableHead className="w-48">{strings.customers.email}</TableHead>
+              <TableHead className="text-right w-24">{strings.customers.totalVisits}</TableHead>
+              <TableHead className="text-right w-32">{strings.customers.totalSpent}</TableHead>
+              <TableHead className="text-right w-36 text-amber-600 dark:text-amber-400 font-bold">{locale === "bn" ? "বকেয়া / বাকি" : "Due Balance"}</TableHead>
               <TableHead className="text-right w-28">{strings.common.actions}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground text-xs sm:text-sm">
+                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground text-xs sm:text-sm">
                   <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-primary" />
                   {strings.common.loading}
                 </TableCell>
               </TableRow>
             ) : customers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground text-xs sm:text-sm">
+                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground text-xs sm:text-sm">
                   {strings.common.noData}
                 </TableCell>
               </TableRow>
             ) : (
               customers.map((c) => {
                 const displayName = c.name === "Walk-in Customer" ? strings.enums.customer.walkIn : c.name;
+                const dueMinor = c.currentDueMinor || 0;
                 return (
                   <TableRow
                     key={c.id}
@@ -278,6 +308,15 @@ export default function CustomersPage() {
                     </TableCell>
                     <TableCell className="text-right font-mono tabular-nums font-semibold text-foreground text-xs sm:text-sm">
                       {formatMoney(c.totalSpentMinor || 0)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums font-bold text-xs sm:text-sm">
+                      {dueMinor > 0 ? (
+                        <span className="text-amber-600 dark:text-amber-400">
+                          {formatMoney(dueMinor)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground font-normal">৳0.00</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
@@ -394,6 +433,25 @@ export default function CustomersPage() {
                 placeholder={locale === "bn" ? "ঠিকানা লিখুন..." : "Address..."}
                 className="h-9 text-sm"
               />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="custCreditLimit" className="text-xs font-semibold">
+                {locale === "bn" ? "ক্রেডিট সীমা (টাকা / ৳)" : "Credit Limit (৳)"}
+              </Label>
+              <Input
+                id="custCreditLimit"
+                type="number"
+                min="0"
+                step="any"
+                value={formData.creditLimit}
+                onChange={(e) => setFormData((f) => ({ ...f, creditLimit: e.target.value }))}
+                placeholder="0"
+                className="h-9 text-sm font-mono"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                {locale === "bn" ? "০ মানে এই গ্রাহক বাকিতে কিনতে পারবেন না" : "0 means no credit allowed"}
+              </p>
             </div>
 
             <div className="space-y-1.5">

@@ -840,7 +840,57 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
      - `apps/api/test/returns-rounding.spec.ts`: Unit test for poisha math.
      - `apps/admin/e2e/returns-flow.spec.ts`: E2E test verifying returns list, detail page, returnable badges, and API-driven return audit history.
      - RLS Catalogue Guard: 100% compliance across all 42 tenant tables with `FORCE ROW LEVEL SECURITY`.
-     - Monorepo full quality check: `npm run lint` (0 errors), `npm run build` (36 static/dynamic routes compiled cleanly), `npm test:cov` (42/42 test files, 230 tests passed, 88.61% statement coverage).
+  - GitHub Actions CI Run: [43920626013](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43920626013) (Commit `b15edd7`) — **Status: completed, Conclusion: success (Green)**.
+
+---
+
+### Milestone C2: Sales on Credit (Due / "Baki") and Collections
+
+- **Start Time:** 2026-11-16 23:45 +06:00
+- **End Time:** 2026-11-17 04:30 +06:00
+- **What Was Built & Fixed:**
+  1. **Prisma Database Schema & Migrations (`apps/api/prisma/migrations/20261116210000_milestone_c2_credit_and_due`):**
+     - `Customer.creditLimitMinor` (BigInt default 0): customer-specific credit ceiling in poisha.
+     - `Sale.dueMinor` (BigInt default 0): remaining unpaid invoice balance.
+     - `CustomerPayment`: records due collections with sequential payment numbers `${branchCode}-PAY-${dateKey}-${seq}`, payment method, shift link, and optional reference.
+     - `CustomerPaymentAllocation`: audit ledger linking payment amounts to specific unpaid sales (`saleId`).
+     - `CustomerPaymentCounter`: atomic document sequence tracking per tenant and branch.
+     - PostgreSQL RLS: applied tenant isolation policies to `customer_payments`, `customer_payment_allocations`, and `customer_payment_counters`, with full `FORCE ROW LEVEL SECURITY`.
+  2. **Shared Math & Schemas (`packages/shared`):**
+     - Added `CUSTOMER_PAYMENT: "customer.payment"` permission and assigned to Owner, Manager, Cashier.
+     - Allowed `CreateSaleSchema.payments` to default to `[]` so zero-down 100% credit sales are fully schema-valid.
+     - Added `CreateCustomerPaymentSchema` and `CustomerStatementQuerySchema`.
+     - `calculateShiftCashTotals`: updated shift math to include customer payment cash collections in expected shift drawer cash and payment method breakdowns.
+     - `calculateShiftCashTotals`: extracted `[due_reduced:X]` metadata from returns so returns that pay off credit only deduct actual cash refunded from drawer cash.
+  3. **Backend Service Engine (`apps/api`):**
+     - `CustomersService`:
+       - `create` & `update`: accepts and updates `creditLimitMinor`.
+       - `getBalance`: calculates `currentDueMinor`, `creditLimitMinor`, and `availableCreditMinor`.
+       - `getStatement`: carries forward opening balance prior to `startDate`, returning running statement balance and closing figures.
+       - `createPayment`: FIFO allocation across unpaid due sales (`dueMinor > 0`), updates `sale.dueMinor`, and creates allocation records.
+       - `findMany`: calculates `currentDueMinor` and supports sorting by `dueBalance`.
+     - `SalesService`:
+       - Checks `customerId` and `sale.credit` permission on sales with `paidMinor < totalMinor`.
+       - Enforces credit limits (`currentDue + dueMinor > creditLimit`), rejecting with 409 `CREDIT_LIMIT_EXCEEDED` (`limitMinor`, `currentDueMinor`, `attemptedDueMinor`) unless user has `sale.credit.override`.
+       - Persists `dueMinor` on `Sale`.
+     - `ReturnsService`:
+       - Automatically reduces unpaid invoice due (`dueReducedMinor = min(refund, dueMinor)`), decrements `sale.dueMinor`, and refunds only net excess cash from drawer.
+     - `ShiftsService`:
+       - Tracks `customerPayments` in shift detail and closing responses.
+     - `ReportsService`:
+       - `getDueReport`: groups unpaid customer balances into ageing buckets (0–30, 31–60, 61–90, >90 days) with customer and invoice breakdown.
+  4. **Admin UI & POS Integration (`apps/admin`):**
+     - `/customers`: added "বকেয়া (Due)" column, sort by due balance, and credit limit configuration in customer modal.
+     - `/customers/[id]`: Customer detail with balance/credit stats cards, statement date range filter, printable statement, and "বাকি আদায়" (Collect Due) payment modal.
+     - `/reports/due`: Due Ageing Report with branch filter, 4 ageing cards, customer breakdown table, and CSV export.
+     - `/dashboard`: added "আজ বাকি দেওয়া" and "আজ বাকি আদায়" stat cards linking to `/reports/due`.
+     - `/pos`: Customer selection modal displays credit limits and current due balances; `PaymentDialog` supports partial/zero cash payments for credit-authorized users with credit warning indicators; `ReceiptView` displays "এই ভাউচারে বাকি (Due on Invoice)" and "গ্রাহকের মোট বকেয়া (Total Customer Due)".
+  5. **Verification & Tests:**
+     - `apps/api/test/credit-and-due.spec.ts`: 11 integration tests covering permission checks, credit limit enforcement, override capability, FIFO allocation, shift cash integration, returns reducing due, statement balance carry-forward, ageing report, and tenant isolation (11/11 passed).
+     - `apps/admin/e2e/credit-due-flow.spec.ts`: 3 Playwright tests verifying POS credit sale with receipt due figures, customer detail ledger & collection modal, and due ageing report (3/3 passed).
+     - Full API test suite: 43 test suites, 241 tests passed (89.12% line coverage).
+     - Local dev database remained 100% clean and untouched.
+
 
 
 

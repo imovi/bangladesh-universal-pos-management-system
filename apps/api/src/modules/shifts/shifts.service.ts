@@ -122,6 +122,7 @@ export class ShiftsService {
       cashMovements: shift.cashMovements,
       sales: shift.sales,
       returns: shift.returns,
+      customerPayments: shift.customerPayments,
     });
     const expectedCashMinor = calc.expectedCashMinor;
     const closingCashMinor = BigInt(dto.closingCashMinor);
@@ -184,6 +185,7 @@ export class ShiftsService {
         include: {
           cashMovements: true,
           returns: true,
+          customerPayments: true,
           sales: {
             where: { status: "completed" },
             include: { payments: true },
@@ -211,6 +213,7 @@ export class ShiftsService {
           cashierUser: { select: { id: true, name: true, email: true } },
           cashMovements: { orderBy: { createdAt: "asc" } },
           returns: true,
+          customerPayments: true,
           sales: {
             where: { status: "completed" },
             include: { payments: true },
@@ -226,6 +229,7 @@ export class ShiftsService {
         cashMovements: shift.cashMovements,
         sales: shift.sales,
         returns: shift.returns,
+        customerPayments: shift.customerPayments,
       });
 
       const paymentMethodTotalsMinor = Object.fromEntries(

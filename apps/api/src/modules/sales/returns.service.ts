@@ -188,6 +188,7 @@ export class ReturnsService {
           cashMovements: true,
           sales: { include: { payments: true } },
           returns: true,
+          customerPayments: true,
         },
       });
       if (!shift || shift.tenantId !== tenantId || shift.status !== "open") {
@@ -341,19 +342,37 @@ export class ReturnsService {
         });
       }
 
+      // 7b. If original sale has due, reduce due first; only what is left after due is cleared is refunded
+      let dueReducedMinor = 0n;
+      let actualCashRefundMinor = totalRefundMinor;
+      const originalSaleDue = sale.dueMinor ? BigInt(sale.dueMinor) : 0n;
+      if (originalSaleDue > 0n) {
+        dueReducedMinor = totalRefundMinor <= originalSaleDue ? totalRefundMinor : originalSaleDue;
+        actualCashRefundMinor = totalRefundMinor - dueReducedMinor;
+
+        // Decrement dueMinor on sale
+        await tx.sale.update({
+          where: { id: sale.id },
+          data: {
+            dueMinor: { decrement: dueReducedMinor },
+          },
+        });
+      }
+
       // 8. Drawer Cash Check
-      if (dto.refundMethod === "cash") {
+      if (dto.refundMethod === "cash" && actualCashRefundMinor > 0n) {
         const shiftCalc = calculateShiftCashTotals({
           openingCashMinor: shift.openingCashMinor,
           cashMovements: shift.cashMovements,
           sales: shift.sales,
           returns: shift.returns,
+          customerPayments: shift.customerPayments,
         });
 
-        if (totalRefundMinor > shiftCalc.expectedCashMinor) {
+        if (actualCashRefundMinor > shiftCalc.expectedCashMinor) {
           throw new ConflictException({
             code: "DRAWER_CASH_EXCEEDED",
-            message: `Cash refund of ${totalRefundMinor} poisha exceeds current drawer cash of ${shiftCalc.expectedCashMinor} poisha`,
+            message: `Cash refund of ${actualCashRefundMinor} poisha exceeds current drawer cash of ${shiftCalc.expectedCashMinor} poisha`,
           });
         }
       }
@@ -365,6 +384,10 @@ export class ReturnsService {
         tx,
         timeZone,
       );
+
+      const finalReason = dueReducedMinor > 0n
+        ? (dto.reason ? `${dto.reason} [due_reduced:${dueReducedMinor}]` : `[due_reduced:${dueReducedMinor}]`)
+        : dto.reason;
 
       // 10. Record SaleReturn and Items
       const saleReturn = await tx.saleReturn.create({
@@ -380,7 +403,7 @@ export class ReturnsService {
           refundMethod: dto.refundMethod,
           totalRefundMinor,
           taxRefundMinor,
-          reason: dto.reason,
+          reason: finalReason,
           overrideReason,
           overrideByUserId,
           requestPayloadHash: payloadHash,
@@ -484,6 +507,7 @@ export class ReturnsService {
           cashMovements: true,
           sales: { include: { payments: true } },
           returns: true,
+          customerPayments: true,
         },
       });
       if (!shift || shift.tenantId !== tenantId || shift.status !== "open") {
@@ -729,6 +753,7 @@ export class ReturnsService {
             cashMovements: shift.cashMovements,
             sales: shift.sales,
             returns: shift.returns,
+            customerPayments: shift.customerPayments,
           });
           if (refundDifferenceMinor > shiftCalc.expectedCashMinor) {
             throw new ConflictException({

@@ -10,6 +10,33 @@ export interface ReportDateFilter {
   endDate?: string;
 }
 
+export interface CustomerBucket {
+  customerId: string;
+  customerName: string;
+  customerPhone: string;
+  branchName: string;
+  totalDueMinor: number;
+  bucket0to30Minor: number;
+  bucket31to60Minor: number;
+  bucket61to90Minor: number;
+  bucketOver90Minor: number;
+  oldestInvoiceDate: string;
+  unpaidInvoicesCount: number;
+}
+
+export interface DueReportResponse {
+  summary: {
+    totalDueMinor: number;
+    bucket0to30Minor: number;
+    bucket31to60Minor: number;
+    bucket61to90Minor: number;
+    bucketOver90Minor: number;
+    customerCount: number;
+    invoiceCount: number;
+  };
+  customers: CustomerBucket[];
+}
+
 @Injectable()
 export class ReportsService {
   constructor(
@@ -50,7 +77,19 @@ export class ReportsService {
   async getSalesSummary(tenantId: string, filter: ReportDateFilter) {
     const tz = await this.getTimeZone(tenantId);
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
-      const [sales, returns] = await Promise.all([
+      const dateRange = (filter.startDate || filter.endDate)
+        ? parseDateFilterRange(filter.startDate, filter.endDate, tz)
+        : null;
+
+      const paymentWhere: Prisma.CustomerPaymentWhereInput = { tenantId };
+      if (filter.branchId) paymentWhere.branchId = filter.branchId;
+      if (dateRange) {
+        paymentWhere.createdAt = {};
+        if (dateRange.gte) paymentWhere.createdAt.gte = dateRange.gte;
+        if (dateRange.lte) paymentWhere.createdAt.lte = dateRange.lte;
+      }
+
+      const [sales, returns, customerPayments] = await Promise.all([
         tx.sale.findMany({
           where: { tenantId, ...this.buildDateFilter(filter, tz) },
           include: { payments: true },
@@ -58,12 +97,16 @@ export class ReportsService {
         tx.saleReturn.findMany({
           where: { tenantId, ...this.buildReturnDateFilter(filter, tz) },
         }),
+        tx.customerPayment.findMany({
+          where: paymentWhere,
+        }),
       ]);
 
       let totalGrossMinor = 0n;
       let totalDiscountMinor = 0n;
       let totalTaxMinor = 0n;
       let totalNetMinor = 0n;
+      let totalCreditGivenMinor = 0n;
       const paymentsByMethod: Record<string, number> = {};
 
       for (const s of sales) {
@@ -71,6 +114,9 @@ export class ReportsService {
         totalDiscountMinor += s.discountMinor;
         totalTaxMinor += s.taxMinor;
         totalNetMinor += s.totalMinor;
+        if (s.dueMinor && s.dueMinor > 0n) {
+          totalCreditGivenMinor += s.dueMinor;
+        }
         for (const p of s.payments) {
           paymentsByMethod[p.paymentMethod] = (paymentsByMethod[p.paymentMethod] || 0) + Number(p.amountMinor);
         }
@@ -84,6 +130,11 @@ export class ReportsService {
         }
       }
 
+      let totalCreditCollectedMinor = 0n;
+      for (const cp of customerPayments) {
+        totalCreditCollectedMinor += cp.amountMinor;
+      }
+
       return {
         salesCount: sales.length,
         returnsCount: returns.length,
@@ -92,6 +143,8 @@ export class ReportsService {
         totalTaxMinor: Number(totalTaxMinor),
         totalNetMinor: Number(totalNetMinor - totalRefundMinor),
         totalRefundMinor: Number(totalRefundMinor),
+        totalCreditGivenMinor: Number(totalCreditGivenMinor),
+        totalCreditCollectedMinor: Number(totalCreditCollectedMinor),
         paymentsByMethod,
       };
     });
@@ -326,6 +379,7 @@ export class ReportsService {
           cashierUser: { select: { id: true, name: true } },
           cashMovements: true,
           returns: true,
+          customerPayments: true,
           sales: { where: { status: "completed" }, include: { payments: true } },
         },
       });
@@ -336,11 +390,13 @@ export class ReportsService {
         cashMovements: shift.cashMovements,
         sales: shift.sales,
         returns: shift.returns,
+        customerPayments: shift.customerPayments,
       });
 
       const transactions = [
         ...shift.sales.map((s) => ({ type: "sale", id: s.id, inv: s.invoiceNumber, totalMinor: Number(s.totalMinor), at: s.createdAt })),
         ...shift.returns.map((r) => ({ type: "return", id: r.id, inv: r.returnNumber, totalMinor: -Number(r.totalRefundMinor), at: r.createdAt })),
+        ...(shift.customerPayments || []).map((cp: any) => ({ type: "payment", id: cp.id, inv: cp.paymentNumber, totalMinor: Number(cp.amountMinor), at: cp.createdAt })),
         ...shift.cashMovements.map((m) => ({ type: m.type, id: m.id, amountMinor: Number(m.amountMinor), reason: m.reason, at: m.createdAt })),
       ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 
@@ -367,6 +423,100 @@ export class ReportsService {
         cardSalesMinor: Number(calc.cardSalesMinor),
         totalSalesCount: calc.completedSalesCount,
         transactions,
+      };
+    });
+  }
+
+  async getDueReport(tenantId: string, filter?: { branchId?: string }): Promise<DueReportResponse> {
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const where: Prisma.SaleWhereInput = {
+        tenantId,
+        status: "completed",
+        dueMinor: { gt: 0n },
+      };
+      if (filter?.branchId) {
+        where.branchId = filter.branchId;
+      }
+
+      const sales = await tx.sale.findMany({
+        where,
+        include: {
+          customer: true,
+          branch: { select: { id: true, name: true, code: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+
+      const now = new Date();
+      let totalDueMinor = 0n;
+      let bucket0to30Minor = 0n;
+      let bucket31to60Minor = 0n;
+      let bucket61to90Minor = 0n;
+      let bucketOver90Minor = 0n;
+
+      const customerMap = new Map<string, CustomerBucket>();
+
+      for (const s of sales) {
+        const due = BigInt(s.dueMinor);
+        totalDueMinor += due;
+
+        const ageDays = Math.floor((now.getTime() - s.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+        let b0 = 0n;
+        let b31 = 0n;
+        let b61 = 0n;
+        let bover = 0n;
+
+        if (ageDays <= 30) {
+          bucket0to30Minor += due;
+          b0 = due;
+        } else if (ageDays <= 60) {
+          bucket31to60Minor += due;
+          b31 = due;
+        } else if (ageDays <= 90) {
+          bucket61to90Minor += due;
+          b61 = due;
+        } else {
+          bucketOver90Minor += due;
+          bover = due;
+        }
+
+        const cId = s.customerId || "walk-in";
+        const cName = s.customer?.name || "Walk-in Customer";
+        const cPhone = s.customer?.phone || "-";
+        const existing = customerMap.get(cId) || {
+          customerId: cId,
+          customerName: cName,
+          customerPhone: cPhone,
+          branchName: s.branch.name,
+          totalDueMinor: 0,
+          bucket0to30Minor: 0,
+          bucket31to60Minor: 0,
+          bucket61to90Minor: 0,
+          bucketOver90Minor: 0,
+          oldestInvoiceDate: s.createdAt.toISOString(),
+          unpaidInvoicesCount: 0,
+        };
+
+        existing.totalDueMinor += Number(due);
+        existing.bucket0to30Minor += Number(b0);
+        existing.bucket31to60Minor += Number(b31);
+        existing.bucket61to90Minor += Number(b61);
+        existing.bucketOver90Minor += Number(bover);
+        existing.unpaidInvoicesCount += 1;
+        customerMap.set(cId, existing);
+      }
+
+      return {
+        summary: {
+          totalDueMinor: Number(totalDueMinor),
+          bucket0to30Minor: Number(bucket0to30Minor),
+          bucket31to60Minor: Number(bucket31to60Minor),
+          bucket61to90Minor: Number(bucket61to90Minor),
+          bucketOver90Minor: Number(bucketOver90Minor),
+          customerCount: customerMap.size,
+          invoiceCount: sales.length,
+        },
+        customers: Array.from(customerMap.values()),
       };
     });
   }

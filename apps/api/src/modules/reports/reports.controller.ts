@@ -67,4 +67,10 @@ export class ReportsController {
   async getShiftReport(@Request() req: any, @Param("id") id: string) {
     return this.reportsService.getShiftReport(req.user.tenantId, id);
   }
+
+  @Get("due")
+  @RequirePermission(PERMISSIONS.REPORT_SALES)
+  async getDueReport(@Request() req: any, @Query("branchId") branchId?: string) {
+    return this.reportsService.getDueReport(req.user.tenantId, { branchId });
+  }
 }

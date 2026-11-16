@@ -30,6 +30,10 @@ test.describe("Part A Item 6: Shared AppShell Layout across all admin routes", (
     "/reports/stock",
     "/reports/profit",
     "/settings/shop",
+    "/settings/branches",
+    "/settings/roles",
+    "/settings/users",
+    "/settings/audit",
   ];
 
   for (const route of routes) {

@@ -572,5 +572,61 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - `npm --workspace=@universal-pos/admin run build`: Clean production build with 31 static/dynamic routes.
   - Playwright E2E: All 39 tests passed (1.1m) on `universal_pos_e2e`.
   - Development database `universal_pos` verified 100% clean and untouched.
+  - GitHub Actions CI Run: 43824646324 (Commit `f757148`) — **Status: completed, Conclusion: success (Green)**.
+
+---
+
+## Milestone A8: Settings & Staff Management (Shop Policies, Branches, Roles with Discount Caps, Users, and Audit Logs)
+
+- **Start Time:** 2026-11-16 13:20 +06:00
+- **End Time:** 2026-11-16 14:15 +06:00
+- **What Was Built:**
+  1. **Shop Policies (`/settings/shop`):**
+     - General shop settings form managing shop name, IANA timezone selector (`Asia/Dhaka`, `UTC`), currency (read-only with badge explaining currency cannot be changed after sales exist), VAT policy toggle (prices include tax), negative stock policy switch with plain-sentence explanation, and receipt header/footer customizable texts.
+     - Connected directly to `GET /settings` and `PATCH /settings` with validation feedback, loading spinners, and save confirmation alerts.
+     - Secured with `<PermissionGate permission="tenant.read">`.
+  2. **Branch Management (`/settings/branches`):**
+     - Full branch management interface displaying active and inactive branch cards and tabular summary (name, code, phone, address, status badges).
+     - Branch creation modal with client and server validation (`name`, `code`, `phone`, `address`).
+     - Branch edit modal with active toggle switch.
+     - Secured with `<PermissionGate permission="branch.read">`.
+  3. **Role Management (`/settings/roles`):**
+     - Role listing with clear visual distinction for system roles (`Owner`, `Manager`, `Cashier`) vs custom roles.
+     - Mandatory maximum discount percentage (0..100%) enforced on role creation and editing.
+     - System roles protected from name changes and deletion.
+     - Permission checkboxes grouped by functional domain (Catalog, Inventory, Purchasing, Sales, Shifts, Branches, Roles, Users, Tenants, Reports, Audit) with bilingual labels (Bangla and English).
+     - Secured with `<PermissionGate permission="role.read">`.
+  4. **Staff & User Management (`/settings/users`):**
+     - User directory table showing name, email, phone, assigned roles, branch assignments, status badge, and creation timestamp.
+     - Search by name/email and filter by role.
+     - Create user dialog with name, email, phone, password, role checkboxes, and branch assignments.
+     - Edit user dialog with self-deactivation guard (users cannot deactivate their own active account).
+     - Secured with `<PermissionGate permission="user.read">`.
+  5. **Audit Log Viewer (`/settings/audit`):**
+     - Audit log activity stream showing timestamp, actor email/ID, action tag, affected entity type, entity ID, and client IP address.
+     - Filter by action and entity type.
+     - Detail modal inspecting before-and-after JSON snapshots side-by-side with formatted diff views.
+     - Secured with `<PermissionGate permission="audit.read">`.
+  6. **I18n Localization:**
+     - Added comprehensive bilingual translations for settings in `apps/admin/src/i18n/bn.ts` and `en.ts` with 100% key parity verified by unit tests.
+  7. **Automated Testing & End-to-End Verification:**
+     - Added `apps/admin/e2e/settings-flow.spec.ts` testing the complete lifecycle:
+       - Updating shop settings and receipt header/footer texts.
+       - Creating a new branch (`Uttara Hub`).
+       - Creating a new custom role with an explicit 5% discount limit.
+       - Creating a new staff user assigned to that 5% limited role.
+       - Signing in as the new staff user, verifying direct redirect to `/pos`, confirming the 5% cashier discount limit is active, and confirming restricted admin pages (`/settings/shop`, `/purchasing/orders`) are blocked with Access Denied.
+       - Signing back in as Owner and inspecting the audit log viewer modal with before/after state diffs.
+- **Decisions Made & Why:**
+  - Added `<PermissionGate permission="purchase.read">` to `/purchasing/orders` to ensure consistent access control behavior across both settings and purchasing modules for restricted users.
+  - Form action button on shop settings uses an explicit `type="button"` trigger with `onClick` handler to guarantee clean form submissions across all browsers without conflicting with nested card components.
+- **Dependencies Added:** None.
+- **Verification & CI Run Result:**
+  - `npm --workspace=@universal-pos/admin test`: 6 test files, 30 passed.
+  - `npm --workspace=@universal-pos/api test`: 39 test files, 210 passed.
+  - `npm --workspace=@universal-pos/admin run lint`: 0 warnings, 0 errors across 79 files.
+  - `npm --workspace=@universal-pos/admin run build`: Clean production build with 35 static/dynamic routes.
+  - Playwright E2E: All 44 tests passed (1.2m) against `universal_pos_e2e`.
+
 
 

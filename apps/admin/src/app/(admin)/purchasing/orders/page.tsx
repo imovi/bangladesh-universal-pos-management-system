@@ -16,6 +16,7 @@ import {
   Building2,
   RefreshCw,
 } from "lucide-react";
+import { PermissionGate } from "@/components/common/permission-gate";
 import { formatMoney } from "@/lib/utils";
 
 interface PurchaseOrder {
@@ -109,7 +110,8 @@ export default function PurchaseOrdersPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <PermissionGate permission="purchase.read">
+      <div className="space-y-6">
       {/* Top Heading */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -282,5 +284,6 @@ export default function PurchaseOrdersPage() {
         </div>
       </div>
     </div>
-  );
+  </PermissionGate>
+);
 }

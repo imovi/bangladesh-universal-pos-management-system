@@ -1042,7 +1042,10 @@ export default function PosPage() {
             <span className="text-xs font-semibold text-foreground truncate max-w-[130px]">
               {user.name}
             </span>
-            <span className="text-[10px] text-muted-foreground font-mono">
+            <span
+              data-testid="cashier-discount-limit"
+              className="text-[10px] text-muted-foreground font-mono"
+            >
               {maxDiscountPercent !== null
                 ? `${strings.pos.discountLimit}: ${maxDiscountPercent}%`
                 : `${strings.pos.discountLimit}: ∞`}

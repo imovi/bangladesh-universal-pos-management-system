@@ -495,4 +495,82 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - Vitest API: 38 test suites, 208 passed.
   - Playwright E2E: 32 tests passed (46.8s) against clean `universal_pos_e2e`.
   - Development database (`universal_pos`) verified 100% clean and untouched.
+  - GitHub Actions CI Run: 43810068423 (Commit `198eb83`) — **Status: completed, Conclusion: success (Green)**.
+
+---
+
+## Part C: POS Selling Screen & Register Lifecycle (`/pos`)
+
+- **Start Time:** 2026-11-16 11:30:00 +06:00
+- **End Time:** 2026-11-16 13:30:00 +06:00
+- **What Was Built:**
+  1. **Full POS Selling Screen Layout (`/pos`):**
+     - Fullscreen counter view (`apps/admin/src/app/pos/page.tsx` & `layout.tsx`) replacing traditional admin sidebars.
+     - Header bar with shop branding, active branch, active register selector, shift status badge ("শিফট চলমান" / "শিফট বন্ধ"), cashier identity, cashier discount limit indicator, hold cart drawer button, shortcuts guide, dark/light theme switch, language toggle, and back-to-office navigation for authorized roles.
+     - Counter-only Cashier login redirection: cashier accounts logging in at `/login` are automatically directed straight to `/pos`.
+  2. **Register & Shift Management Lifecycle:**
+     - Shift enforcement: selling actions (scanning, adding items, checking out) are disabled until a shift is opened.
+     - Open Shift Dialog (`apps/admin/src/components/pos/shift-dialogs.tsx`): opening float input in BDT with autofocus, submitting to `POST /shifts/open`.
+     - Shift In Use Alert: warns operator if a register is already held open by another user.
+     - Cash Movements Dialog: Cash In and Cash Out with minimum 3-character reason validation, updating expected shift cash in real-time.
+     - Close Shift Dialog: Bangladesh currency denomination counter (৳1000, ৳500, ৳200, ৳100, ৳50, ৳20, ৳10, ৳5, ৳2, ৳1), expected cash vs counted cash calculation, over/short difference display, notes, and shift summary confirmation with print action.
+     - Shift Sales Breakdown Modal: view current shift invoices, cash/non-cash breakdown, and invoice reprint/void shortcuts.
+  3. **Product Search & Variant Matrix Selection:**
+     - Search and barcode input with autofocus, F2 shortcut, and 200ms debounce.
+     - Category filter pills ("সকল", "Shirts", "Polos & Tees", "Trousers", etc.).
+     - Product catalog card grid displaying price, variant count, and stock count.
+     - Variant Picker Modal (`apps/admin/src/components/pos/variant-picker-modal.tsx`): 2D size × colour combination matrix with stock badges, individual variant SKU and price, and quick-add actions.
+  4. **Cart & Financial Calculation Engine:**
+     - `apps/admin/src/lib/pos/cart-calculations.ts`: standalone client calculation engine verifying line net, VAT amounts, bill discount distribution, rounding, and cash change.
+     - Line item quantity increment/decrement, manual quantity edit, and item deletion.
+     - Line discount (% or fixed amount) and whole-cart bill discount (% or fixed amount).
+     - Cashier Discount Limit: strictly caps percentage and fixed discounts against `user.maxDiscountPercent`. An alert banner is displayed when a cashier is restricted (e.g. 5%), preventing checkout if the limit is exceeded.
+  5. **Split Payment Engine & Idempotent Checkout:**
+     - Payment Dialog (`apps/admin/src/components/pos/payment-dialog.tsx`): split tender supporting Cash, bKash, Nagad, Rocket, Card, and Bank Transfer simultaneously.
+     - Live balance remaining indicator and auto-calculated cash change for cash overpayment. Non-cash payment methods cannot exceed the remaining balance.
+     - Quick cash buttons (+৳500, +৳1000, Exact).
+     - Resilient checkout: generates client UUID v7 sale ID passed in the payload and in the `Idempotency-Key` header to safely allow retries without duplicate billing.
+  6. **Thermal Receipt & Customer Management:**
+     - Thermal Receipt View (`apps/admin/src/components/pos/receipt-view.tsx`): formatted 58mm/80mm receipt with store info, invoice number, date/time, itemized table with VAT rates, payment breakdown, change given, cashier name, customer name/phone, barcode, and Bangla footer note. Supports instant print dialog (`window.print()`).
+     - Customer Selection Dialog (`apps/admin/src/components/pos/customer-dialog.tsx`): search customer by phone or name, select customer, or create a new customer inline.
+     - Hold Cart / Resume: store pending customer carts in local storage and resume them with one click (F8).
+  7. **Keyboard Shortcuts:**
+     - F2: Focus barcode/search input.
+     - F4: Open payment checkout.
+     - F8: Hold / Resume cart drawer.
+     - F9: Open new customer modal.
+     - Esc: Close active modal.
+  8. **Backend Endpoints & Profile Enhancements:**
+     - Implemented `GET /settings/pos` returning cashier POS settings (default branch, register configuration, tax rates).
+     - Enhanced auth profile (`GET /auth/me` and login response) to return `maxDiscountPercent` directly from role permissions.
+  9. **Testing & Automated Verification:**
+     - Vitest POS Unit Tests (`apps/admin/test/pos-logic.spec.ts`): 11 tests verifying line item calculations, percentage & fixed line discounts, bill discounts, VAT rate calculations, split payment remaining balances, and cash change calculations.
+     - Playwright POS E2E Suite (`apps/admin/e2e/pos-flow.spec.ts`):
+       - Flow 1: Counter-only cashier login redirect to `/pos`, discount limit alert verification, and role restriction enforcement.
+       - Flow 2: Complete sale lifecycle: open shift with ৳2,000 float -> barcode search -> variant matrix selection -> apply line discount -> open payment modal -> split tender (৳1,000 cash + bKash) -> submit sale -> verify thermal receipt -> trigger new sale -> record ৳500 cash out -> close shift with denomination count -> verify shift close summary.
+       - Flow 3: Multi-device & theme screenshot capture.
+       - Flow 4: Automated Axe WCAG 2.2 AA accessibility audit on `/pos` and `payment-dialog` with zero violations.
+  10. **Screenshots Captured under `docs/screenshots/pos/`:**
+     - `desktop-pos-ready.png` (1366×768 desktop POS ready state).
+     - `variant-picker-modal.png` (Size × Colour variant selector).
+     - `payment-dialog.png` (Split payment tender with cash & bKash).
+     - `thermal-receipt.png` (80mm thermal receipt print preview).
+     - `close-shift-dialog.png` (Denomination counter and closing cash).
+     - `desktop-1366-bn-light.png` (Bangla light theme).
+     - `desktop-1366-en-light.png` (English light theme).
+     - `tablet-1024-en-light.png` (1024×768 tablet layout).
+     - `desktop-1366-dark.png` (Dark theme counter view).
+- **Decisions Made & Why:**
+  - Implemented semantic landmarks (`<header>`, `<main>`, `<aside aria-label="...">`, and `<h1>` store heading) on `/pos` to achieve 100% WCAG 2.2 AA Axe automated audit compliance.
+  - Unwrapped API responses defensively to support both flat arrays (`data.data`) and paginated payloads (`data.data.items`) from NestJS interceptors.
+  - Client-side UUID v7 ID generated using timestamp and cryptographic random bytes to ensure deterministic idempotency keys across retry attempts.
+- **Dependencies Added:** None (all components built using existing project tools: Lucide React, Radix UI, Tailwind, Vitest, Playwright).
+- **Verification & CI Run Result:**
+  - `npm --workspace=@universal-pos/admin test`: 6 test files, 30 passed.
+  - `npm --workspace=@universal-pos/api test`: 39 test files, 210 passed.
+  - `npm --workspace=@universal-pos/admin run lint`: 0 warnings, 0 errors across 75 files.
+  - `npm --workspace=@universal-pos/admin run build`: Clean production build with 31 static/dynamic routes.
+  - Playwright E2E: All 39 tests passed (1.1m) on `universal_pos_e2e`.
+  - Development database `universal_pos` verified 100% clean and untouched.
+
 

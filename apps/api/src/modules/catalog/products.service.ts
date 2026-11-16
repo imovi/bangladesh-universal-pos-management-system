@@ -299,6 +299,11 @@ export class ProductsService {
         : "createdAt";
       const sortOrder: Prisma.SortOrder = query.sortOrder === "asc" ? "asc" : "desc";
 
+      const validBranchId =
+        query.branchId && query.branchId !== "undefined" && query.branchId.trim().length > 0
+          ? query.branchId
+          : undefined;
+
       const [items, total] = await Promise.all([
         tx.product.findMany({
           where,
@@ -311,7 +316,7 @@ export class ProductsService {
               include: {
                 optionValues: { include: { optionValue: true } },
                 barcodes: true,
-                stockLevels: query.branchId ? { where: { branchId: query.branchId } } : true,
+                stockLevels: validBranchId ? { where: { branchId: validBranchId } } : true,
               },
             },
           },

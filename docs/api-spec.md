@@ -61,6 +61,7 @@ All responses strictly follow the standardized envelope:
 - `POST /api/v1/auth/logout`: Revokes refresh token.
 - `GET /api/v1/auth/me`: Retrieves current authenticated session and permissions.
 - `GET /api/v1/settings`: Retrieves tenant name and settings (timezone, currency, prices_include_tax, allow_negative_stock, receipt_header, receipt_footer). Accessible by Owner and Manager (`tenant.read`).
+- `GET /api/v1/settings/pos`: Retrieves counter-safe shop settings for POS selling (`shopName`, `currency`, `timezone`, `pricesIncludeTax`, `allowNegativeStock`, `receiptHeader`, `receiptFooter`). Accessible by counter cashiers (`sale.create`).
 - `PATCH /api/v1/settings`: Updates tenant name and settings. Requires Owner (`tenant.update`). Validated with strict schema (unknown keys rejected). `timezone` must be valid IANA identifier. Currency cannot be changed once tenant has any sale (returns HTTP 409 Conflict).
 
 ### 3.2 Branches, Users & Roles

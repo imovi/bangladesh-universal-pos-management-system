@@ -206,12 +206,42 @@ export class ShiftsService {
           branch: true,
           cashierUser: { select: { id: true, name: true, email: true } },
           cashMovements: { orderBy: { createdAt: "asc" } },
+          sales: {
+            where: { status: "completed" },
+            include: { payments: true },
+          },
         },
       });
       if (!shift || shift.tenantId !== tenantId) {
         throw new NotFoundException("Shift not found");
       }
-      return shift;
+
+      const calc = calculateShiftCashTotals({
+        openingCashMinor: shift.openingCashMinor,
+        cashMovements: shift.cashMovements,
+        sales: shift.sales,
+      });
+
+      const paymentMethodTotalsMinor = Object.fromEntries(
+        Object.entries(calc.paymentMethodTotalsMinor).map(([k, v]) => [k, Number(v)]),
+      );
+
+      return {
+        ...shift,
+        summary: {
+          expectedCashMinor: Number(calc.expectedCashMinor),
+          cashPaymentsMinor: Number(calc.cashPaymentsMinor),
+          changeGivenMinor: Number(calc.changeGivenMinor),
+          netCashSalesMinor: Number(calc.netCashSalesMinor),
+          cashInMinor: Number(calc.cashInMinor),
+          cashOutMinor: Number(calc.cashOutMinor),
+          completedSalesCount: calc.completedSalesCount,
+          paymentMethodTotalsMinor,
+          cardSalesMinor: Number(calc.cardSalesMinor),
+          bkashSalesMinor: Number(calc.bkashSalesMinor),
+          otherSalesMinor: Number(calc.otherSalesMinor),
+        },
+      };
     });
   }
 

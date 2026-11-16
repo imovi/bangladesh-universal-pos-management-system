@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { useTranslation } from "@/i18n/context";
 import { useTheme } from "next-themes";
@@ -14,10 +15,11 @@ import {
   Building2,
   LogOut,
   ChevronDown,
+  Store,
 } from "lucide-react";
 
 export function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
-  const { user, currentBranch, setCurrentBranch, logout } = useAuth();
+  const { user, currentBranch, setCurrentBranch, logout, hasPermission } = useAuth();
   const { locale, setLocale, strings } = useTranslation();
   const { theme, setTheme } = useTheme();
 
@@ -105,8 +107,19 @@ export function Header({ onOpenMobile }: { onOpenMobile: () => void }) {
         </div>
       </div>
 
-      {/* Right Controls: Language, Theme, User Menu */}
+      {/* Right Controls: Start selling, Language, Theme, User Menu */}
       <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+        {hasPermission("sale.create") && (
+          <Link
+            href="/pos"
+            data-testid="header-pos-link"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors shadow-sm mr-1"
+          >
+            <Store className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{locale === "bn" ? "বিক্রি শুরু করুন" : "Start selling"}</span>
+          </Link>
+        )}
+
         {/* Language Switcher */}
         <Button
           data-testid="language-toggle"

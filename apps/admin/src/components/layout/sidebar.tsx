@@ -28,7 +28,7 @@ interface NavItem {
 export function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
   const pathname = usePathname();
   const { hasPermission, user } = useAuth();
-  const { strings } = useTranslation();
+  const { strings, locale } = useTranslation();
 
   const navItems: NavItem[] = [
     {
@@ -132,6 +132,20 @@ export function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
 
       {/* Navigation List */}
       <nav className="flex-1 overflow-y-auto p-4 space-y-1.5" aria-label="Main Navigation">
+        {hasPermission("sale.create") && (
+          <div className="mb-3">
+            <Link
+              href="/pos"
+              data-testid="sidebar-pos-link"
+              onClick={onCloseMobile}
+              className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-lg bg-primary text-primary-foreground font-semibold text-sm shadow hover:bg-primary/90 transition-colors"
+            >
+              <Store className="h-4 w-4" />
+              <span>{locale === "bn" ? "বিক্রি শুরু করুন" : "Start selling"}</span>
+            </Link>
+          </div>
+        )}
+
         {filteredNav.map((item) => {
           const Icon = item.icon;
           const isActive =

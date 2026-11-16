@@ -88,7 +88,7 @@ test.describe("Milestone A7: Dashboard & Reports Flow", () => {
     await page.fill("#email", "cashier@artisan.com");
     await page.fill("#password", "Password123!");
     await page.click('button[type="submit"]');
-    await page.waitForURL("**/dashboard", { timeout: 15000 });
+    await page.waitForURL(/\/(pos|dashboard)/, { timeout: 15000 });
 
     // 3. Attempt to access /reports/profit directly
     await page.goto("/reports/profit");

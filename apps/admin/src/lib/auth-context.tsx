@@ -22,6 +22,7 @@ export interface AuthUser {
   permissions: string[];
   isOwner: boolean;
   branches: BranchInfo[];
+  maxDiscountPercent?: number | null;
 }
 
 interface AuthContextValue {
@@ -124,6 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           permissions: u.permissions || [],
           isOwner: u.isOwner ?? false,
           branches: u.branches || [],
+          maxDiscountPercent: u.maxDiscountPercent !== undefined ? u.maxDiscountPercent : (u.isOwner ? null : 0),
         };
         setUser(profile);
 

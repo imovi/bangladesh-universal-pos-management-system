@@ -137,6 +137,13 @@ export class AuthService {
         },
       });
 
+      const maxDiscountPercent = isOwner
+        ? null
+        : user.userRoles.reduce(
+            (max, ur) => Math.max(max, ur.role.maxDiscountPercent ?? 0),
+            0,
+          );
+
       return {
         accessToken,
         refreshToken: rawRefreshToken,
@@ -150,6 +157,7 @@ export class AuthService {
           roles: roleNames,
           permissions,
           isOwner,
+          maxDiscountPercent,
         },
       };
     });
@@ -333,6 +341,13 @@ export class AuthService {
         });
       }
 
+      const maxDiscountPercent = isOwner
+        ? null
+        : user.userRoles.reduce(
+            (max, ur) => Math.max(max, ur.role.maxDiscountPercent ?? 0),
+            0,
+          );
+
       return {
         id: user.id,
         name: user.name,
@@ -349,6 +364,7 @@ export class AuthService {
           code: ub.branch.code,
         })),
         isOwner,
+        maxDiscountPercent,
       };
     });
   }

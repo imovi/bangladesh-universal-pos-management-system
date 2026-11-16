@@ -188,7 +188,11 @@ test.describe("Milestone A2: Sign-in, Session, and App Shell E2E", () => {
     await page.fill("#password", "Password123!");
     await page.click('button[type="submit"]');
 
-    await page.waitForURL("**/dashboard", { timeout: 15000 });
+    await page.waitForURL(/\/(pos|dashboard)/, { timeout: 15000 });
+    if (page.url().includes("/pos")) {
+      await page.goto("/dashboard");
+      await page.waitForURL("**/dashboard", { timeout: 15000 });
+    }
 
     // Cashier should see Sales
     const nav = page.locator('nav[aria-label="Main Navigation"]');

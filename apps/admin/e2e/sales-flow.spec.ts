@@ -118,7 +118,7 @@ test.describe("Milestone A6: Sales, Customers, Registers & Shifts Flow", () => {
     await page.fill("#password", "Password123!");
     await page.click('button[type="submit"]');
 
-    await page.waitForURL("**/dashboard", { timeout: 15000 });
+    await page.waitForURL(/\/(pos|dashboard)/, { timeout: 15000 });
 
     // 2. Navigate directly to the sale detail page
     await page.goto(`/sales/${saleId}`);
@@ -141,7 +141,7 @@ test.describe("Milestone A6: Sales, Customers, Registers & Shifts Flow", () => {
     await page.fill("#password", "Password123!");
     await page.click('button[type="submit"]');
 
-    await page.waitForURL("**/dashboard", { timeout: 15000 });
+    await page.waitForURL(/\/(pos|dashboard)/, { timeout: 15000 });
 
     // 2. Go to Sales list
     await page.goto("/sales");

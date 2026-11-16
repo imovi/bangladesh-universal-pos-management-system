@@ -25,12 +25,27 @@ const LoginSchema = z.object({
 type LoginFormValues = z.infer<typeof LoginSchema>;
 
 function LoginForm() {
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, user } = useAuth();
   const { locale, setLocale, strings } = useTranslation();
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const searchParams = useSearchParams();
   const from = searchParams.get("from") || "/dashboard";
+
+  const getTargetUrl = (targetUser: any, fallback: string) => {
+    if (fallback && fallback !== "/dashboard") return fallback;
+    if (!targetUser) return fallback;
+    const hasAdminPerms =
+      targetUser.isOwner ||
+      targetUser.permissions?.includes("*") ||
+      targetUser.permissions?.some((p: string) =>
+        ["report.sales", "report.profit", "tenant.read", "purchase.read", "role.read", "user.read"].includes(p)
+      );
+    if (!hasAdminPerms && targetUser.permissions?.includes("sale.create")) {
+      return "/pos";
+    }
+    return fallback;
+  };
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -59,9 +74,9 @@ function LoginForm() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      router.push(from);
+      router.push(getTargetUrl(user, from));
     }
-  }, [isAuthenticated, router, from]);
+  }, [isAuthenticated, user, router, from]);
 
   const onSubmit = async (values: LoginFormValues) => {
     setIsSubmitting(true);
@@ -88,7 +103,7 @@ function LoginForm() {
         setErrorMessage(strings.auth.invalidCredentials);
       }
     } else {
-      router.push(from);
+      router.push(getTargetUrl(user, from));
     }
   };
 

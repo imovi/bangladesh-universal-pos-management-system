@@ -1,9 +1,13 @@
 import { test } from "@playwright/test";
 import * as fs from "fs";
 import * as path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 test.describe("Milestone C2 Screenshots Capture", () => {
-  const repoRoot = path.resolve(__dirname, "../../");
+  const repoRoot = path.resolve(__dirname, "../../../");
   const screenshotsDir = path.resolve(repoRoot, "docs/screenshots/c2");
 
   test.beforeAll(() => {
@@ -25,12 +29,48 @@ test.describe("Milestone C2 Screenshots Capture", () => {
     const loginData = await loginRes.json();
     const token = loginData.data.accessToken;
 
+    // Close any lingering open shifts so Owner has a clean register state
+    try {
+      const openShiftsRes = await request.get("http://localhost:4000/api/v1/shifts?status=open", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (openShiftsRes.ok()) {
+        const shiftsData = await openShiftsRes.json();
+        const openShifts = Array.isArray(shiftsData.data) ? shiftsData.data : (shiftsData.data?.items || []);
+        for (const s of openShifts) {
+          await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
+            headers: { Authorization: `Bearer ${token}` },
+            data: { closingCashMinor: Number(s.openingCashMinor || 50000) },
+          }).catch(() => {});
+        }
+      }
+    } catch {}
+
     // Fetch branches and products
     const branchesRes = await request.get("http://localhost:4000/api/v1/branches", {
       headers: { Authorization: `Bearer ${token}` },
     });
     const branches = await branchesRes.json();
     const branchId = branches.data.find((b: any) => b.code === "GFS-01")?.id || branches.data[0].id;
+
+    // Ensure register & open shift for Owner
+    const registersRes = await request.get(`http://localhost:4000/api/v1/registers?branchId=${branchId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const registers = (await registersRes.json()).data;
+    const registerId = registers[0].id;
+
+    const shiftsRes = await request.get(`http://localhost:4000/api/v1/shifts?registerId=${registerId}&status=open`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const shifts = (await shiftsRes.json()).data;
+    const openShifts = Array.isArray(shifts) ? shifts : (shifts.items || []);
+    if (openShifts.length === 0) {
+      await request.post("http://localhost:4000/api/v1/shifts/open", {
+        headers: { Authorization: `Bearer ${token}` },
+        data: { registerId, branchId, openingCashMinor: 500000 },
+      });
+    }
 
     // Create test customer
     const custPhone = `018${Math.floor(10000000 + Math.random() * 90000000)}`;

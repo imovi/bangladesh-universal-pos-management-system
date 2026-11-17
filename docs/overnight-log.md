@@ -1224,3 +1224,20 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - `apps/admin/e2e/pos-flow.spec.ts`: 5/5 passed (21.5s).
   - `npm run lint`: 0 warnings, 0 errors across all 94 admin files and 72 api files.
   - `npm run build`: All workspaces compiled cleanly.
+
+### Step 2 (Item 1): /pos Keyboard Shortcuts Assertion Suite (F2, F4, F6, F8, F9, Esc, Shortcuts Modal)
+- **Start Time:** 2026-11-17 23:10 +06:00
+- **What Was Built & Tested:**
+  1. **Shortcuts Modal Update (`apps/admin/src/app/pos/page.tsx`):**
+     - Added `F6` ("পণ্য ফেরত / বদল" / "Returns & Exchanges") to the keyboard shortcuts modal grid alongside F2, F4, F8, F9, Esc, and Enter.
+  2. **Dedicated E2E Shortcuts Test Suite (`apps/admin/e2e/pos-shortcuts.spec.ts`):**
+     - **F2 (Focus Search):** Verified pressing F2 from blurred / body focus focuses the search input.
+     - **F6 (Returns & Exchanges Dialog):** Verified pressing F6 with focus inside the search box opens the return dialog, and pressing F6 with focus on the page body opens the return dialog.
+     - **Esc (Dialog Dismissal):** Verified pressing Escape closes the returns dialog, customer dialog, hold cart dialog, payment dialog, and shortcuts modal.
+     - **F8 (Hold / Resume Carts):** Verified pressing F8 with focus in search box opens the hold cart dialog, and pressing F8 with focus on page body opens the hold cart dialog.
+     - **F9 (Customer Select Dialog):** Verified pressing F9 from page body opens the customer selection dialog.
+     - **F4 (Payment / Checkout):** Verified pressing F4 with items in the cart opens the payment dialog.
+     - **Shortcuts Modal Inspection:** Verified modal lists F2, F4, F6, F8, F9, Esc, and Enter with correct localization.
+- **Verification:**
+  - `apps/admin/e2e/pos-shortcuts.spec.ts`: 1/1 passed (9.0s).
+  - `npm run lint`: 0 warnings, 0 errors.

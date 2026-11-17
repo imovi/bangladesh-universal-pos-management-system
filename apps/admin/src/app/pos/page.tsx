@@ -2570,6 +2570,10 @@ export default function PosPage() {
                 <kbd className="px-1.5 py-0.5 rounded bg-muted font-mono font-bold">F4</kbd>
               </div>
               <div className="p-2.5 rounded-lg bg-muted/40 border border-border flex justify-between items-center">
+                <span>{locale === "bn" ? "পণ্য ফেরত / বদল" : "Returns & Exchanges"}</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-muted font-mono font-bold">F6</kbd>
+              </div>
+              <div className="p-2.5 rounded-lg bg-muted/40 border border-border flex justify-between items-center">
                 <span>{locale === "bn" ? "কার্ট হোল্ড / রিস্টোর" : "Hold / Resume"}</span>
                 <kbd className="px-1.5 py-0.5 rounded bg-muted font-mono font-bold">F8</kbd>
               </div>
@@ -2581,7 +2585,7 @@ export default function PosPage() {
                 <span>{locale === "bn" ? "ডায়ালগ বন্ধ" : "Close Dialog"}</span>
                 <kbd className="px-1.5 py-0.5 rounded bg-muted font-mono font-bold">Esc</kbd>
               </div>
-              <div className="p-2.5 rounded-lg bg-muted/40 border border-border flex justify-between items-center">
+              <div className="col-span-2 p-2.5 rounded-lg bg-muted/40 border border-border flex justify-between items-center">
                 <span>{locale === "bn" ? "নতুন বিক্রি (রসিদ)" : "New Sale"}</span>
                 <kbd className="px-1.5 py-0.5 rounded bg-muted font-mono font-bold">Enter</kbd>
               </div>

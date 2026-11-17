@@ -78,6 +78,7 @@ export const en: TranslationKeys = {
     categories: "Categories & Brands",
     inventory: "Inventory",
     stockLevels: "Stock Levels",
+    transfers: "Stock Transfers",
     lowStock: "Low Stock Alerts",
     adjustments: "Stock Adjustments",
     openingStock: "Opening Stock",

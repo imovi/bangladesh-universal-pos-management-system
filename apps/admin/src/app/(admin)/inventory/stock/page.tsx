@@ -320,6 +320,7 @@ export default function StockLevelsPage() {
               <TableHead className="w-[160px]">{strings.products.barcode}</TableHead>
               <TableHead className="w-[120px]">{locale === "bn" ? "শাখা" : "Branch"}</TableHead>
               <TableHead className="w-[120px] text-right">{strings.inventory.quantity}</TableHead>
+              <TableHead className="w-[120px] text-right">{locale === "bn" ? "ইন-ট্রানজিট" : "In-Transit"}</TableHead>
               <TableHead className="w-[120px] text-right">{strings.inventory.reorderLevel}</TableHead>
               <TableHead className="w-[160px] text-right">{strings.common.actions}</TableHead>
             </TableRow>
@@ -327,13 +328,13 @@ export default function StockLevelsPage() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-32 text-center text-muted-foreground text-sm">
+                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground text-sm">
                   {strings.common.loading}
                 </TableCell>
               </TableRow>
             ) : items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-32 text-center text-muted-foreground text-sm">
+                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground text-sm">
                   {strings.common.noData}
                 </TableCell>
               </TableRow>
@@ -423,6 +424,19 @@ export default function StockLevelsPage() {
                       >
                         {item.qty}
                       </span>
+                    </TableCell>
+
+                    <TableCell className="text-right text-xs font-mono tabular-nums" data-testid="in-transit-qty-cell">
+                      {Number(item.inTransitQty || 0) > 0 ? (
+                        <Badge
+                          variant="outline"
+                          className="text-[11px] font-semibold bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-500/30 font-mono tabular-nums"
+                        >
+                          +{item.inTransitQty}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">0</span>
+                      )}
                     </TableCell>
 
                     <TableCell className="text-right text-xs font-mono tabular-nums">

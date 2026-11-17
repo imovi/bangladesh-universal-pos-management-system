@@ -54,6 +54,7 @@ export function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
       permission: "inventory.read",
       subItems: [
         { titleKey: "stockLevels", href: "/inventory/stock", permission: "inventory.read" },
+        { titleKey: "transfers", href: "/inventory/transfers", permission: "transfer.read" },
         { titleKey: "lowStock", href: "/inventory/low-stock", permission: "inventory.read" },
         { titleKey: "adjustments", href: "/inventory/adjustments", permission: "stock.adjust" },
         { titleKey: "openingStock", href: "/inventory/opening", permission: "inventory.manage" },

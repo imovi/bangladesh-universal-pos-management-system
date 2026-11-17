@@ -1007,3 +1007,54 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
      - `npm run lint`: 0 warnings, 0 errors across 87 admin files and 69 api files.
      - Vitest API: 44 test files, 248 passed (100% pass rate, 89.47% overall coverage).
      - Playwright E2E: All 112 tests passed (3.3m) with zero failures.
+
+
+---
+
+### Step 3: Milestone C3 — Stock Transfers Between Branches
+- **Start Time:** 2026-11-17 07:15 +06:00
+- **End Time:** 2026-11-17 08:15 +06:00
+- **What Was Built & Fixed:**
+  1. **Prisma Schema & Database Migration:**
+     - Added `StockTransfer` (`id`, `transferNumber`, `status` [`draft`, `sent`, `received`, `cancelled`], `sourceBranchId`, `destinationBranchId`, `notes`, `sentAt`, `receivedAt`, timestamps, created/sent/received by relations).
+     - Added `StockTransferItem` (`id`, `transferId`, `variantId`, `sentQty`, `receivedQty`, `lossReason`).
+     - Added `TransferCounter` for atomic sequence numbers per branch/year/month (`TRF-YYMMDD-XXXX`).
+     - Migration `20261117000000_milestone_c3_stock_transfers` deployed to `universal_pos`, `universal_pos_test`, and `universal_pos_e2e` with full PostgreSQL RLS policies (`SET LOCAL ROLE pos_app`, `set_config('app.tenant_id', ...)`).
+  2. **Permissions & Zod Schemas:**
+     - Added `transfer.read`, `transfer.create`, `transfer.send`, `transfer.receive` in `packages/shared/src/permissions.ts`.
+     - Added `CreateStockTransferSchema`, `SendStockTransferSchema`, `ReceiveStockTransferSchema`, `StockTransferQuerySchema` in `packages/shared/src/schemas/transfers.schemas.ts`.
+  3. **API Module (`apps/api/src/modules/transfers/`):**
+     - `TransfersController`: Endpoints for `GET /transfers`, `POST /transfers`, `GET /transfers/:id`, `POST /transfers/:id/send`, `POST /transfers/:id/receive`, `POST /transfers/:id/cancel`.
+     - `TransfersService`:
+       - Draft creation with validation preventing source == destination and ensuring positive sent quantities.
+       - Atomic dispatch: validates source stock, decrements source stock with `transfer_out` inventory movement, transitions status to `sent`.
+       - Atomic receipt: increments destination stock with `transfer_in` inventory movement for `receivedQty`, handles discrepancies (`sentQty - receivedQty`) with `transfer_loss` and mandatory `lossReason`.
+       - Branch authorization: Non-owner operators can only receive transfers destined for branches assigned to them in `user_branches`.
+       - Cancellation: Only draft transfers can be cancelled.
+     - Updated `InventoryService`: attached `inTransitQty` per variant when queried by branch.
+  4. **Integration Tests (`apps/api/test/transfers-engine.spec.ts`):**
+     - 8/8 tests passing covering draft creation, immediate send, in-transit stock reflection, partial receive with mandatory loss reason, missing reason rejection, cancellation, and branch authorization.
+  5. **Frontend UI (`apps/admin`):**
+     - `/inventory/transfers`: Responsive table with status tabs (`all`, `draft`, `sent`, `received`, `cancelled`), branch filtering, search, pagination.
+     - `/inventory/transfers/new`: Source & destination branch selectors, product dropdown, interactive `SizeColorGrid` showing available stock in source branch, transfer items draft table, Save Draft and Send Immediately actions.
+     - `/inventory/transfers/[id]`: Detail view, timeline, status badges, inline receive mode (supporting partial receipts with loss reason), cancel modal, and print-ready A4 transfer note with sender/receiver signature blocks.
+     - `/inventory/stock`: Added "ইন-ট্রানজিট" (In-Transit) column badge showing stock in transit.
+     - Navigation & i18n: Added Transfers nav item with bilingual translations.
+  6. **E2E & Screenshot Catalog (`docs/screenshots/c3/`):**
+     - `apps/admin/e2e/transfers-flow.spec.ts` passed (10.2s).
+     - Captured all 10 required screenshots:
+       1. `01-transfers-list-desktop-light.png`
+       2. `02-transfers-list-desktop-dark.png`
+       3. `03-transfers-list-mobile.png`
+       4. `04-transfer-create-grid-desktop.png`
+       5. `05-transfer-create-grid-mobile.png`
+       6. `06-transfer-detail-desktop.png`
+       7. `07-transfer-detail-receive-mode.png`
+       8. `08-transfer-detail-mobile.png`
+       9. `09-transfer-note-print-preview.png`
+       10. `10-stock-levels-in-transit.png`
+  7. **Verification:**
+     - `npm run build`: Zero errors across all workspaces.
+     - `npm run lint`: 0 warnings, 0 errors.
+     - Vitest API: 45 test files, 256 tests passed (0 failed).
+     - Strict file size limit compliance (<800 lines on every file).

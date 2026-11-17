@@ -438,4 +438,5 @@ export type CashMovementDto = z.infer<typeof CashMovementSchema>;
 // --- M6 Sales Engine Schemas ---
 export * from "./schemas/sales.schemas.js";
 export * from "./schemas/returns.schemas.js";
+export * from "./schemas/transfers.schemas.js";
 

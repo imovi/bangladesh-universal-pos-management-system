@@ -390,8 +390,28 @@ export class InventoryService {
       const limit = Math.min(100, Math.max(1, query.limit || 50));
       const skip = (page - 1) * limit;
 
+      let inTransitMap: Record<string, number> = {};
+      if (query.branchId) {
+        const sentTransfers = await tx.stockTransfer.findMany({
+          where: {
+            tenantId,
+            destinationBranchId: query.branchId,
+            status: "sent",
+          },
+          include: {
+            items: true,
+          },
+        });
+        for (const t of sentTransfers) {
+          for (const it of t.items) {
+            inTransitMap[it.variantId] = (inTransitMap[it.variantId] || 0) + Number(it.sentQty);
+          }
+        }
+      }
+
       const items = filtered.slice(skip, skip + limit).map((l) => ({
         ...l,
+        inTransitQty: inTransitMap[l.variantId] || 0,
         reorderLevel: l.variant.reorderLevel !== null ? Number(l.variant.reorderLevel) : null,
       }));
 

@@ -76,6 +76,7 @@ export const bn = {
     categories: "ক্যাটাগরি ও ব্র্যান্ড",
     inventory: "মজুদ ও ইনভেন্টরি",
     stockLevels: "মজুদ স্টক",
+    transfers: "স্টক ট্রান্সফার",
     lowStock: "কম স্টক সতর্কতা",
     adjustments: "স্টক সমন্বয়",
     openingStock: "প্রারম্ভিক স্টক",

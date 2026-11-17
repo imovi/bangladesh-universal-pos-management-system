@@ -1241,3 +1241,21 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
 - **Verification:**
   - `apps/admin/e2e/pos-shortcuts.spec.ts`: 1/1 passed (9.0s).
   - `npm run lint`: 0 warnings, 0 errors.
+
+### Step 2 (Item 2): C4 Barcode Screenshots Suite (Desktop, Mobile, Print Previews, Product Page)
+- **Start Time:** 2026-11-18 00:10 +06:00
+- **What Was Built & Captured (`docs/screenshots/c4/`):**
+  1. `01-barcode-modal-thermal-38x25.png`: Desktop modal for 38×25mm thermal roll format.
+  2. `01-barcode-modal-thermal-38x25-mobile.png`: Mobile 375px viewport for 38×25mm.
+  3. `02-barcode-modal-thermal-50x30.png`: Desktop modal for 50×30mm thermal roll format.
+  4. `02-barcode-modal-thermal-50x30-mobile.png`: Mobile 375px viewport for 50×30mm.
+  5. `03-barcode-modal-sheet-a4.png`: Desktop modal for A4 3×8 (24 labels) sheet format.
+  6. `03-barcode-modal-sheet-a4-mobile.png`: Mobile 375px viewport for A4 3×8 sheet.
+  7. `04-pos-scanned-ean13-cart.png`: POS selling screen after scanning valid EAN-13 barcode into search box and auto-adding line to cart.
+  8. `05-print-preview-38x25.png`: High-resolution print preview of 38×25mm label (shop name, product name, variant, SVG barcode, EAN-13 number, price).
+  9. `06-print-preview-50x30.png`: High-resolution print preview of 50×30mm label.
+  10. `07-print-preview-a4-3x8.png`: High-resolution print preview of A4 3×8 sheet label.
+  11. `08-product-page-generate-barcode.png`: Product detail screen at `/catalog/products/[id]` showing the "বারকোড প্রিন্ট" button and actions.
+- **Verification:**
+  - `apps/admin/e2e/barcode-print-and-scan.spec.ts`: 1/1 passed (9.7s).
+  - All 11 screenshots verified present in `docs/screenshots/c4/`.

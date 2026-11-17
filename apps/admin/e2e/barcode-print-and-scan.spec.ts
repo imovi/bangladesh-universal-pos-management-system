@@ -78,9 +78,15 @@ test.describe("Milestone C4: Barcode Label Generation, Print Modal & Scan Back V
     }
     await page.waitForURL("**/catalog/products/*", { timeout: 10000 });
 
-    // 4. Click Barcode Print button
+    // Capture screenshot: Product detail page with Barcode Print button
     const printBtn = page.locator('[data-testid="print-barcodes-button"]');
     await expect(printBtn).toBeVisible({ timeout: 10000 });
+    await page.screenshot({
+      path: path.join(screenshotsDir, "08-product-page-generate-barcode.png"),
+      fullPage: false,
+    });
+
+    // 4. Click Barcode Print button
     await printBtn.click();
 
     // 5. Verify Barcode Print Modal opens
@@ -94,10 +100,17 @@ test.describe("Milestone C4: Barcode Label Generation, Print Modal & Scan Back V
       await expect(modal.locator('svg[data-testid^="barcode-svg-"]').first()).toBeVisible({ timeout: 10000 });
     }
 
-    // Capture screenshot: 38x25 thermal roll format preview
+    // Capture screenshot: 38x25 thermal roll format preview (desktop)
     await page.screenshot({
       path: path.join(screenshotsDir, "01-barcode-modal-thermal-38x25.png"),
       fullPage: false,
+    });
+
+    // Capture print preview card crop for 38x25 (barcode number and price clearly readable)
+    const previewCard38x25 = modal.locator(".shadow-sm").first();
+    await expect(previewCard38x25).toBeVisible({ timeout: 5000 });
+    await previewCard38x25.screenshot({
+      path: path.join(screenshotsDir, "05-print-preview-38x25.png"),
     });
 
     // 6. Switch format to 50x30 mm
@@ -108,6 +121,13 @@ test.describe("Milestone C4: Barcode Label Generation, Print Modal & Scan Back V
       fullPage: false,
     });
 
+    // Capture print preview card crop for 50x30
+    const previewCard50x30 = modal.locator(".shadow-sm").first();
+    await expect(previewCard50x30).toBeVisible({ timeout: 5000 });
+    await previewCard50x30.screenshot({
+      path: path.join(screenshotsDir, "06-print-preview-50x30.png"),
+    });
+
     // 7. Switch format to A4 3x8 sheet
     await page.getByRole("button", { name: "A4 শিট" }).click();
     await page.waitForTimeout(400);
@@ -116,7 +136,44 @@ test.describe("Milestone C4: Barcode Label Generation, Print Modal & Scan Back V
       fullPage: false,
     });
 
-    // 8. Find a rendered barcode SVG and get its value
+    // Capture print preview card crop for A4 3x8
+    const previewCardA4 = modal.locator(".shadow-sm").first();
+    await expect(previewCardA4).toBeVisible({ timeout: 5000 });
+    await previewCardA4.screenshot({
+      path: path.join(screenshotsDir, "07-print-preview-a4-3x8.png"),
+    });
+
+    // 8. Mobile 375px screenshots for all 3 formats
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.waitForTimeout(400);
+
+    // Mobile: A4
+    await page.screenshot({
+      path: path.join(screenshotsDir, "03-barcode-modal-sheet-a4-mobile.png"),
+      fullPage: false,
+    });
+
+    // Mobile: 50x30
+    await page.getByRole("button", { name: "50×30 mm" }).click();
+    await page.waitForTimeout(400);
+    await page.screenshot({
+      path: path.join(screenshotsDir, "02-barcode-modal-thermal-50x30-mobile.png"),
+      fullPage: false,
+    });
+
+    // Mobile: 38x25
+    await page.getByRole("button", { name: "38×25 mm" }).click();
+    await page.waitForTimeout(400);
+    await page.screenshot({
+      path: path.join(screenshotsDir, "01-barcode-modal-thermal-38x25-mobile.png"),
+      fullPage: false,
+    });
+
+    // Reset viewport to desktop
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.waitForTimeout(300);
+
+    // 9. Find a rendered barcode SVG and get its value
     const barcodeSvg = modal.locator('svg[data-testid^="barcode-svg-"]').first();
     await expect(barcodeSvg).toBeVisible({ timeout: 5000 });
     const testId = await barcodeSvg.getAttribute("data-testid");
@@ -124,11 +181,11 @@ test.describe("Milestone C4: Barcode Label Generation, Print Modal & Scan Back V
     expect(scannedBarcode).toBeTruthy();
     expect(isValidEan13(scannedBarcode!)).toBe(true);
 
-    // 9. Close modal
+    // 10. Close modal
     await modal.locator('button[aria-label="Close"]').click();
     await expect(modal).not.toBeVisible();
 
-    // 10. Open shift on Register 1 if prompted at /pos
+    // 11. Open shift on Register 1 if prompted at /pos
     await page.goto("http://localhost:3000/pos");
     await page.waitForLoadState("networkidle");
 
@@ -138,13 +195,13 @@ test.describe("Milestone C4: Barcode Label Generation, Print Modal & Scan Back V
       await page.waitForTimeout(1000);
     }
 
-    // 11. Scan / type the generated EAN-13 barcode into the POS search input
+    // 12. Scan / type the generated EAN-13 barcode into the POS search input
     const searchInput = page.locator('[data-testid="pos-search-input"]');
     await expect(searchInput).toBeVisible({ timeout: 10000 });
     await searchInput.fill(scannedBarcode!);
     await searchInput.press("Enter");
 
-    // 12. Assert item was added to the cart
+    // 13. Assert item was added to the cart
     const firstQtyInput = page.locator('[data-testid="qty-input-0"]');
     await expect(firstQtyInput).toBeVisible({ timeout: 10000 });
     await expect(firstQtyInput).toHaveValue("1");

@@ -231,8 +231,12 @@ export default function CustomersPage() {
         </div>
 
         <div className="flex items-center gap-2 self-end sm:self-auto">
-          <span className="text-xs text-muted-foreground whitespace-nowrap">{locale === "bn" ? "সাজান:" : "Sort:"}</span>
+          <label htmlFor="customer-sort-select" className="text-xs text-muted-foreground whitespace-nowrap">
+            {locale === "bn" ? "সাজান:" : "Sort:"}
+          </label>
           <select
+            id="customer-sort-select"
+            aria-label={locale === "bn" ? "গ্রাহক সাজান" : "Sort customers"}
             value={`${sortBy}-${sortOrder}`}
             onChange={(e) => {
               const [sb, so] = e.target.value.split("-") as [string, "asc" | "desc"];

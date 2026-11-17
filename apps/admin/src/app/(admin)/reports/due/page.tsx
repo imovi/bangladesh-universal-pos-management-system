@@ -169,8 +169,12 @@ export default function DueReportPage() {
       <div className="bg-card border border-border p-4 rounded-xl shadow-xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Building className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground font-medium">{locale === "bn" ? "শাখা:" : "Branch:"}</span>
+          <label htmlFor="due-branch-select" className="text-xs text-muted-foreground font-medium">
+            {locale === "bn" ? "শাখা:" : "Branch:"}
+          </label>
           <select
+            id="due-branch-select"
+            aria-label={locale === "bn" ? "শাখা নির্বাচন করুন" : "Select Branch"}
             value={selectedBranchId}
             onChange={(e) => setSelectedBranchId(e.target.value)}
             className="h-8 px-2.5 text-xs rounded-md border border-input bg-background text-foreground font-medium"

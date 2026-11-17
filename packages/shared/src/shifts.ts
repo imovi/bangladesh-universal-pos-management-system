@@ -131,14 +131,20 @@ function aggregateReturns(returns?: ShiftReturnInput[]) {
   for (const r of returns) {
     returnsCount++;
     const amt = BigInt(r.totalRefundMinor);
-    let dueReduced = 0n;
+    let nonCashDeduction = 0n;
     if (r.reason && r.reason.includes("due_reduced:")) {
       const match = r.reason.match(/due_reduced:(\d+)/);
       if (match) {
-        dueReduced = BigInt(match[1]);
+        nonCashDeduction += BigInt(match[1]);
       }
     }
-    const actualRefund = amt > dueReduced ? amt - dueReduced : 0n;
+    if (r.reason && r.reason.includes("exchange_applied:")) {
+      const match = r.reason.match(/exchange_applied:(\d+)/);
+      if (match) {
+        nonCashDeduction += BigInt(match[1]);
+      }
+    }
+    const actualRefund = amt > nonCashDeduction ? amt - nonCashDeduction : 0n;
 
     totalRefunds += amt;
     refundMethodTotals[r.refundMethod] = (refundMethodTotals[r.refundMethod] || 0n) + actualRefund;

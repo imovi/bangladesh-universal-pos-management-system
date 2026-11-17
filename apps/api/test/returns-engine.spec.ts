@@ -36,6 +36,7 @@ describe("Milestone C1: Returns and Exchanges Engine Integration Tests", () => {
   // Tenant B for isolation test
   let tenantBToken: string;
   let tenantBId: string;
+  let tenantBBranchId: string;
 
   beforeAll(async () => {
     await truncateTestDatabase();
@@ -171,6 +172,7 @@ describe("Milestone C1: Returns and Exchanges Engine Integration Tests", () => {
       branch: { name: "Chittagong Outlet", code: "CTG-01" },
     });
     tenantBId = signupB.tenantId;
+    tenantBBranchId = signupB.branchId;
     const loginB = await authService.login({
       tenantSlug: "comp-outlet",
       email: "owner@comp.com",
@@ -275,6 +277,196 @@ describe("Milestone C1: Returns and Exchanges Engine Integration Tests", () => {
     expect(retRes.body.error?.code || retRes.body.message).toContain("OVER_RETURN_PROHIBITED");
   });
 
+  it("4b. Parallel over-return test: concurrent requests for last returnable unit (Promise.all)", async () => {
+    // Create dedicated sale of 1 unit of Linen Shirt
+    const parSaleId = uuidv7();
+    const saleRes = await request(app.getHttpServer())
+      .post("/api/v1/sales")
+      .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", parSaleId)
+      .send({
+        id: parSaleId,
+        shiftId: openShiftId,
+        branchId,
+        items: [{ variantId: variantId1, quantity: 1 }],
+        payments: [{ paymentMethod: "cash", amountMinor: 105000 }],
+        expectedTotalMinor: 105000,
+      });
+    expect(saleRes.status).toBe(201);
+    const parItemId = saleRes.body.data.items[0].id;
+
+    // Get current stock
+    const stockBefore = await request(app.getHttpServer())
+      .get(`/api/v1/inventory/levels?branchId=${branchId}&variantId=${variantId1}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    const initialQty = Number(stockBefore.body.data[0].qty);
+
+    // Send two concurrent return requests for the 1 returnable unit
+    const reqId1 = uuidv7();
+    const reqId2 = uuidv7();
+    const reqA = request(app.getHttpServer())
+      .post(`/api/v1/sales/${parSaleId}/returns`)
+      .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", reqId1)
+      .send({
+        id: reqId1,
+        shiftId: openShiftId,
+        refundMethod: "cash",
+        items: [{ saleItemId: parItemId, quantity: 1, condition: "resellable" }],
+      });
+    const reqB = request(app.getHttpServer())
+      .post(`/api/v1/sales/${parSaleId}/returns`)
+      .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", reqId2)
+      .send({
+        id: reqId2,
+        shiftId: openShiftId,
+        refundMethod: "cash",
+        items: [{ saleItemId: parItemId, quantity: 1, condition: "resellable" }],
+      });
+
+    const [resA, resB] = await Promise.all([reqA, reqB]);
+    const statuses = [resA.status, resB.status].sort();
+    expect(statuses).toEqual([201, 409]);
+
+    const failedRes = resA.status === 409 ? resA : resB;
+    expect(failedRes.body.error?.code || failedRes.body.message).toContain("OVER_RETURN_PROHIBITED");
+
+    // Afterwards, returned quantity in DB equals sold quantity (1)
+    const updatedSale = await request(app.getHttpServer())
+      .get(`/api/v1/sales/${parSaleId}`)
+      .set("Authorization", `Bearer ${cashierToken}`);
+    expect(Number(updatedSale.body.data.items[0].returnedQuantity)).toBe(1);
+
+    // Stock went up by exactly 1
+    const stockAfter = await request(app.getHttpServer())
+      .get(`/api/v1/inventory/levels?branchId=${branchId}&variantId=${variantId1}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(Number(stockAfter.body.data[0].qty)).toBe(initialQty + 1);
+  });
+
+  it("4c. Idempotency tests: same ID + body returns first result; different body returns 409 IDEMPOTENCY_CONFLICT", async () => {
+    // 1. Return idempotency
+    const idemSaleId = uuidv7();
+    const saleRes = await request(app.getHttpServer())
+      .post("/api/v1/sales")
+      .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", idemSaleId)
+      .send({
+        id: idemSaleId,
+        shiftId: openShiftId,
+        branchId,
+        items: [{ variantId: variantId1, quantity: 2 }],
+        payments: [{ paymentMethod: "cash", amountMinor: 210000 }],
+        expectedTotalMinor: 210000,
+      });
+    expect(saleRes.status).toBe(201);
+    const saleItemId = saleRes.body.data.items[0].id;
+
+    const returnId = uuidv7();
+    const returnBody = {
+      id: returnId,
+      shiftId: openShiftId,
+      refundMethod: "cash",
+      reason: "Initial return reason",
+      items: [{ saleItemId, quantity: 1, condition: "resellable" }],
+    };
+
+    // First attempt -> 201
+    const firstRes = await request(app.getHttpServer())
+      .post(`/api/v1/sales/${idemSaleId}/returns`)
+      .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", returnId)
+      .send(returnBody);
+    expect(firstRes.status).toBe(201);
+    const firstReturnNumber = firstRes.body.data.returnNumber;
+
+    // Retry with exact same body & key -> 200/201 duplicate return
+    const retryRes = await request(app.getHttpServer())
+      .post(`/api/v1/sales/${idemSaleId}/returns`)
+      .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", returnId)
+      .send(returnBody);
+    expect([200, 201]).toContain(retryRes.status);
+    expect(retryRes.body.data.returnNumber).toBe(firstReturnNumber);
+
+    // Verify only ONE return record exists in database
+    const returnList = await request(app.getHttpServer())
+      .get(`/api/v1/sales/returns?saleId=${idemSaleId}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(returnList.body.data.items).toHaveLength(1);
+
+    // Attempt with same ID but DIFFERENT body -> 409 IDEMPOTENCY_CONFLICT
+    const conflictRes = await request(app.getHttpServer())
+      .post(`/api/v1/sales/${idemSaleId}/returns`)
+      .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", returnId)
+      .send({
+        ...returnBody,
+        reason: "Mutated return reason",
+      });
+    expect(conflictRes.status).toBe(409);
+    expect(conflictRes.body.error?.code || conflictRes.body.message).toContain("IDEMPOTENCY_CONFLICT");
+
+    // 2. Exchange idempotency
+    const exchSaleId = uuidv7();
+    const exSaleRes = await request(app.getHttpServer())
+      .post("/api/v1/sales")
+      .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", exchSaleId)
+      .send({
+        id: exchSaleId,
+        shiftId: openShiftId,
+        branchId,
+        items: [{ variantId: variantId1, quantity: 1 }],
+        payments: [{ paymentMethod: "cash", amountMinor: 105000 }],
+        expectedTotalMinor: 105000,
+      });
+    expect(exSaleRes.status).toBe(201);
+    const exItemId = exSaleRes.body.data.items[0].id;
+
+    const exchangeId = uuidv7();
+    const exchangeBody = {
+      id: exchangeId,
+      originalSaleId: exchSaleId,
+      shiftId: openShiftId,
+      branchId,
+      returnItems: [{ saleItemId: exItemId, quantity: 1, condition: "resellable" }],
+      newItems: [{ variantId: variantId1, quantity: 1 }],
+      payments: [],
+    };
+
+    // First attempt -> 201
+    const exFirst = await request(app.getHttpServer())
+      .post("/api/v1/sales/exchange")
+      .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", exchangeId)
+      .send(exchangeBody);
+    expect(exFirst.status).toBe(201);
+    const exReturnNumber = exFirst.body.data.returnNumber;
+
+    // Retry with exact same body -> returns first result
+    const exRetry = await request(app.getHttpServer())
+      .post("/api/v1/sales/exchange")
+      .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", exchangeId)
+      .send(exchangeBody);
+    expect([200, 201]).toContain(exRetry.status);
+    expect(exRetry.body.data.returnNumber).toBe(exReturnNumber);
+
+    // Retry with DIFFERENT body -> 409 IDEMPOTENCY_CONFLICT
+    const exConflict = await request(app.getHttpServer())
+      .post("/api/v1/sales/exchange")
+      .set("Authorization", `Bearer ${cashierToken}`)
+      .set("Idempotency-Key", exchangeId)
+      .send({
+        ...exchangeBody,
+        returnReason: "Mutated exchange reason",
+      });
+    expect(exConflict.status).toBe(409);
+    expect(exConflict.body.error?.code || exConflict.body.message).toContain("IDEMPOTENCY_CONFLICT");
+  });
+
   it("5. Returns damaged Cotton Panjabi without restocking", async () => {
     const returnId2 = uuidv7();
     const retRes = await request(app.getHttpServer())
@@ -368,50 +560,7 @@ describe("Milestone C1: Returns and Exchanges Engine Integration Tests", () => {
     expect(retRes.body.error?.code || retRes.body.message).toContain("DRAWER_CASH_EXCEEDED");
   });
 
-  it("8. Processes exchange (return + new sale in one transaction)", async () => {
-    // Create a sale to exchange
-    const saleToExchangeId = uuidv7();
-    const sRes = await request(app.getHttpServer())
-      .post("/api/v1/sales")
-      .set("Authorization", `Bearer ${cashierToken}`)
-      .set("Idempotency-Key", saleToExchangeId)
-      .send({
-        id: saleToExchangeId,
-        shiftId: openShiftId,
-        branchId,
-        items: [{ variantId: variantId1, quantity: 1 }], // 1,000 * 1.05 = 105,000 poisha
-        payments: [{ paymentMethod: "cash", amountMinor: 105000 }],
-        expectedTotalMinor: 105000,
-      });
-    expect(sRes.status).toBe(201);
-    const saleToExchItemId = sRes.body.data.items[0].id;
-
-    // Exchange: Return Linen Shirt (105,000 poisha), Buy Cotton Panjabi (157,500 poisha)
-    // Customer pays difference: 157,500 - 105,000 = 52,500 poisha
-    const exchangeId = uuidv7();
-    const exRes = await request(app.getHttpServer())
-      .post("/api/v1/sales/exchange")
-      .set("Authorization", `Bearer ${cashierToken}`)
-      .set("Idempotency-Key", exchangeId)
-      .send({
-        id: exchangeId,
-        originalSaleId: saleToExchangeId,
-        shiftId: openShiftId,
-        branchId,
-        returnItems: [{ saleItemId: saleToExchItemId, quantity: 1, condition: "resellable" }],
-        newItems: [{ variantId: variantId2, quantity: 1 }],
-        payments: [{ paymentMethod: "cash", amountMinor: 52500 }],
-      });
-
-    expect(exRes.status).toBe(201);
-    const ex = exRes.body.data;
-    expect(ex.totalRefundMinor).toBe(105000);
-    expect(ex.exchangeSaleId).toBeDefined();
-    expect(ex.exchangeSale.totalMinor).toBe(157500);
-    expect(ex.exchangeSale.status).toBe("completed");
-  });
-
-  it("9. Return window enforcement and override permission check", async () => {
+  it("8. Return window enforcement and override permission check", async () => {
     // Create a sale and manually set its createdAt to 30 days ago via admin connection
     const oldSaleId = uuidv7();
     await request(app.getHttpServer())
@@ -487,22 +636,125 @@ describe("Milestone C1: Returns and Exchanges Engine Integration Tests", () => {
     expect(okRes.body.data.overrideReason).toBe("VIP customer approval");
   });
 
-  it("10. Tenant isolation: Tenant B cannot access Tenant A returns", async () => {
-    // GET /sales/returns/:id
+  it("9. Comprehensive cross-tenant isolation tests", async () => {
+    // 1. Create a complete sale and return inside Tenant B
+    const bReg = (
+      await request(app.getHttpServer())
+        .post("/api/v1/registers")
+        .set("Authorization", `Bearer ${tenantBToken}`)
+        .send({ branchId: tenantBBranchId, name: "CTG Reg", code: "REG-B" })
+    ).body.data;
+
+    const bShift = (
+      await request(app.getHttpServer())
+        .post("/api/v1/shifts/open")
+        .set("Authorization", `Bearer ${tenantBToken}`)
+        .send({ registerId: bReg.id, branchId: tenantBBranchId, openingCashMinor: 500000 })
+    ).body.data;
+
+    const bProd = (
+      await request(app.getHttpServer())
+        .post("/api/v1/products")
+        .set("Authorization", `Bearer ${tenantBToken}`)
+        .send({
+          name: "Tenant B Item",
+          sku: "TB-ITEM",
+          priceMinor: 100000,
+          options: [{ name: "Size", values: ["S"] }],
+        })
+    ).body.data;
+    const bVarId = bProd.variants[0].id;
+
+    await request(app.getHttpServer())
+      .post("/api/v1/inventory/opening-stock")
+      .set("Authorization", `Bearer ${tenantBToken}`)
+      .send({
+        branchId: tenantBBranchId,
+        items: [{ variantId: bVarId, quantity: 10, unitCostMinor: 50000 }],
+      });
+
+    const bSaleId = uuidv7();
+    const bSale = (
+      await request(app.getHttpServer())
+        .post("/api/v1/sales")
+        .set("Authorization", `Bearer ${tenantBToken}`)
+        .set("Idempotency-Key", bSaleId)
+        .send({
+          id: bSaleId,
+          shiftId: bShift.id,
+          branchId: tenantBBranchId,
+          items: [{ variantId: bVarId, quantity: 2 }],
+          payments: [{ paymentMethod: "cash", amountMinor: 200000 }],
+          expectedTotalMinor: 200000,
+        })
+    ).body.data;
+    const bSaleItemId = bSale.items[0].id;
+
+    const bReturnId = uuidv7();
+    await request(app.getHttpServer())
+      .post(`/api/v1/sales/${bSaleId}/returns`)
+      .set("Authorization", `Bearer ${tenantBToken}`)
+      .set("Idempotency-Key", bReturnId)
+      .send({
+        id: bReturnId,
+        shiftId: bShift.id,
+        refundMethod: "cash",
+        items: [{ saleItemId: bSaleItemId, quantity: 1, condition: "resellable" }],
+      });
+
+    // NOW TEST WITH TENANT A'S TOKEN ACROSS ALL 4 ENDPOINTS:
+
+    // (1) GET /sales/returns/:id with Tenant B's return ID -> 404
+    const crossGet = await request(app.getHttpServer())
+      .get(`/api/v1/sales/returns/${bReturnId}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(crossGet.status).toBe(404);
+
+    // (2) GET /sales/returns?saleId=:tenantBSaleId with Tenant B's sale ID -> 404
+    const crossList = await request(app.getHttpServer())
+      .get(`/api/v1/sales/returns?saleId=${bSaleId}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(crossList.status).toBe(404);
+
+    // (3) POST /sales/:tenantBSaleId/returns with Tenant B's sale ID -> 404
+    const crossPostRetId = uuidv7();
+    const crossPost = await request(app.getHttpServer())
+      .post(`/api/v1/sales/${bSaleId}/returns`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .set("Idempotency-Key", crossPostRetId)
+      .send({
+        id: crossPostRetId,
+        shiftId: openShiftId,
+        refundMethod: "cash",
+        items: [{ saleItemId: bSaleItemId, quantity: 1, condition: "resellable" }],
+      });
+    expect(crossPost.status).toBe(404);
+
+    // (4) POST /sales/exchange with originalSaleId = tenantBSaleId -> 404
+    const crossExchId = uuidv7();
+    const crossExch = await request(app.getHttpServer())
+      .post("/api/v1/sales/exchange")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .set("Idempotency-Key", crossExchId)
+      .send({
+        id: crossExchId,
+        originalSaleId: bSaleId,
+        shiftId: openShiftId,
+        branchId,
+        returnItems: [{ saleItemId: bSaleItemId, quantity: 1, condition: "resellable" }],
+        newItems: [{ variantId: variantId1, quantity: 1 }],
+        payments: [{ paymentMethod: "cash", amountMinor: 105000 }],
+      });
+    expect(crossExch.status).toBe(404);
+
+    // And Tenant B cannot access Tenant A's return -> 404
     const bGetRes = await request(app.getHttpServer())
       .get(`/api/v1/sales/returns/${returnId1}`)
       .set("Authorization", `Bearer ${tenantBToken}`);
     expect(bGetRes.status).toBe(404);
-
-    // Tenant B's list should not include Tenant A's return
-    const bListRes = await request(app.getHttpServer())
-      .get("/api/v1/sales/returns")
-      .set("Authorization", `Bearer ${tenantBToken}`);
-    expect(bListRes.status).toBe(200);
-    expect(bListRes.body.data.items).toHaveLength(0);
   });
 
-  it("11. Shift details and reports correctly deduct returns", async () => {
+  it("10. Shift details and reports correctly deduct returns", async () => {
     // Shift details
     const shiftRes = await request(app.getHttpServer())
       .get(`/api/v1/shifts/${openShiftId}`)

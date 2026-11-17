@@ -19,16 +19,19 @@ import {
   CreditCard,
   ArrowRight,
   RefreshCw,
+  RotateCcw,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 interface SalesSummaryResponse {
   salesCount: number;
+  returnsCount?: number;
   totalGrossMinor: number;
   totalDiscountMinor: number;
   totalTaxMinor: number;
   totalNetMinor: number;
+  totalRefundMinor?: number;
   totalCreditGivenMinor?: number;
   totalCreditCollectedMinor?: number;
   paymentsByMethod: Record<string, number>;
@@ -346,6 +349,35 @@ export default function DashboardPage() {
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {locale === "bn" ? "আজকের মোট বকেয়া কিস্তি আদায়" : "Due collections recorded today"}
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        {/* Returns Today */}
+        <Link href="/sales/returns" className="block focus:outline-none">
+          <Card data-testid="dashboard-returns-card" className="shadow-sm hover:border-rose-400/50 transition-colors bg-rose-500/5 border-rose-500/20 h-full">
+            <CardHeader className="flex flex-row items-center justify-between pb-1.5 space-y-0">
+              <CardTitle className="text-xs font-semibold text-rose-800 dark:text-rose-300 uppercase tracking-wider">
+                {locale === "bn" ? "আজকের ফেরত" : "Today's Returns"}
+              </CardTitle>
+              <div className="h-7 w-7 rounded-full bg-rose-500/10 text-rose-600 flex items-center justify-center">
+                <RotateCcw className="h-3.5 w-3.5" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div
+                className="text-2xl font-bold font-mono tracking-tight text-rose-900 dark:text-rose-200 tabular-nums"
+                data-testid="dashboard-returns-amount"
+              >
+                {formatMoney(salesSummary?.totalRefundMinor || 0)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5" data-testid="dashboard-returns-count">
+                {(salesSummary?.returnsCount ?? 0) > 0
+                  ? `${salesSummary?.returnsCount} ${locale === "bn" ? "টি ফেরত রসিদ" : "return receipts"}`
+                  : locale === "bn"
+                  ? "আজ কোনো ফেরত নেই"
+                  : "No returns today"}
               </p>
             </CardContent>
           </Card>

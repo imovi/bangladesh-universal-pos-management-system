@@ -59,6 +59,8 @@ export const ListReturnsQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(20),
   search: z.string().trim().optional(),
   branchId: z.string().uuid().optional(),
+  shiftId: z.string().uuid().optional(),
+  saleId: z.string().uuid().optional(),
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
   sortBy: z.enum(["createdAt", "returnNumber", "totalRefundMinor"]).default("createdAt"),

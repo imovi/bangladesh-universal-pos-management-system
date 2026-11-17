@@ -2019,7 +2019,11 @@ export default function PosPage() {
         }}
         shiftId={activeShift?.id || ""}
         branchId={currentBranch?.id || ""}
-        drawerCashMinor={activeShift ? Number(activeShift.openingCashMinor || 0) : 0}
+        drawerCashMinor={
+          activeShift
+            ? Number(activeShift.summary?.expectedCashMinor ?? activeShift.openingCashMinor ?? 0)
+            : 0
+        }
         initialInvoiceNumber={initialReturnInvoice}
         onStartExchange={(origSale, returnItems, reason, overrideReason) => {
           const retRefundMinor = returnItems.reduce(

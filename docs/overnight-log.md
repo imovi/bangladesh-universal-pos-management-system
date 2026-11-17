@@ -900,3 +900,77 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
 
 
 
+
+
+---
+
+## Phase 1C, run 2
+
+### Step 0: Initial Audit & Repository State Inspection
+- **Start Time:** 2026-11-17 06:17 +06:00
+- **Repository State:**
+  - Active Branch: `main`
+  - Prior Commit: `97c2116 feat(customers): credit sales, due collections, customer ledger, and ageing report (C2)` committed at the conclusion of run 1.
+  - Working Tree Audit:
+    - Retained C1 gap fixes (`returns.service.ts`, `exchanges.service.ts`, `returns-common.helper.ts`, `return-modal.tsx`, `return-receipt-view.tsx`, `return-lines-table.tsx`, `returns-flow.spec.ts`, `global-data-integrity-guard.spec.ts`, `capture-c1-screenshots.spec.ts`, `docs/screenshots/c1/`).
+    - Retained C2 label accessibility adjustments in `apps/admin/src/app/(admin)/customers/page.tsx` and `reports/due/page.tsx` for global data integrity guard.
+    - Reverted 38 binary screenshot diffs from prior runs to keep repository history clean and lean.
+    - C3 transfer schema stubs preserved in working tree for Milestone C3.
+
+### Step 1: Milestone C1 Gaps Closure (Returns & Exchanges)
+- **Start Time:** 2026-11-17 06:18 +06:00
+- **End Time:** 2026-11-17 06:30 +06:00
+- **What Was Built & Fixed:**
+  1. **Parallel Over-Return Protection & Advisory Locks:**
+     - Implemented `lockSaleItems(tx, itemIds)` using `SELECT pg_advisory_xact_lock(hashtext(itemId::text))` in `apps/api/src/modules/sales/returns-common.helper.ts`.
+     - Crucial: Item UUIDs are sorted alphanumerically (`Array.from(new Set(itemIds)).sort()`) to guarantee deterministic lock acquisition order across concurrent transactions, preventing PostgreSQL deadlocks.
+     - Integration test in `apps/api/test/returns-engine.spec.ts` executes concurrent returns via `Promise.all` against the last returnable unit: exactly one succeeds (201) and the second is rejected (409 `OVER_RETURN_EXCEEDED`), with returned quantity in database strictly capped at total sold quantity.
+     - Ran 5 consecutive passes without flakiness (18/18 tests passing on every pass).
+  2. **Idempotent Retry Tests:**
+     - Verified exact retry with same ID and payload returns cached response (200/201).
+     - Conflicting payload with existing ID is rejected with 409 `IDEMPOTENCY_CONFLICT`.
+  3. **Two-Way Exchange Engine & Limits:**
+     - Extracted `ExchangesService` into `apps/api/src/modules/sales/exchanges.service.ts` (<800 lines).
+     - Case A (New items cost MORE): Customer pays cash difference; shift drawer cash increases by exact difference; payment breakdown and receipt reflect positive difference.
+     - Case B (New items cost LESS): Shop refunds cash difference; shift drawer cash decreases by exact difference.
+     - Drawer cash ceiling: Attempting cash refund exceeding current available drawer cash (`DRAWER_CASH_EXCEEDED`) is blocked with 409.
+     - Cashier discount limit: New items in exchange respect cashier max line discount (500 bp), rejecting unapproved discounts with 403 `DISCOUNT_LIMIT_EXCEEDED`.
+  4. **Comprehensive Cross-Tenant Isolation Tests:**
+     - Verified 404 response on:
+       - `GET /api/v1/sales/returns/:id`
+       - `GET /api/v1/sales/returns?saleId=:tenantBSaleId`
+       - `POST /api/v1/sales/:tenantBSaleId/returns`
+       - `POST /api/v1/sales/exchange` with foreign `originalSaleId`
+  5. **Cashier Return on Selling Screen (`/pos`):**
+     - Keyboard shortcut `F6` opens `ReturnModal`.
+     - Invoice search fetches original sale; return items table selects items, condition (`resellable`), and quantities.
+     - On completion, renders thermal return receipt with `[data-testid="return-receipt-title"]` ("ফেরত রসিদ"), refund amount matching `totalRefundMinor`, and "সম্পন্ন" button.
+     - UI Exchange mode: Customer can switch to exchange mode with prominent banner `"পণ্য বদল মোড: <INVOICE>"`, add new variants to cart, and checkout with net price difference.
+     - Verified via Playwright end-to-end test in `apps/admin/e2e/returns-flow.spec.ts`.
+  6. **Today's Returns Dashboard Card:**
+     - Added "আজকের ফেরত" / "Today's Returns" card to `apps/admin/src/app/(admin)/dashboard/page.tsx` displaying `returnsAmount` and `returnsCount`.
+     - Playwright assertion asserts card figures against `/api/v1/reports/sales-summary` using Asia/Dhaka business date.
+  7. **Global Data Integrity Guard:**
+     - Added `/sales/returns`, return detail (`/sales/returns/[id]`), and sale with return to `apps/admin/e2e/global-data-integrity-guard.spec.ts` in Bengali (`bn`) and English (`en`). All 52 test scenarios pass with zero console errors, zero uncaught exceptions, and zero placeholder texts.
+  8. **Document Sequence Format Decision:**
+     - Retained `REG01-R-YYMMDD-XXXX` format.
+     - Rationale: Sales invoices use `REG01-YYMMDD-XXXX` with 4-digit zero-padded sequence per date key. Inserting `-R-` cleanly denotes returns while matching the shop's standard document sequencing across all branches and registers.
+  9. **File Size Limit Compliance (<800 lines):**
+     - Split `returns.service.ts` into `returns-common.helper.ts` (105 lines), `exchanges.service.ts` (529 lines), and `returns.service.ts` (546 lines).
+     - Split `return-modal.tsx` into `return-receipt-view.tsx` (125 lines), `return-lines-table.tsx` (155 lines), and `return-modal.tsx` (655 lines).
+     - Split `returns-engine.spec.ts` into `returns-engine.spec.ts` (774 lines) and `exchanges-engine.spec.ts` (473 lines).
+     - Every file across all modules is strictly under 800 lines.
+  10. **Screenshots:**
+     - Captured all 12 required screenshots in `docs/screenshots/c1/` at 1440px desktop and 375px mobile across light and dark modes:
+       - `docs/screenshots/c1/desktop-light-returns-list.png`
+       - `docs/screenshots/c1/desktop-dark-returns-list.png`
+       - `docs/screenshots/c1/desktop-light-return-modal.png`
+       - `docs/screenshots/c1/desktop-dark-return-modal.png`
+       - `docs/screenshots/c1/desktop-light-return-detail.png`
+       - `docs/screenshots/c1/desktop-dark-return-detail.png`
+       - `docs/screenshots/c1/desktop-light-pos-exchange.png`
+       - `docs/screenshots/c1/desktop-dark-pos-exchange.png`
+       - `docs/screenshots/c1/desktop-light-dashboard-returns.png`
+       - `docs/screenshots/c1/desktop-dark-dashboard-returns.png`
+       - `docs/screenshots/c1/mobile-light-returns-list.png`
+       - `docs/screenshots/c1/mobile-dark-returns-list.png`

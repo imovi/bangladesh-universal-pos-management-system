@@ -24,6 +24,8 @@ const routes = [
   "/settings/users",
   "/settings/audit",
   "/pos",
+  "/sales/returns",
+  "/reports/due",
 ];
 
 test.describe("Global Data Integrity Guard: No NaN, undefined, null, Invalid Date, or [object Object]", () => {
@@ -79,5 +81,48 @@ test.describe("Global Data Integrity Guard: No NaN, undefined, null, Invalid Dat
         expect(bodyText).not.toContain("[object Object]");
       });
     }
+
+    test(`verifies return detail and sale with return pages (${locale.toUpperCase()})`, async ({ page }) => {
+      await page.goto("/sales/returns");
+      await page.waitForLoadState("domcontentloaded");
+
+      if (locale === "en") {
+        const enBtn = page.locator('header button:has-text("EN"), button:has-text("EN")').first();
+        if (await enBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await enBtn.click();
+          await page.waitForTimeout(300);
+        }
+      }
+
+      // Check if any return link exists
+      const returnRowLink = page.locator('tbody tr a[href*="/sales/returns/"]').first();
+      if (await returnRowLink.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await returnRowLink.click();
+        await page.waitForLoadState("domcontentloaded");
+        await page.waitForTimeout(500);
+
+        let bodyText = await page.locator("body").innerText();
+        expect(bodyText).not.toMatch(/\bNaN\b/);
+        expect(bodyText).not.toMatch(/\bundefined\b/);
+        expect(bodyText).not.toMatch(/\bnull\b/);
+        expect(bodyText).not.toContain("Invalid Date");
+        expect(bodyText).not.toContain("[object Object]");
+
+        // Click into the associated sale detail
+        const saleLink = page.locator('a[href*="/sales/"]:not([href*="/returns/"])').first();
+        if (await saleLink.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await saleLink.click();
+          await page.waitForLoadState("domcontentloaded");
+          await page.waitForTimeout(500);
+
+          bodyText = await page.locator("body").innerText();
+          expect(bodyText).not.toMatch(/\bNaN\b/);
+          expect(bodyText).not.toMatch(/\bundefined\b/);
+          expect(bodyText).not.toMatch(/\bnull\b/);
+          expect(bodyText).not.toContain("Invalid Date");
+          expect(bodyText).not.toContain("[object Object]");
+        }
+      }
+    });
   }
 });

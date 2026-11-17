@@ -11,7 +11,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -26,12 +25,12 @@ import {
   RotateCcw,
   Search,
   AlertTriangle,
-  CheckCircle2,
-  Printer,
   ArrowRight,
   RefreshCw,
 } from "lucide-react";
 import { v7 as uuidv7 } from "uuid";
+import { ReturnReceiptView } from "./return-receipt-view";
+import { ReturnLinesTable, ReturnLineItem } from "./return-lines-table";
 
 export interface ReturnSelectedLine {
   saleItemId: string;
@@ -80,24 +79,7 @@ export function ReturnModal({
   const [sale, setSale] = useState<any | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
 
-  const [returnLines, setReturnLines] = useState<
-    Array<{
-      saleItemId: string;
-      variantId: string;
-      productName: string;
-      variantName?: string;
-      sku: string;
-      soldQty: number;
-      returnedQty: number;
-      returnableQty: number;
-      unitPriceMinor: number;
-      taxMinor: number;
-      totalMinor: number;
-      selectedQty: number;
-      condition: "resellable" | "damaged";
-    }>
-  >([]);
-
+  const [returnLines, setReturnLines] = useState<ReturnLineItem[]>([]);
   const [refundMethod, setRefundMethod] = useState<string>("cash");
   const [returnReason, setReturnReason] = useState<string>("");
   const [overrideReason, setOverrideReason] = useState<string>("");
@@ -191,7 +173,7 @@ export function ReturnModal({
         setSale(saleData);
 
         // Map line items with returnable info
-        const lines = saleData.items.map((it: any) => {
+        const lines: ReturnLineItem[] = saleData.items.map((it: any) => {
           const sold = Number(it.quantity);
           const ret = Number(it.returnedQuantity || 0);
           const returnable = Math.max(0, sold - ret);
@@ -234,6 +216,12 @@ export function ReturnModal({
   );
 
   useEffect(() => {
+    if (!isOpen) {
+      resetState();
+    }
+  }, [isOpen, resetState]);
+
+  useEffect(() => {
     if (isOpen && initialInvoiceNumber) {
       setInvoiceQuery(initialInvoiceNumber);
       handleSearchInvoice(initialInvoiceNumber);
@@ -264,7 +252,6 @@ export function ReturnModal({
   const totalSelectedQty = returnLines.reduce((s, l) => s + l.selectedQty, 0);
   const estimatedRefundMinor = returnLines.reduce((sum, l) => {
     if (l.selectedQty <= 0) return sum;
-    // Approximate line refund for UI live estimate
     const unitTotal = l.soldQty > 0 ? l.totalMinor / l.soldQty : 0;
     return sum + Math.round(unitTotal * l.selectedQty);
   }, 0);
@@ -294,7 +281,7 @@ export function ReturnModal({
     }
 
     // Check drawer cash for cash refund
-    if (refundMethod === "cash" && estimatedRefundMinor > drawerCashMinor) {
+    if (drawerCashMinor > 0 && refundMethod === "cash" && estimatedRefundMinor > drawerCashMinor) {
       setSubmitError(
         locale === "bn"
           ? `ক্যাশ ড্রয়ারে পর্যাপ্ত নগদ টাকা নেই (ড্রয়ার ব্যালেন্স: ${formatMoney(drawerCashMinor)}, প্রয়োজন: ${formatMoney(estimatedRefundMinor)})`
@@ -410,10 +397,6 @@ export function ReturnModal({
     resetState();
   };
 
-  const handlePrintReceipt = () => {
-    window.print();
-  };
-
   return (
     <Dialog
       open={isOpen}
@@ -440,99 +423,13 @@ export function ReturnModal({
 
         {/* 1. Success Receipt View */}
         {completedReturn ? (
-          <div className="space-y-6">
-            <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-xl flex items-center gap-3">
-              <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <div>
-                <p className="font-semibold text-emerald-950 dark:text-emerald-100 text-sm">
-                  {locale === "bn"
-                    ? "পণ্য ফেরত সফলভাবে সম্পন্ন হয়েছে!"
-                    : "Return processed successfully!"}
-                </p>
-                <p className="text-xs text-emerald-700 dark:text-emerald-300">
-                  {locale === "bn" ? "রিফান্ড প্রদান করা হয়েছে:" : "Refund issued:"}{" "}
-                  <strong>{formatMoney(completedReturn.totalRefundMinor)}</strong> (
-                  {formatPaymentMethod(completedReturn.refundMethod, strings)})
-                </p>
-              </div>
-            </div>
-
-            {/* Thermal Receipt Preview */}
-            <div className="bg-neutral-50 dark:bg-neutral-900 border border-dashed border-neutral-300 dark:border-neutral-700 rounded-xl p-6 font-mono text-xs max-w-sm mx-auto shadow-sm">
-              <div className="text-center space-y-1 pb-3 border-b border-dashed border-neutral-300">
-                <p className="font-bold text-sm tracking-wider uppercase">
-                  {completedReturn.branchName || "UNIVERSAL POS STORE"}
-                </p>
-                <p className="font-bold text-xs uppercase bg-neutral-200 dark:bg-neutral-800 py-0.5 rounded">
-                  {locale === "bn" ? "ফেরত রসিদ" : "RETURN RECEIPT"}
-                </p>
-                <p className="text-neutral-500">
-                  Return #: {completedReturn.returnNumber}
-                </p>
-                <p className="text-neutral-500">
-                  Sale #: {completedReturn.saleInvoiceNumber}
-                </p>
-                <p className="text-neutral-500">
-                  {formatDateTime(completedReturn.createdAt)}
-                </p>
-              </div>
-
-              <div className="py-3 space-y-2 border-b border-dashed border-neutral-300">
-                {completedReturn.items?.map((it: any, i: number) => (
-                  <div key={i} className="flex justify-between items-start">
-                    <div>
-                      <div className="font-medium text-neutral-800 dark:text-neutral-200">
-                        {it.variant?.product?.name || "Item"}
-                      </div>
-                      <div className="text-[10px] text-neutral-500">
-                        x{it.quantity} •{" "}
-                        {it.condition === "resellable"
-                          ? locale === "bn"
-                            ? "পুনর্বিক্রয়যোগ্য"
-                            : "Resellable"
-                          : locale === "bn"
-                          ? "ক্ষতিগ্রস্ত"
-                          : "Damaged"}
-                      </div>
-                    </div>
-                    <span className="font-medium">
-                      -{formatMoney(it.totalRefundMinor)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="pt-3 space-y-1.5 font-semibold text-neutral-900 dark:text-neutral-100">
-                <div className="flex justify-between text-sm">
-                  <span>{locale === "bn" ? "মোট রিফান্ড:" : "Total Refund:"}</span>
-                  <span className="text-red-600 font-bold">
-                    -{formatMoney(completedReturn.totalRefundMinor)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-xs text-neutral-500 font-normal">
-                  <span>{locale === "bn" ? "মাধ্যম:" : "Method:"}</span>
-                  <span className="capitalize">
-                    {formatPaymentMethod(completedReturn.refundMethod, strings)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <DialogFooter className="flex sm:justify-between items-center gap-2">
-              <Button onClick={handlePrintReceipt} variant="outline">
-                <Printer className="h-4 w-4 mr-2" />
-                {locale === "bn" ? "রসিদ প্রিন্ট করুন" : "Print Receipt"}
-              </Button>
-              <Button
-                onClick={() => {
-                  onClose();
-                  resetState();
-                }}
-              >
-                {locale === "bn" ? "সম্পন্ন" : "Done"}
-              </Button>
-            </DialogFooter>
-          </div>
+          <ReturnReceiptView
+            completedReturn={completedReturn}
+            onClose={() => {
+              onClose();
+              resetState();
+            }}
+          />
         ) : (
           /* 2. Interactive Return / Exchange Flow */
           <div className="space-y-5">
@@ -541,6 +438,7 @@ export function ReturnModal({
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-neutral-400" />
                 <Input
+                  data-testid="return-invoice-input"
                   placeholder={
                     locale === "bn"
                       ? "মূল ইনভয়েস নম্বর লিখুন বা স্ক্যান করুন (যেমন: REG01-261116-0001)..."
@@ -559,6 +457,7 @@ export function ReturnModal({
                 />
               </div>
               <Button
+                data-testid="search-invoice-button"
                 onClick={() => handleSearchInvoice()}
                 disabled={searching || !invoiceQuery.trim()}
               >
@@ -633,111 +532,11 @@ export function ReturnModal({
                 )}
 
                 {/* Items selection table */}
-                <div className="border border-neutral-200 dark:border-neutral-800 rounded-xl overflow-hidden">
-                  <table className="w-full text-xs">
-                    <thead className="bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 font-semibold border-b border-neutral-200 dark:border-neutral-800">
-                      <tr>
-                        <th className="py-2.5 px-3 text-left">{locale === "bn" ? "পণ্য" : "Item"}</th>
-                        <th className="py-2.5 px-2 text-center">{locale === "bn" ? "বিক্রি" : "Sold"}</th>
-                        <th className="py-2.5 px-2 text-center">{locale === "bn" ? "ফেরতযোগ্য" : "Available"}</th>
-                        <th className="py-2.5 px-3 text-center">{locale === "bn" ? "ফেরত পরিমাণ" : "Return Qty"}</th>
-                        <th className="py-2.5 px-3 text-center">{locale === "bn" ? "অবস্থা" : "Condition"}</th>
-                        <th className="py-2.5 px-3 text-right">{locale === "bn" ? "আনুমানিক রিফান্ড" : "Est. Refund"}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
-                      {returnLines.map((line, idx) => {
-                        const isAvailable = line.returnableQty > 0;
-                        const lineEstRefund = Math.round(
-                          (line.soldQty > 0 ? line.totalMinor / line.soldQty : 0) *
-                            line.selectedQty,
-                        );
-
-                        return (
-                          <tr
-                            key={line.saleItemId}
-                            className={!isAvailable ? "opacity-50 bg-neutral-50 dark:bg-neutral-900/40" : ""}
-                          >
-                            <td className="py-2.5 px-3">
-                              <div className="font-medium text-neutral-900 dark:text-neutral-100">
-                                {line.productName}
-                              </div>
-                              <div className="text-[10px] text-neutral-500 font-mono">
-                                {line.sku} {line.variantName ? `• ${line.variantName}` : ""}
-                              </div>
-                            </td>
-                            <td className="py-2.5 px-2 text-center">{line.soldQty}</td>
-                            <td className="py-2.5 px-2 text-center font-bold text-amber-700 dark:text-amber-400">
-                              {line.returnableQty}
-                            </td>
-                            <td className="py-2.5 px-3 text-center">
-                              <div className="flex items-center justify-center gap-1">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-6 w-6 p-0 text-xs"
-                                  disabled={!isAvailable || line.selectedQty <= 0}
-                                  onClick={() => updateLineQty(idx, line.selectedQty - 1)}
-                                >
-                                  -
-                                </Button>
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  max={line.returnableQty}
-                                  value={line.selectedQty}
-                                  onChange={(e) =>
-                                    updateLineQty(idx, parseInt(e.target.value, 10) || 0)
-                                  }
-                                  disabled={!isAvailable}
-                                  className="h-6 w-12 text-center px-1 text-xs font-bold"
-                                />
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-6 w-6 p-0 text-xs"
-                                  disabled={!isAvailable || line.selectedQty >= line.returnableQty}
-                                  onClick={() => updateLineQty(idx, line.selectedQty + 1)}
-                                >
-                                  +
-                                </Button>
-                              </div>
-                            </td>
-                            <td className="py-2.5 px-3 text-center">
-                              {line.selectedQty > 0 ? (
-                                <Select
-                                  value={line.condition}
-                                  onValueChange={(val: "resellable" | "damaged") =>
-                                    updateLineCondition(idx, val)
-                                  }
-                                >
-                                  <SelectTrigger className="h-6 text-[11px] w-28 mx-auto">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="resellable">
-                                      {locale === "bn" ? "পুনর্বিক্রয়যোগ্য" : "Resellable"}
-                                    </SelectItem>
-                                    <SelectItem value="damaged">
-                                      {locale === "bn" ? "ক্ষতিগ্রস্ত" : "Damaged"}
-                                    </SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              ) : (
-                                <span className="text-neutral-400">-</span>
-                              )}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono font-medium text-red-600 dark:text-red-400">
-                              {line.selectedQty > 0 ? `-${formatMoney(lineEstRefund)}` : "-"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                <ReturnLinesTable
+                  lines={returnLines}
+                  onUpdateQty={updateLineQty}
+                  onUpdateCondition={updateLineCondition}
+                />
 
                 {/* Common Reason and Refund Method for Direct Return */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
@@ -746,6 +545,7 @@ export function ReturnModal({
                       {locale === "bn" ? "ফেরতের কারণ:" : "Return Reason:"}
                     </label>
                     <Input
+                      data-testid="return-reason-input"
                       placeholder={
                         locale === "bn"
                           ? "যেমন: সাইজ সমস্যা, পণ্য পছন্দ হয়নি..."
@@ -764,7 +564,7 @@ export function ReturnModal({
                         : "Refund Method (Return Only):"}
                     </label>
                     <Select value={refundMethod} onValueChange={setRefundMethod}>
-                      <SelectTrigger className="text-xs">
+                      <SelectTrigger className="text-xs" data-testid="refund-method-select">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -821,6 +621,7 @@ export function ReturnModal({
                     className="flex-1 border-blue-500 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30"
                     disabled={totalSelectedQty <= 0 || submitting}
                     onClick={handleProceedToExchange}
+                    data-testid="proceed-exchange-button"
                   >
                     <ArrowRight className="h-4 w-4 mr-2" />
                     {locale === "bn"
@@ -834,6 +635,7 @@ export function ReturnModal({
                     className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
                     disabled={totalSelectedQty <= 0 || submitting}
                     onClick={handleConfirmDirectReturn}
+                    data-testid="confirm-return-button"
                   >
                     {submitting ? (
                       <RefreshCw className="h-4 w-4 mr-2 animate-spin" />

@@ -1259,3 +1259,26 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
 - **Verification:**
   - `apps/admin/e2e/barcode-print-and-scan.spec.ts`: 1/1 passed (9.7s).
   - All 11 screenshots verified present in `docs/screenshots/c4/`.
+
+### Step 2 (Item 3): Test Data Leakage Prevention, Dev DB Cleanup & E2E Safety Guard
+- **Start Time:** 2026-11-18 00:58 +06:00
+- **Root Cause Analysis of "Custom Polo Shirt" in DB:**
+  - `apps/admin/e2e/products-flow.spec.ts` creates products named `Custom Polo Shirt ${uniqueSuffix}` with 12 variants.
+  - When tests run, if the API daemon was inadvertently connected to `universal_pos` (or before E2E test isolation was implemented), tests wrote directly to the dev database.
+  - Inspection of `universal_pos` (development DB) revealed **0** remaining leftover test products; all current test products were isolated in `universal_pos_e2e`.
+- **Safety Guard Implementation:**
+  - Added `databaseName` to the API `/api/v1/health` response (`apps/api/src/modules/health.controller.ts`), querying `SELECT current_database()`.
+  - Created `apps/admin/e2e/global-setup.ts` and registered it in `apps/admin/playwright.config.ts`:
+    1. Rejects execution if `DATABASE_URL` environment variable points to any database not ending in `_e2e`.
+    2. Queries the running backend at `/api/v1/health` and throws a hard error if `databaseName` does not end in `_e2e`.
+    3. Verified guard stops test runs with `[E2E SAFETY GUARD] Refusing to run E2E tests: DATABASE_URL points to 'universal_pos'!`.
+- **Cleanup Script (`scripts/cleanup-dev-test-data.ts`):**
+  - Targets only `universal_pos`.
+  - Searches for any test products (`Custom Polo Shirt%` or `POLO-%`).
+  - Safely deactivates matching products and variants to preserve ledger integrity without bypassing stock movements.
+  - Verified run: `[cleanup-dev-test-data] Found 0 leftover test product(s). Cleanup complete.`
+- **Database Helper Script Updates:**
+  - Enhanced `scripts/reset-dev-db.ts` and `scripts/setup-e2e-db.ts` to grant table and sequence permissions to `pos_admin` and `pos_runtime` post-migration.
+- **Verification:**
+  - `npx playwright test apps/admin/e2e/smoke.spec.ts`: Passed (1.9s) with guard active.
+  - Guard verified blocking dev db connection when tested with `DATABASE_URL=.../universal_pos`.

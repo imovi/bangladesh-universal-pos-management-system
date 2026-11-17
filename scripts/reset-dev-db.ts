@@ -42,6 +42,12 @@ async function main() {
     },
   });
 
+  console.log(`[db:reset:dev] Granting table permissions...`);
+  const postMigrateClient = new PrismaClient({ datasources: { db: { url: rawUrl } } });
+  await postMigrateClient.$executeRawUnsafe(`GRANT ALL ON ALL TABLES IN SCHEMA public TO pos_admin, pos_runtime;`);
+  await postMigrateClient.$executeRawUnsafe(`GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO pos_admin, pos_runtime;`);
+  await postMigrateClient.$disconnect();
+
   console.log(`[db:reset:dev] Seeding clean demo dataset...`);
   execSync("npx tsx scripts/seed-demo.ts", {
     stdio: "inherit",

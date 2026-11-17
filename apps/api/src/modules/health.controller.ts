@@ -8,9 +8,11 @@ export class HealthController {
   @Get()
   async check() {
     let dbStatus = "disconnected";
+    let dbName = "";
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
+      const res = await this.prisma.$queryRaw<{ current_database: string }[]>`SELECT current_database()`;
       dbStatus = "connected";
+      dbName = res[0]?.current_database || "";
     } catch {
       dbStatus = "unreachable";
     }
@@ -18,6 +20,7 @@ export class HealthController {
     return {
       status: "ok",
       database: dbStatus,
+      databaseName: dbName,
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
     };

@@ -113,11 +113,19 @@ test.describe("Milestone A8: Settings, Staff, Roles & Audit Flow", () => {
     // Wait for redirect to /pos
     await page.waitForURL(/\/(pos|dashboard)/, { timeout: 15000 });
 
-    // Verify 5% discount limit on POS screen
+    // Verify 5% discount limit on POS screen (inside cashier menu)
     if (page.url().includes("/pos")) {
+      const switchBtn = page.locator('[data-testid="switch-register-btn"]');
+      if (await switchBtn.waitFor({ state: "visible", timeout: 4000 }).then(() => true).catch(() => false)) {
+        await switchBtn.click();
+        await expect(switchBtn).toBeHidden({ timeout: 5000 });
+      }
+      const cashierBlock = page.locator('[data-testid="cashier-name-block"]');
+      await cashierBlock.click();
       const discountLimitBadge = page.locator('[data-testid="cashier-discount-limit"]');
       await expect(discountLimitBadge).toBeVisible({ timeout: 10000 });
       await expect(discountLimitBadge).toContainText("5%");
+      await cashierBlock.click();
     }
 
     // Verify restricted pages are blocked (Access Denied)

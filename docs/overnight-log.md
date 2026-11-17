@@ -1204,3 +1204,23 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
      - `pos-header-layout.spec.ts`: 2/2 tests passed (11.5s).
      - `pos-flow.spec.ts`: 5/5 tests passed including accessibility and discount limit check.
      - `npm run lint`: 0 warnings, 0 errors across all workspaces.
+
+### Step 1.1: CI Failure Fix on 51b033a, Register Full-Name Display Directive, & POS Dialog Polish
+- **Start Time:** 2026-11-17 21:05 +06:00
+- **CI Failure Root Cause (Run 44059255416 on 51b033a):**
+  - In `apps/admin/e2e/settings-flow.spec.ts`, after logging in as a newly created cashier and redirecting to `/pos`, the `ShiftInUseAlert` dialog (`data-testid="switch-register-btn"`) appeared because REG01 already had an active shift from another user.
+  - The previous test used `isVisible({ timeout: 4000 })` which in Playwright does not wait (it checks instant visibility and immediately returns false). Pointer events to `[data-testid="cashier-name-block"]` were then intercepted by the alert backdrop.
+  - Fix: Updated `settings-flow.spec.ts` with explicit `.waitFor({ state: "visible", timeout: 4000 })` on `[data-testid="switch-register-btn"]` before clicking cashier block.
+- **Directive 4: Register Name Display on Wide Screens:**
+  - Added media query listener `(min-width: 1440px)` in `apps/admin/src/app/pos/page.tsx`.
+  - On screens >= 1440px: shows full register name and code (`${r.name} (${r.code})`, e.g. "Main Counter (REG01)").
+  - On screens < 1440px: shows code only (`REG01`) with expanded tooltip, preventing horizontal crowding.
+- **Error Propagation in Shift Close Dialog:**
+  - Updated `handleCloseShift` in `apps/admin/src/app/pos/page.tsx` to throw `new Error(errMsg)` on API failure rather than returning null.
+  - Ensures `CloseShiftDialog` in `apps/admin/src/components/pos/shift-dialogs.tsx` displays the exact server error message directly inside the modal in Bangla.
+- **Verification:**
+  - `apps/admin/e2e/settings-flow.spec.ts`: 1/1 passed (5.9s).
+  - `apps/admin/e2e/pos-header-layout.spec.ts`: 2/2 passed (12.2s).
+  - `apps/admin/e2e/pos-flow.spec.ts`: 5/5 passed (21.5s).
+  - `npm run lint`: 0 warnings, 0 errors across all 94 admin files and 72 api files.
+  - `npm run build`: All workspaces compiled cleanly.

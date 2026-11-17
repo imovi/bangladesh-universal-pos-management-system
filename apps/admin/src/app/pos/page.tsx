@@ -169,6 +169,16 @@ export default function PosPage() {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const [selectedProductForVariants, setSelectedProductForVariants] = useState<PosProduct | null>(null);
+  const [isWideScreen, setIsWideScreen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia("(min-width: 1440px)");
+    setIsWideScreen(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setIsWideScreen(e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -1114,15 +1124,15 @@ export default function PosPage() {
         checkRegisterShift();
         return closed;
       } else {
-        const errMsg = data.error?.message || data.message || "Failed to close shift";
+        const errMsg = data.error?.message || data.message || (locale === "bn" ? "শিফট বন্ধ করা যায়নি।" : "Failed to close shift");
         console.error("Failed to close shift:", errMsg);
         setServerErrorBanner(errMsg);
-        return null;
+        throw new Error(errMsg);
       }
     } catch (err: any) {
       console.error("Failed to close shift:", err.message);
       setServerErrorBanner(err.message);
-      return null;
+      throw err;
     } finally {
       setIsShiftSubmitting(false);
     }
@@ -1285,13 +1295,13 @@ export default function PosPage() {
                   if (reg) handleSelectRegister(reg);
                 }}
                 aria-label={locale === "bn" ? "রেজিস্টার নির্বাচন" : "Select Register"}
-                className="h-7 text-xs font-semibold bg-muted/50 border border-input rounded-md px-1.5 max-w-[95px] sm:max-w-[120px] md:max-w-[140px] focus:outline-none focus:ring-1 focus:ring-primary truncate"
+                className="h-7 text-xs font-semibold bg-muted/50 border border-input rounded-md px-1.5 max-w-[95px] sm:max-w-[110px] md:max-w-[130px] xl:max-w-[180px] min-[1440px]:max-w-[280px] focus:outline-none focus:ring-1 focus:ring-primary truncate"
                 data-testid="register-select"
                 title={selectedRegister ? `${selectedRegister.name} (${selectedRegister.code})` : ""}
               >
                 {registers.map((r) => (
                   <option key={r.id} value={r.id} title={`${r.name} (${r.code})`}>
-                    {r.name} ({r.code})
+                    {isWideScreen ? `${r.name} (${r.code})` : r.code}
                   </option>
                 ))}
               </select>

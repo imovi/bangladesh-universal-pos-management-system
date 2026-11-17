@@ -263,4 +263,50 @@ test.describe("Milestone C2: Credit & Due Sales, Customer Ledger, Collection Flo
     await expect(page.locator("body")).toContainText(/৬১-৯০ দিন|61-90 Days/i);
     await expect(page.locator("body")).toContainText(/>৯০ দিন|>90 Days/i);
   });
+
+  test("dashboard figures match API for today credit given, today credit collected, and today returns", async ({
+    page,
+  }) => {
+    // 1. Log in as Owner
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/login");
+    await page.fill("#tenantSlug", "artisan-apparel");
+    await page.fill("#email", "owner@artisan.com");
+    await page.fill("#password", "Password123!");
+    await page.click('button[type="submit"]');
+    await page.waitForURL(/\/(pos|dashboard)/, { timeout: 15000 });
+
+    // 2. Navigate to /dashboard and intercept the sales-summary API response
+    const [summaryApiRes] = await Promise.all([
+      page.waitForResponse((res) => res.url().includes("/reports/sales-summary") && res.status() === 200, {
+        timeout: 15000,
+      }),
+      page.goto("/dashboard"),
+    ]);
+    const summaryJson = await summaryApiRes.json();
+    const summaryData = summaryJson.data || summaryJson;
+
+    const expectedCreditGivenMinor = summaryData.totalCreditGivenMinor || 0;
+    const expectedCreditCollectedMinor = summaryData.totalCreditCollectedMinor || 0;
+    const expectedRefundMinor = summaryData.totalRefundMinor || 0;
+
+    // 3. Assert on-screen figures match API
+    const creditGivenEl = page.locator('[data-testid="dashboard-credit-given-amount"]');
+    await expect(creditGivenEl).toBeVisible({ timeout: 10000 });
+    const creditGivenText = (await creditGivenEl.textContent()) || "";
+    const creditGivenNum = Math.round(Number(creditGivenText.replace(/[^\d.]/g, "")) * 100);
+    expect(creditGivenNum).toBe(Number(expectedCreditGivenMinor));
+
+    const creditCollectedEl = page.locator('[data-testid="dashboard-credit-collected-amount"]');
+    await expect(creditCollectedEl).toBeVisible({ timeout: 10000 });
+    const creditCollectedText = (await creditCollectedEl.textContent()) || "";
+    const creditCollectedNum = Math.round(Number(creditCollectedText.replace(/[^\d.]/g, "")) * 100);
+    expect(creditCollectedNum).toBe(Number(expectedCreditCollectedMinor));
+
+    const returnsAmountEl = page.locator('[data-testid="dashboard-returns-amount"]');
+    await expect(returnsAmountEl).toBeVisible({ timeout: 10000 });
+    const returnsAmountText = (await returnsAmountEl.textContent()) || "";
+    const returnsAmountNum = Math.round(Number(returnsAmountText.replace(/[^\d.]/g, "")) * 100);
+    expect(returnsAmountNum).toBe(Number(expectedRefundMinor));
+  });
 });

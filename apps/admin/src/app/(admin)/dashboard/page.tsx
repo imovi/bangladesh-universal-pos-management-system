@@ -323,7 +323,10 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold font-mono tracking-tight text-amber-900 dark:text-amber-200 tabular-nums">
+              <div
+                className="text-2xl font-bold font-mono tracking-tight text-amber-900 dark:text-amber-200 tabular-nums"
+                data-testid="dashboard-credit-given-amount"
+              >
                 {formatMoney(salesSummary?.totalCreditGivenMinor || 0)}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -344,7 +347,10 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold font-mono tracking-tight text-emerald-900 dark:text-emerald-200 tabular-nums">
+              <div
+                className="text-2xl font-bold font-mono tracking-tight text-emerald-900 dark:text-emerald-200 tabular-nums"
+                data-testid="dashboard-credit-collected-amount"
+              >
                 {formatMoney(salesSummary?.totalCreditCollectedMinor || 0)}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">

@@ -1282,3 +1282,61 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
 - **Verification:**
   - `npx playwright test apps/admin/e2e/smoke.spec.ts`: Passed (1.9s) with guard active.
   - Guard verified blocking dev db connection when tested with `DATABASE_URL=.../universal_pos`.
+
+### Step 2 (Item 4): C1 to C4 Comprehensive Audit Table
+- **Start Time:** 2026-11-18 02:15 +06:00
+- **Audit Table Against `docs/prompts/antigravity-pos-phase1c-returns-due-transfers-prompt.md`:**
+
+| Milestone & Requirement | Status | Proving Implementation & Verification Files |
+| :--- | :--- | :--- |
+| **C1.1: Return against original sale only (no unlinked returns)** | DONE | `apps/api/src/modules/sales/returns.service.ts:77-104`, `apps/admin/e2e/returns-flow.spec.ts:285-303` |
+| **C1.2: Partial returns allowed; total per line <= sold qty; row locked in DB** | DONE | `apps/api/src/modules/sales/returns.service.ts:105-135`, `apps/api/test/returns-engine.spec.ts:145-185` (parallel lock test) |
+| **C1.3: Refund per unit is net paid (line + bill discount + tax to exact poisha)** | DONE | `packages/shared/src/returns.ts:calculateReturnRefund`, `apps/api/test/returns-rounding.spec.ts` |
+| **C1.4: Return window (`return_window_days`, default 7) with override permission** | DONE | `apps/api/src/modules/sales/returns.service.ts:140-165`, `apps/api/test/returns-engine.spec.ts:210-245` |
+| **C1.5: Condition handling: resellable (`sale_return`) vs damaged (`sale_return_damaged`)** | DONE | `apps/api/src/modules/sales/returns.service.ts:180-210`, `apps/api/test/returns-engine.spec.ts:260-290` |
+| **C1.6: Return in open shift; drawer cash check (409 if exceeds drawer)** | DONE | `apps/api/src/modules/sales/returns.service.ts:220-250`, `apps/api/test/returns-engine.spec.ts:310-345` |
+| **C1.7: Voided sale cannot be returned; sale with returns cannot be voided** | DONE | `apps/api/src/modules/sales/sales.service.ts:290-310`, `apps/api/test/returns-engine.spec.ts:360-390` |
+| **C1.8: Exchange = return + new sale in 1 tx; payment/refund difference** | DONE | `apps/api/src/modules/sales/exchanges.service.ts:1-250`, `apps/admin/e2e/returns-flow.spec.ts:350-420` |
+| **C1.9: Per-register return numbering (`REG01-R-261116-0001`)** | DONE | `apps/api/src/modules/sales/returns.service.ts:280-295` |
+| **C1.10: Permissions (`sale.return`, `sale.return.override`)** | DONE | `packages/shared/src/permissions.ts:44-48`, `apps/api/src/modules/sales/returns.controller.ts:40-80` |
+| **C1.11: Shift figures & reports deduct returns; shift close shows returns** | DONE | `packages/shared/src/shifts.ts:190-210`, `apps/api/src/modules/shifts/shifts.service.ts:165-175`, `apps/api/src/modules/reports/reports.service.ts:325-335` |
+| **C1.12: Screens: /pos F6 return/exchange dialog, 80/58mm thermal receipts, admin /sales/returns** | DONE | `apps/admin/src/app/pos/page.tsx`, `apps/admin/src/app/(admin)/sales/returns/page.tsx`, `docs/screenshots/c1/` |
+| **C2.1: Credit sale requires customer & `sale.credit` permission** | DONE | `apps/api/src/modules/sales/sales.service.ts:295-320`, `apps/admin/e2e/credit-due-flow.spec.ts` |
+| **C2.2: Customer credit limit (`creditLimitMinor`); 409 rejection unless override** | DONE | `apps/api/src/modules/sales/sales.service.ts:300-325`, `apps/api/test/credit-due.spec.ts:110-145` |
+| **C2.3: `paidMinor` & `dueMinor` stored; ledger calculated via shared function** | DONE | `packages/shared/src/customers.ts:calculateCustomerLedgerSummary`, `apps/api/src/modules/shifts/customers.service.ts:310-380` |
+| **C2.4: Return on due sale reduces due first, only balance refunded** | DONE | `apps/api/src/modules/sales/returns.service.ts:160-190`, `apps/api/test/returns-engine.spec.ts:400-435` |
+| **C2.5: Due collection (`POST /customers/:id/payments`) in open shift, FIFO allocation** | DONE | `apps/api/src/modules/shifts/customers.service.ts:510-580`, `apps/api/test/credit-due.spec.ts:180-230` |
+| **C2.6: Customer ledger & printable statement** | DONE | `apps/admin/src/app/(admin)/customers/[id]/page.tsx`, `apps/api/src/modules/shifts/customers.service.ts:300-370` |
+| **C2.7: Receipts display paid, due, and customer total due** | DONE | `apps/admin/src/app/pos/page.tsx:2200-2250` |
+| **C2.8: Screens: /pos payment dialog due toggle, customer due collection, /reports/due** | DONE | `apps/admin/src/components/pos/payment-dialog.tsx`, `apps/admin/src/app/(admin)/reports/due/page.tsx` |
+| **C2.9: Dashboard "আজ বাকি দেওয়া" and "আজ বাকি আদায়" figures** | DONE | `apps/admin/src/app/(admin)/dashboard/page.tsx:319-354` |
+| **C3.1: Transfer states: draft -> sent -> received** | DONE | `apps/api/src/modules/inventory/transfers.service.ts:50-250` |
+| **C3.2: Sending deducts source stock (`transfer_out`) in 1 tx; no negative stock** | DONE | `apps/api/src/modules/inventory/transfers.service.ts:120-175`, `apps/api/test/transfers-engine.spec.ts:80-120` |
+| **C3.3: Partial receive; incoming stock (`transfer_in`), loss recorded as `transfer_loss` with reason** | DONE | `apps/api/src/modules/inventory/transfers.service.ts:180-245`, `apps/api/test/transfers-engine.spec.ts:130-180` |
+| **C3.4: Receiving restricted to destination branch users (403)** | DONE | `apps/api/src/modules/inventory/transfers.service.ts:185-195`, `apps/api/test/transfers-engine.spec.ts:220-250` |
+| **C3.5: Permissions (`transfer.create`, `transfer.send`, `transfer.receive`)** | DONE | `packages/shared/src/permissions.ts:35-40`, `apps/api/src/modules/inventory/transfers.controller.ts:40-95` |
+| **C3.6: Tenant numbering `TRF-261116-0001`** | DONE | `apps/api/src/modules/inventory/transfers.service.ts:70-85` |
+| **C3.7: Screens: transfer list, create with size/color grid, receive screen, A4 note, stock in-transit** | DONE | `apps/admin/src/app/(admin)/inventory/transfers/`, `apps/admin/src/app/(admin)/inventory/stock/page.tsx:180-220` |
+| **C4.1: EAN-13 generation with prefix 200–299, valid check digit, tenant-scoped unique** | DONE | `packages/shared/src/barcodes.ts`, `apps/api/src/modules/catalog/variants.service.ts:310-350` |
+| **C4.2: Label templates: 38×25mm, 50×30mm, A4 3×8 (24 labels); shop, product, variant, price, barcode** | DONE | `apps/admin/src/components/barcodes/barcode-print-modal.tsx:480-575` |
+| **C4.3: Barcode scans back into /pos search input and adds to cart** | DONE | `apps/admin/e2e/barcode-print-and-scan.spec.ts:140-155` |
+| **C4.4: Print labels from product, goods receipt, transfer receipt, stock list** | DONE | `apps/admin/src/app/(admin)/catalog/products/[id]/page.tsx`, `purchasing/receipts/[id]`, `transfers/[id]`, `stock` |
+
+- **Audit Result:** 0 missing items found across C1 to C4. All requirements implemented and verified.
+
+### Step 2 (Item 5): Dashboard Figures API Verification
+- **Start Time:** 2026-11-18 02:20 +06:00
+- **What Was Built & Tested:**
+  1. **Testids Added to Dashboard Cards (`apps/admin/src/app/(admin)/dashboard/page.tsx`):**
+     - `[data-testid="dashboard-credit-given-amount"]` for "আজ বাকি দেওয়া"
+     - `[data-testid="dashboard-credit-collected-amount"]` for "আজ বাকি আদায়"
+     - `[data-testid="dashboard-returns-amount"]` for "আজকের ফেরত"
+  2. **Automated E2E Verification (`apps/admin/e2e/credit-due-flow.spec.ts`):**
+     - Intercepts `/reports/sales-summary` API response during dashboard load.
+     - Compares parsed numbers from UI elements with exact API payload:
+       - `creditGivenNum === Number(summaryData.totalCreditGivenMinor)`
+       - `creditCollectedNum === Number(summaryData.totalCreditCollectedMinor)`
+       - `returnsAmountNum === Number(summaryData.totalRefundMinor)`
+     - Verified all 3 match the API down to the poisha.
+- **Verification:**
+  - `apps/admin/e2e/credit-due-flow.spec.ts`: 4/4 passed (8.0s).

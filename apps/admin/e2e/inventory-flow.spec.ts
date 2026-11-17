@@ -23,10 +23,11 @@ test.describe("Milestone A4: Stock & Inventory E2E Flow", () => {
     // Wait until options are populated
     await expect(productSelect.locator("option")).not.toHaveCount(1, { timeout: 10000 });
     
-    // Choose the first actual product (index 1)
+    // Choose a product option (use the last product to avoid movement log overflow from other test suites)
     const optionValues = await productSelect.locator("option").all();
-    const productValue = await optionValues[1].getAttribute("value");
-    const productName = await optionValues[1].innerText();
+    const targetOption = optionValues.length > 2 ? optionValues[optionValues.length - 1] : optionValues[1];
+    const productValue = await targetOption.getAttribute("value");
+    const productName = await targetOption.innerText();
     await productSelect.selectOption(productValue!);
 
     // Wait for the SizeColorGrid to render

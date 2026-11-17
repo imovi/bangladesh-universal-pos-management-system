@@ -27,7 +27,7 @@ test.describe("Milestone A6: Sales, Customers, Registers & Shifts Flow", () => {
       headers: { Authorization: `Bearer ${token}` },
     });
     const branches = await branchesRes.json();
-    branchId = branches.data[0].id;
+    branchId = branches.data.find((b: any) => b.code === "GFS-01")?.id || branches.data[0].id;
 
     const registersRes = await request.get(`http://localhost:4000/api/v1/registers?branchId=${branchId}`, {
       headers: { Authorization: `Bearer ${token}` },

@@ -974,3 +974,36 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
        - `docs/screenshots/c1/desktop-dark-dashboard-returns.png`
        - `docs/screenshots/c1/mobile-light-returns-list.png`
        - `docs/screenshots/c1/mobile-dark-returns-list.png`
+
+
+### Step 2: Milestone C2 Verification & CI E2E Isolation Hardening
+- **Start Time:** 2026-11-17 06:35 +06:00
+- **End Time:** 2026-11-17 07:05 +06:00
+- **What Was Built & Fixed:**
+  1. **Root Cause of CI Flakiness in Commit `7786fda`:**
+     - **Shift State Collision across Test Suites:** `returns-flow.spec.ts` opened a shift on `Main Counter (REG01)` under Owner (Tariqul Islam) without closing it. When `pos-flow.spec.ts` ran subsequently with Cashier Sultana Razia, the `ShiftInUseAlert` dialog ("এই রেজিস্টারে অন্য ক্যাশিয়ারের শিফট চলমান রয়েছে: Main Counter — Tariqul Islam") popped up asynchronously. The modal backdrop intercepted pointer events on the POS screen, causing timeout failures on product card clicks.
+     - **Incorrect Stock Adjustment URL in `credit-due-flow.spec.ts`:** Setup called `POST /api/v1/inventory/adjustments` with `{ items: [...] }` (which returned 404), failing to populate stock and leaving the checkout button disabled.
+     - **Branch Code Alignment:** `credit-due-flow.spec.ts` and `sales-flow.spec.ts` used `branches.data[0].id` (Dhanmondi) while POS and Sales lists in the UI defaulted to `GFS-01` (Gulshan Flagship Store).
+     - **Movement Log Depth in `inventory-flow.spec.ts`:** `inventory/opening` defaulted to `branches[0].id` rather than the active branch `currentBranch.id` (`GFS-01`). Furthermore, the first product in the dropdown had accumulated over 10 recent transactions from previous tests, pushing the initial `+20` opening stock entry beyond the 10-row movements table.
+  2. **Fixes Applied & Verified:**
+     - **Inter-Suite Shift Cleanup:** Added `test.beforeAll` shift cleanup in `apps/admin/e2e/pos-flow.spec.ts` to close any lingering open shifts on `REG01` before executing cashier selling tests. Hardened register switch button locator to `button:has-text("অন্য রেজিস্টার বেছে নিন"), [data-testid="switch-register-btn"]`.
+     - **Correct Stock Endpoint:** Updated `credit-due-flow.spec.ts` to use `POST /api/v1/inventory/adjustment` with `{ branchId, variantId, qtyDelta: 50, reason }` targeted at `GFS-01`.
+     - **Opening Stock Branch Alignment:** Updated `apps/admin/src/app/(admin)/inventory/opening/page.tsx` to initialize `selectedBranchId` using `currentBranch?.id || branches[0].id`, matching the active branch in AppShell.
+     - **Targeted Option Selection:** Updated `inventory-flow.spec.ts` to choose a dedicated product option, ensuring opening stock entries are reliably displayed in the movement history modal.
+     - **Sales Filter Alignment:** Updated `sales-flow.spec.ts` to create the test sale under `GFS-01`, matching the active branch filter on `/sales`.
+  3. **Milestone C2 Screenshot Catalog (`docs/screenshots/c2/`):**
+     - Captured all 10 required screenshots at 1440px desktop and 375px mobile across light and dark modes:
+       - `customer-detail-ledger-desktop-bn.png`
+       - `customer-detail-ledger-mobile-bn.png`
+       - `customers-list-due-sort-desktop-bn.png`
+       - `dashboard-due-cards-desktop-bn.png`
+       - `pos-credit-payment-dialog-desktop-light-bn.png`
+       - `pos-credit-payment-dialog-desktop-dark-bn.png`
+       - `pos-credit-payment-dialog-mobile-light-bn.png`
+       - `pos-credit-payment-dialog-mobile-dark-bn.png`
+       - `reports-due-ageing-desktop-bn.png`
+       - `reports-due-ageing-mobile-bn.png`
+  4. **Full Verification:**
+     - `npm run lint`: 0 warnings, 0 errors across 87 admin files and 69 api files.
+     - Vitest API: 44 test files, 248 passed (100% pass rate, 89.47% overall coverage).
+     - Playwright E2E: All 112 tests passed (3.3m) with zero failures.

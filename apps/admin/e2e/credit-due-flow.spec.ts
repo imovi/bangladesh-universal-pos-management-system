@@ -10,6 +10,7 @@ test.describe("Milestone C2: Credit & Due Sales, Customer Ledger, Collection Flo
   let customerPhone: string;
   let variantId: string;
   let unitPriceMinor: number;
+  let testProductName: string;
 
   test.beforeAll(async ({ request }) => {
     // 1. Authenticate with API as Owner
@@ -29,7 +30,7 @@ test.describe("Milestone C2: Credit & Due Sales, Customer Ledger, Collection Flo
       headers: { Authorization: `Bearer ${token}` },
     });
     const branches = await branchesRes.json();
-    branchId = branches.data[0].id;
+    branchId = branches.data.find((b: any) => b.code === "GFS-01")?.id || branches.data[0].id;
 
     const registersRes = await request.get(`http://localhost:4000/api/v1/registers?branchId=${branchId}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -50,29 +51,27 @@ test.describe("Milestone C2: Credit & Due Sales, Customer Ledger, Collection Flo
       registerId = regJson.data.id;
     }
 
-    // 3. Ensure a clean open shift for the Owner on this register
+    // 3. Ensure a clean open shift on this register
     const shiftsRes = await request.get(
-      `http://localhost:4000/api/v1/shifts?status=open`,
+      `http://localhost:4000/api/v1/shifts?registerId=${registerId}&status=open`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
     const shiftsJson = await shiftsRes.json();
-    for (const s of (shiftsJson.data?.items || shiftsJson.data || [])) {
-      await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
+    const openShifts = Array.isArray(shiftsJson.data) ? shiftsJson.data : (shiftsJson.data?.items || []);
+    if (openShifts.length > 0) {
+      shiftId = openShifts[0].id;
+    } else {
+      const openRes = await request.post("http://localhost:4000/api/v1/shifts/open", {
         headers: { Authorization: `Bearer ${token}` },
-        data: { closingCashMinor: Number(s.openingCashMinor || 50000) },
+        data: {
+          registerId,
+          branchId,
+          openingCashMinor: 50000,
+        },
       });
+      const openJson = await openRes.json();
+      shiftId = openJson.data.id;
     }
-
-    const openRes = await request.post("http://localhost:4000/api/v1/shifts/open", {
-      headers: { Authorization: `Bearer ${token}` },
-      data: {
-        registerId,
-        branchId,
-        openingCashMinor: 50000,
-      },
-    });
-    const openJson = await openRes.json();
-    shiftId = openJson.data.id;
 
     // 4. Create a dedicated test customer with credit limit (e.g. 500,000 poisha = ৳5,000)
     customerPhone = `017${Math.floor(10000000 + Math.random() * 90000000)}`;
@@ -96,13 +95,15 @@ test.describe("Milestone C2: Credit & Due Sales, Customer Ledger, Collection Flo
     const items = prodJson.data.items || prodJson.data;
     const testProd = items.find((p: any) => p.variants && p.variants.length > 0);
     variantId = testProd.variants[0].id;
+    testProductName = testProd.name;
     unitPriceMinor = Number(testProd.variants[0].priceMinor) || 150000;
 
-    await request.post("http://localhost:4000/api/v1/inventory/adjustments", {
+    await request.post("http://localhost:4000/api/v1/inventory/adjustment", {
       headers: { Authorization: `Bearer ${token}` },
       data: {
         branchId,
-        items: [{ variantId, qtyDelta: 20 }],
+        variantId,
+        qtyDelta: 50,
         reason: "C2 credit sales test stock",
       },
     });
@@ -149,7 +150,12 @@ test.describe("Milestone C2: Credit & Due Sales, Customer Ledger, Collection Flo
     await expect(searchResultItem).toBeVisible({ timeout: 5000 });
     await searchResultItem.click();
 
-    // Add first available product card to cart
+    // Add product to cart
+    if (testProductName) {
+      await page.fill('[data-testid="pos-search-input"]', testProductName);
+      await page.waitForTimeout(400);
+    }
+
     const firstProduct = page.locator('[data-testid^="product-card-"]').first();
     await expect(firstProduct).toBeVisible({ timeout: 10000 });
     await firstProduct.click();

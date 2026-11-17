@@ -11,9 +11,40 @@ const screenshotsDir = path.resolve(
 test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
   test.use({ viewport: { width: 1366, height: 768 } });
 
-  test.beforeAll(() => {
+  test.beforeAll(async ({ request }) => {
     if (!fs.existsSync(screenshotsDir)) {
       fs.mkdirSync(screenshotsDir, { recursive: true });
+    }
+    // Clean up any lingering shifts from previous tests to guarantee pristine starting state
+    try {
+      const loginRes = await request.post("http://localhost:4000/api/v1/auth/login", {
+        data: {
+          tenantSlug: "artisan-apparel",
+          email: "owner@artisan.com",
+          password: "Password123!",
+        },
+      });
+      if (loginRes.ok()) {
+        const loginData = await loginRes.json();
+        const token = loginData.data?.accessToken;
+        if (token) {
+          const shiftsRes = await request.get("http://localhost:4000/api/v1/shifts?status=open", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (shiftsRes.ok()) {
+            const shiftsData = await shiftsRes.json();
+            const openShifts = Array.isArray(shiftsData.data) ? shiftsData.data : (shiftsData.data?.items || []);
+            for (const s of openShifts) {
+              await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
+                headers: { Authorization: `Bearer ${token}` },
+                data: { closingCashMinor: Number(s.openingCashMinor || 50000) },
+              }).catch(() => {});
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore if offline
     }
   });
 
@@ -35,19 +66,27 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
     await expect(page.locator("text=5%")).toBeVisible({ timeout: 10000 });
 
     // Handle shift in use dialog by switching register if needed
-    const switchBtn = page.locator('[data-testid="switch-register-btn"]');
-    if (await switchBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+    const switchBtn = page.locator('button:has-text("অন্য রেজিস্টার বেছে নিন"), [data-testid="switch-register-btn"]');
+    if (await switchBtn.isVisible({ timeout: 4000 }).catch(() => false)) {
       await switchBtn.click();
-      await expect(switchBtn).toBeHidden({ timeout: 3000 });
+      await expect(switchBtn).toBeHidden({ timeout: 5000 });
+      await page.waitForTimeout(500);
     }
 
     // Open shift if closed
-    const openShiftBtn = page.locator('[data-testid="open-shift-button"]');
-    if (await openShiftBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await openShiftBtn.click();
+    const confirmBtn = page.locator('[data-testid="confirm-open-shift-button"]');
+    if (await confirmBtn.isVisible({ timeout: 2500 }).catch(() => false)) {
       await page.fill('[data-testid="opening-cash-input"]', "500");
-      await page.click('[data-testid="confirm-open-shift-button"]');
-      await expect(page.locator('[data-testid="confirm-open-shift-button"]')).toBeHidden({ timeout: 5000 });
+      await confirmBtn.click();
+      await expect(confirmBtn).toBeHidden({ timeout: 5000 });
+    } else {
+      const openShiftBtn = page.locator('[data-testid="open-shift-button"]');
+      if (await openShiftBtn.isVisible({ timeout: 2500 }).catch(() => false)) {
+        await openShiftBtn.click();
+        await page.fill('[data-testid="opening-cash-input"]', "500");
+        await page.click('[data-testid="confirm-open-shift-button"]');
+        await expect(page.locator('[data-testid="confirm-open-shift-button"]')).toBeHidden({ timeout: 5000 });
+      }
     }
 
     // Add an item to cart by clicking first product card
@@ -121,9 +160,15 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
     // 3. Wait for Shift status and Open Shift if closed
     const openShiftBtn = page.locator('[data-testid="open-shift-button"]');
     const cashMoveBtn = page.locator('[data-testid="cash-movement-button"]');
-    await expect(openShiftBtn.or(cashMoveBtn)).toBeVisible({ timeout: 10000 });
+    const confirmOpenBtn = page.locator('[data-testid="confirm-open-shift-button"]');
+    await expect(openShiftBtn.or(cashMoveBtn).or(confirmOpenBtn)).toBeVisible({ timeout: 10000 });
 
-    if (await openShiftBtn.isVisible()) {
+    if (await confirmOpenBtn.isVisible().catch(() => false)) {
+      const openCashInput = page.locator('[data-testid="opening-cash-input"]');
+      await openCashInput.fill("1000");
+      await confirmOpenBtn.click();
+      await expect(cashMoveBtn).toBeVisible({ timeout: 10000 });
+    } else if (await openShiftBtn.isVisible().catch(() => false)) {
       await openShiftBtn.click();
       const openCashInput = page.locator('[data-testid="opening-cash-input"]');
       await expect(openCashInput).toBeVisible({ timeout: 5000 });

@@ -20,7 +20,7 @@ import Link from "next/link";
 
 export default function OpeningStockPage() {
   const { strings } = useTranslation();
-  const { apiFetch } = useAuth();
+  const { apiFetch, currentBranch } = useAuth();
   const queryClient = useQueryClient();
 
   const [selectedBranchId, setSelectedBranchId] = useState("");
@@ -66,12 +66,13 @@ export default function OpeningStockPage() {
     },
   });
 
-  // Auto-select first branch if available
+  // Auto-select current branch or first branch if available
   React.useEffect(() => {
     if (branches.length > 0 && !selectedBranchId) {
-      setSelectedBranchId(branches[0].id);
+      const match = currentBranch?.id ? branches.find((b: any) => b.id === currentBranch.id) : null;
+      setSelectedBranchId(match ? match.id : branches[0].id);
     }
-  }, [branches, selectedBranchId]);
+  }, [branches, currentBranch?.id, selectedBranchId]);
 
   // Extract sizes and colors from selected product
   const { sizes, colors, variantLookup } = useMemo(() => {

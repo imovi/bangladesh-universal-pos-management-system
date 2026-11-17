@@ -69,6 +69,8 @@ import {
   X,
   CreditCard,
   RotateCcw,
+  ChevronDown,
+  MoreHorizontal,
 } from "lucide-react";
 
 export default function PosPage() {
@@ -164,6 +166,8 @@ export default function PosPage() {
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isCashierMenuOpen, setIsCashierMenuOpen] = useState(false);
   const cashierMenuRef = useRef<HTMLDivElement>(null);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const [selectedProductForVariants, setSelectedProductForVariants] = useState<PosProduct | null>(null);
 
   useEffect(() => {
@@ -171,12 +175,15 @@ export default function PosPage() {
       if (cashierMenuRef.current && !cashierMenuRef.current.contains(e.target as Node)) {
         setIsCashierMenuOpen(false);
       }
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setIsMoreMenuOpen(false);
+      }
     };
-    if (isCashierMenuOpen) {
+    if (isCashierMenuOpen || isMoreMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isCashierMenuOpen]);
+  }, [isCashierMenuOpen, isMoreMenuOpen]);
   const [activeReceipt, setActiveReceipt] = useState<ReceiptData | null>(null);
 
   // Line Discount Modal
@@ -1243,27 +1250,33 @@ export default function PosPage() {
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-background">
       {/* 1. POS Top Bar */}
-      <header className="h-14 border-b border-border bg-card px-4 flex items-center justify-between shrink-0 select-none">
-        {/* Left: Brand & Register status */}
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="flex items-center gap-2 text-primary shrink-0">
-            <Store className="h-5 w-5" />
-            <h1 className="text-sm font-bold truncate">
-              <span className="hidden xl:inline">{posConfig.shopName}</span>
+      <header className="h-14 border-b border-border bg-card px-2.5 sm:px-4 flex items-center justify-between shrink-0 select-none overflow-hidden flex-nowrap gap-2">
+        {/* Left Zone: Shop, Branch, Register */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 flex-1 md:flex-initial shrink">
+          <div className="flex items-center gap-1.5 text-primary shrink-0">
+            <Store className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
+            <h1 className="text-xs sm:text-sm font-bold truncate hidden lg:inline" title={posConfig.shopName}>
+              {posConfig.shopName}
             </h1>
           </div>
 
-          <div className="h-4 w-px bg-border hidden xl:block" />
+          <div className="h-4 w-px bg-border hidden lg:block shrink-0" />
 
-          {/* Branch & Register Dropdowns */}
-          <div className="flex items-center gap-1.5 text-xs font-medium shrink-0">
-            <span className="font-semibold truncate max-w-[75px] xl:max-w-[140px]">
-              <span className="hidden xl:inline">{currentBranch?.code || "BR"} - </span>
+          {/* Branch Name */}
+          <div className="min-w-0 shrink flex items-center">
+            <span
+              className="font-semibold text-xs text-foreground block truncate min-w-0 max-w-[75px] sm:max-w-[120px] md:max-w-[160px] lg:max-w-[200px]"
+              title={`${currentBranch?.code ? currentBranch.code + " - " : ""}${currentBranch?.name || ""}`}
+            >
+              <span className="hidden xl:inline">{currentBranch?.code ? `${currentBranch.code} - ` : ""}</span>
               {currentBranch?.name}
             </span>
+          </div>
 
-            <span className="text-muted-foreground">•</span>
+          <span className="text-muted-foreground/50 shrink-0 select-none hidden sm:inline">•</span>
 
+          {/* Register Selector */}
+          <div className="min-w-0 shrink items-center hidden sm:flex">
             {registers.length > 0 ? (
               <select
                 value={selectedRegister?.id || ""}
@@ -1272,122 +1285,134 @@ export default function PosPage() {
                   if (reg) handleSelectRegister(reg);
                 }}
                 aria-label={locale === "bn" ? "রেজিস্টার নির্বাচন" : "Select Register"}
-                className="h-7 text-xs font-semibold bg-muted/50 border border-input rounded-md px-1.5 max-w-[95px] sm:max-w-[130px] focus:outline-none focus:ring-1 focus:ring-primary"
+                className="h-7 text-xs font-semibold bg-muted/50 border border-input rounded-md px-1.5 max-w-[95px] sm:max-w-[120px] md:max-w-[140px] focus:outline-none focus:ring-1 focus:ring-primary truncate"
                 data-testid="register-select"
+                title={selectedRegister ? `${selectedRegister.name} (${selectedRegister.code})` : ""}
               >
                 {registers.map((r) => (
-                  <option key={r.id} value={r.id}>
+                  <option key={r.id} value={r.id} title={`${r.name} (${r.code})`}>
                     {r.name} ({r.code})
                   </option>
                 ))}
               </select>
             ) : (
-              <span className="text-rose-500 font-semibold">{strings.pos.noRegisters}</span>
+              <span className="text-rose-500 font-semibold text-xs">{strings.pos.noRegisters}</span>
             )}
           </div>
-
-          {/* Shift status badge */}
-          {activeShift ? (
-            <Badge
-              variant="default"
-              data-testid="shift-status-badge"
-              className="text-[10px] py-1 px-2 font-medium flex items-center gap-1 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-none shrink-0 whitespace-nowrap"
-            >
-              <Unlock className="h-3 w-3 shrink-0" />
-              <span>
-                <span className="hidden sm:inline">{locale === "bn" ? "শিফট " : "Shift "}</span>
-                <span>{locale === "bn" ? "চলমান" : "Open"}</span>
-                <span className="hidden md:inline"> ({new Date(activeShift.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})</span>
-              </span>
-            </Badge>
-          ) : (
-            <Badge
-              variant="outline"
-              data-testid="shift-status-badge"
-              className="text-[10px] py-1 px-2 font-medium flex items-center gap-1 border-dashed shrink-0 whitespace-nowrap"
-            >
-              <Lock className="h-3 w-3 shrink-0" />
-              <span>
-                <span className="hidden sm:inline">{locale === "bn" ? "শিফট " : "Shift "}</span>
-                <span>{locale === "bn" ? "বন্ধ" : "Closed"}</span>
-              </span>
-            </Badge>
-          )}
         </div>
 
-        {/* Right: Cashier, Discount Limit, Shift Actions, Network, Theme, Language, Back */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        {/* Middle Zone: Unified Shift + Cashier Pill */}
+        <div className="flex items-center gap-1 sm:gap-2 shrink min-w-0 justify-center">
+          {/* Unified Shift + Cashier Pill */}
+          <div className="relative shrink min-w-0 max-w-[110px] sm:max-w-[150px] md:max-w-[190px] lg:max-w-[240px] xl:max-w-[300px]" ref={cashierMenuRef}>
+            <button
+              type="button"
+              data-testid="cashier-name-block"
+              onClick={() => setIsCashierMenuOpen((prev) => !prev)}
+              className="flex items-center gap-1 sm:gap-1.5 h-8 px-2 sm:px-2.5 rounded-full border text-xs font-medium w-full max-w-full transition-colors bg-muted/40 hover:bg-muted/70 border-border/60 text-left min-w-0 shrink overflow-hidden"
+              title={`${activeShift ? (locale === "bn" ? "শিফট চলমান" : "Shift Open") : (locale === "bn" ? "শিফট বন্ধ" : "Shift Closed")} · ${user.name}`}
+            >
+              {activeShift ? (
+                <span
+                  data-testid="shift-status-badge"
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 shrink-0"
+                >
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="hidden sm:inline">{locale === "bn" ? "শিফট " : "Shift "}</span>
+                  <span>{locale === "bn" ? "চলমান" : "Open"}</span>
+                </span>
+              ) : (
+                <span
+                  data-testid="shift-status-badge"
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-500 shrink-0"
+                >
+                  <Lock className="h-3 w-3" />
+                  <span className="hidden sm:inline">{locale === "bn" ? "শিফট " : "Shift "}</span>
+                  <span>{locale === "bn" ? "বন্ধ" : "Closed"}</span>
+                </span>
+              )}
+
+              <span className="text-muted-foreground/40 shrink-0 select-none">·</span>
+
+              <span
+                data-testid="cashier-name"
+                className="block truncate font-medium text-foreground min-w-0"
+                title={user.name}
+              >
+                {user.name}
+              </span>
+
+              <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0 opacity-70" />
+            </button>
+
+            {/* Dropdown Menu */}
+            {isCashierMenuOpen && (
+              <div
+                data-testid="cashier-menu-dropdown"
+                className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 w-64 bg-card border border-border rounded-xl shadow-xl p-3 z-50 text-xs space-y-2.5 animate-in fade-in"
+              >
+                <div className="border-b border-border pb-2">
+                  <p className="font-semibold text-foreground truncate">{user.name}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{user.email}</p>
+                  <Badge variant="outline" className="mt-1 text-[10px]">
+                    {user.roles?.join(", ") || (user.isOwner ? "Owner" : "Staff")}
+                  </Badge>
+                </div>
+
+                <div className="space-y-1 text-[11px] border-b border-border pb-2">
+                  <div className="flex justify-between items-center text-muted-foreground">
+                    <span>{locale === "bn" ? "শিফট অবস্থা" : "Shift Status"}</span>
+                    <span className="font-medium text-foreground">
+                      {activeShift ? (locale === "bn" ? "চলমান" : "Open") : (locale === "bn" ? "বন্ধ" : "Closed")}
+                    </span>
+                  </div>
+                  {activeShift && (
+                    <div className="flex justify-between items-center text-muted-foreground">
+                      <span>{locale === "bn" ? "শুরুর সময়" : "Opened At"}</span>
+                      <span className="font-mono text-foreground">
+                        {new Date(activeShift.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center text-muted-foreground pt-1">
+                    <span>{strings.pos.discountLimit}</span>
+                    <span
+                      data-testid="cashier-discount-limit"
+                      className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-primary/10 text-primary border border-primary/20"
+                    >
+                      {user?.isOwner || user?.roles?.includes("Owner") || maxDiscountPercent === null
+                        ? locale === "bn" ? "সীমাহীন" : "No limit"
+                        : `${maxDiscountPercent}%`}
+                    </span>
+                  </div>
+                </div>
+
+                {canAccessAdmin && (
+                  <Link
+                    href="/dashboard"
+                    onClick={() => setIsCashierMenuOpen(false)}
+                    className="flex items-center justify-center gap-1.5 w-full py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors text-foreground"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    <span>{strings.pos.backToAdmin}</span>
+                  </Link>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Zone: Actions, Held Carts, Menus */}
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           {/* Offline warning indicator */}
           {!isOnline && (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-semibold shrink-0">
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-semibold shrink-0">
               <WifiOff className="h-3.5 w-3.5" />
               <span className="hidden md:inline">{locale === "bn" ? "অফলাইন" : "Offline"}</span>
             </div>
           )}
 
-          {/* Cashier Name & Menu (Interactive, moves discount limit inside at narrow widths) */}
-          <div className="relative shrink-0" ref={cashierMenuRef}>
-            <button
-              type="button"
-              data-testid="cashier-name-block"
-              onClick={() => setIsCashierMenuOpen((prev) => !prev)}
-              className="flex items-center gap-1.5 h-8 px-2 rounded-md bg-muted/40 hover:bg-muted/70 border border-border/50 transition-colors text-left"
-              title={locale === "bn" ? "ক্যাশিয়ার তথ্য" : "Cashier details"}
-            >
-              <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <span
-                data-testid="cashier-name"
-                className="text-xs font-medium text-foreground truncate max-w-[70px] sm:max-w-[100px]"
-              >
-                {user.name}
-              </span>
-            </button>
-
-            {/* Cashier Dropdown Menu (Contains discount limit on narrow screens) */}
-            {isCashierMenuOpen && (
-              <div
-                data-testid="cashier-menu-dropdown"
-                className="absolute right-0 top-full mt-1.5 w-56 bg-card border border-border rounded-xl shadow-xl p-3 z-50 text-xs space-y-2 animate-in fade-in"
-              >
-                <div className="border-b border-border pb-2">
-                  <p className="font-semibold text-foreground">{user.name}</p>
-                  <p className="text-[11px] text-muted-foreground">{user.email}</p>
-                  <Badge variant="outline" className="mt-1 text-[10px]">
-                    {user.roles?.join(", ") || (user.isOwner ? "Owner" : "Staff")}
-                  </Badge>
-                </div>
-                <div className="py-1">
-                  <span className="text-muted-foreground block text-[11px] mb-1">
-                    {strings.pos.discountLimit}
-                  </span>
-                  <span
-                    data-testid="cashier-discount-limit"
-                    className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-semibold bg-primary/10 text-primary border border-primary/20"
-                  >
-                    {user?.isOwner || user?.roles?.includes("Owner") || maxDiscountPercent === null
-                      ? locale === "bn" ? "সীমাহীন" : "No limit"
-                      : `${maxDiscountPercent}%`}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Standalone Discount Limit badge on medium/large widths (>= 640px) */}
-          <div
-            data-testid="cashier-discount-limit"
-            className="hidden sm:inline-flex items-center h-8 px-2 rounded-md text-[10px] font-mono font-medium bg-primary/10 text-primary border border-primary/20 shrink-0 whitespace-nowrap"
-          >
-            <span className="hidden xl:inline">{strings.pos.discountLimit}: </span>
-            <span className="xl:hidden">{locale === "bn" ? "সীমা: " : "Limit: "}</span>
-            <span>
-              {user?.isOwner || user?.roles?.includes("Owner") || maxDiscountPercent === null
-                ? locale === "bn" ? "সীমাহীন" : "No limit"
-                : `${maxDiscountPercent}%`}
-            </span>
-          </div>
-
-          {/* Shift Actions */}
+          {/* Core Shift Actions */}
           {activeShift ? (
             <div className="flex items-center gap-1">
               <Button
@@ -1397,9 +1422,10 @@ export default function PosPage() {
                 className="h-8 px-2 text-xs font-medium"
                 data-testid="cash-movement-button"
                 title={strings.pos.cashManagement}
+                aria-label={strings.pos.cashManagement}
               >
-                <ArrowRightLeft className="h-3.5 w-3.5 2xl:mr-1" />
-                <span className="hidden 2xl:inline">{strings.pos.cashManagement}</span>
+                <ArrowRightLeft className="h-3.5 w-3.5 xl:mr-1" />
+                <span className="hidden xl:inline">{strings.pos.cashManagement}</span>
               </Button>
 
               <Button
@@ -1408,10 +1434,11 @@ export default function PosPage() {
                 onClick={() => setIsShiftSalesOpen(true)}
                 className="h-8 px-2 text-xs font-medium"
                 data-testid="shift-sales-button"
-                title={locale === "bn" ? "শিফট বিক্রি" : "Shift Sales"}
+                title={locale === "bn" ? "শিফট বিক্রি তালিকা" : "Shift Sales"}
+                aria-label={locale === "bn" ? "শিফট বিক্রি তালিকা" : "Shift Sales"}
               >
-                <Receipt className="h-3.5 w-3.5 2xl:mr-1" />
-                <span className="hidden 2xl:inline">{locale === "bn" ? "বিক্রি তালিকা" : "Sales"}</span>
+                <Receipt className="h-3.5 w-3.5 xl:mr-1" />
+                <span className="hidden xl:inline">{locale === "bn" ? "বিক্রি তালিকা" : "Sales"}</span>
               </Button>
 
               <Button
@@ -1421,9 +1448,10 @@ export default function PosPage() {
                 className="h-8 px-2 text-xs font-medium text-amber-600 hover:text-amber-700 hover:bg-amber-500/10"
                 data-testid="pos-return-button"
                 title={locale === "bn" ? "পণ্য ফেরত / বদল (F6)" : "Returns & Exchanges (F6)"}
+                aria-label={locale === "bn" ? "পণ্য ফেরত / বদল (F6)" : "Returns & Exchanges (F6)"}
               >
-                <RotateCcw className="h-3.5 w-3.5 2xl:mr-1" />
-                <span className="hidden 2xl:inline">{locale === "bn" ? "ফেরত (F6)" : "Return (F6)"}</span>
+                <RotateCcw className="h-3.5 w-3.5 xl:mr-1" />
+                <span className="hidden xl:inline">{locale === "bn" ? "ফেরত (F6)" : "Return (F6)"}</span>
               </Button>
 
               <Button
@@ -1433,9 +1461,10 @@ export default function PosPage() {
                 className="h-8 px-2 text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-500/10"
                 data-testid="close-shift-button"
                 title={strings.pos.closeShift}
+                aria-label={strings.pos.closeShift}
               >
-                <Lock className="h-3.5 w-3.5 2xl:mr-1" />
-                <span className="hidden 2xl:inline">{strings.pos.closeShift}</span>
+                <Lock className="h-3.5 w-3.5 xl:mr-1" />
+                <span className="hidden xl:inline">{strings.pos.closeShift}</span>
               </Button>
             </div>
           ) : (
@@ -1443,11 +1472,12 @@ export default function PosPage() {
               <Button
                 size="sm"
                 onClick={() => setIsOpenShiftOpen(true)}
-                className="h-8 px-3 text-xs font-semibold"
+                className="h-8 px-2.5 text-xs font-semibold"
                 data-testid="open-shift-button"
+                title={strings.pos.openShift}
               >
-                <Unlock className="h-3.5 w-3.5 mr-1" />
-                <span>{strings.pos.openShift}</span>
+                <Unlock className="h-3.5 w-3.5 sm:mr-1" />
+                <span className="hidden sm:inline">{strings.pos.openShift}</span>
               </Button>
             )
           )}
@@ -1459,58 +1489,131 @@ export default function PosPage() {
             onClick={() => setIsHoldCartOpen(true)}
             className="h-8 px-2 text-xs font-medium relative"
             title={strings.pos.holdCart}
+            aria-label={strings.pos.holdCart}
           >
             <PauseCircle className="h-3.5 w-3.5" />
             {heldCarts.length > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
+              <span
+                data-testid="held-carts-badge"
+                className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center"
+              >
                 {heldCarts.length}
               </span>
             )}
           </Button>
 
-          {/* Keyboard Shortcuts Dialog */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsShortcutsOpen(true)}
-            aria-label={strings.pos.shortcuts}
-            className="h-8 w-8 text-muted-foreground hidden sm:inline-flex"
-            title={strings.pos.shortcuts}
-          >
-            <Keyboard className="h-4 w-4" />
-          </Button>
-
-          {/* Theme & Language Switchers */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            aria-label={locale === "bn" ? "থিম পরিবর্তন" : "Toggle theme"}
-            className="h-8 w-8"
-          >
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setLocale(locale === "bn" ? "en" : "bn")}
-            className="h-8 px-2 text-xs font-semibold"
-          >
-            {locale === "bn" ? "EN" : "বাং"}
-          </Button>
-
-          {/* Back to Back Office (Admin) Link */}
-          {canAccessAdmin && (
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-1 h-8 px-2 rounded-md border border-border text-xs font-medium hover:bg-muted transition-colors"
-              title={strings.pos.backToAdmin}
+          {/* Full Screen / Desktop Actions (visible on xl and up) */}
+          <div className="hidden xl:flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsShortcutsOpen(true)}
+              aria-label={strings.pos.shortcuts}
+              className="h-8 w-8 text-muted-foreground"
+              title={strings.pos.shortcuts}
             >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              <span className="hidden 2xl:inline">{strings.pos.backToAdmin}</span>
-            </Link>
-          )}
+              <Keyboard className="h-4 w-4" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              aria-label={locale === "bn" ? "থিম পরিবর্তন" : "Toggle theme"}
+              className="h-8 w-8"
+              title={locale === "bn" ? "থিম পরিবর্তন" : "Toggle theme"}
+            >
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setLocale(locale === "bn" ? "en" : "bn")}
+              className="h-8 px-2 text-xs font-semibold"
+              title={locale === "bn" ? "Switch to English" : "বাংলায় পরিবর্তন করুন"}
+            >
+              {locale === "bn" ? "EN" : "বাং"}
+            </Button>
+
+            {canAccessAdmin && (
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-1 h-8 px-2 rounded-md border border-border text-xs font-medium hover:bg-muted transition-colors"
+                title={strings.pos.backToAdmin}
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                <span className="hidden 2xl:inline">{strings.pos.backToAdmin}</span>
+              </Link>
+            )}
+          </div>
+
+          {/* Overflow Menu for Narrow Screens (< xl) */}
+          <div className="relative xl:hidden shrink-0" ref={moreMenuRef}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsMoreMenuOpen((prev) => !prev)}
+              aria-label={locale === "bn" ? "আরও অপশন" : "More options"}
+              className="h-8 w-8 text-muted-foreground"
+              title={locale === "bn" ? "আরও অপশন" : "More options"}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+
+            {isMoreMenuOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-48 bg-card border border-border rounded-xl shadow-xl p-2 z-50 text-xs space-y-1 animate-in fade-in">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsShortcutsOpen(true);
+                    setIsMoreMenuOpen(false);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg hover:bg-muted text-foreground text-left"
+                >
+                  <Keyboard className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>{strings.pos.shortcuts}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTheme(theme === "dark" ? "light" : "dark");
+                    setIsMoreMenuOpen(false);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg hover:bg-muted text-foreground text-left"
+                >
+                  {theme === "dark" ? <Sun className="h-3.5 w-3.5 text-muted-foreground" /> : <Moon className="h-3.5 w-3.5 text-muted-foreground" />}
+                  <span>{theme === "dark" ? (locale === "bn" ? "লাইট মোড" : "Light Mode") : (locale === "bn" ? "ডার্ক মোড" : "Dark Mode")}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLocale(locale === "bn" ? "en" : "bn");
+                    setIsMoreMenuOpen(false);
+                  }}
+                  className="flex items-center justify-between w-full px-2.5 py-1.5 rounded-lg hover:bg-muted text-foreground text-left"
+                >
+                  <span>{locale === "bn" ? "ভাষা: বাংলা" : "Language: English"}</span>
+                  <span className="font-semibold text-primary">{locale === "bn" ? "EN" : "বাং"}</span>
+                </button>
+
+                {canAccessAdmin && (
+                  <div className="border-t border-border pt-1">
+                    <Link
+                      href="/dashboard"
+                      onClick={() => setIsMoreMenuOpen(false)}
+                      className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg hover:bg-muted text-foreground text-left"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span>{strings.pos.backToAdmin}</span>
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </header>
 

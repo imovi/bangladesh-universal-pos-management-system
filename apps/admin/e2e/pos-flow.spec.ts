@@ -62,8 +62,12 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
     await page.waitForURL("**/pos", { timeout: 15000 });
     expect(page.url()).toContain("/pos");
 
-    // Check discount limit display (5%)
-    await expect(page.locator("text=5%")).toBeVisible({ timeout: 10000 });
+    // Check discount limit display (5% inside cashier menu pill)
+    const cashierBlock = page.locator('[data-testid="cashier-name-block"]');
+    await cashierBlock.click();
+    await expect(page.locator('[data-testid="cashier-menu-dropdown"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("text=5%")).toBeVisible({ timeout: 5000 });
+    await cashierBlock.click();
 
     // Handle shift in use dialog by switching register if needed
     const switchBtn = page.locator('button:has-text("অন্য রেজিস্টার বেছে নিন"), [data-testid="switch-register-btn"]');

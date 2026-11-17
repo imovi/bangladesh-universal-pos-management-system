@@ -1162,3 +1162,45 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
      - `npm run lint`: 0 warnings, 0 errors across 94 admin files and 72 api files.
      - Vitest API: `test/reports-c5.spec.ts` 4/4 passed.
      - Playwright E2E: `reports-c5.spec.ts` 1/1 passed, `global-data-integrity-guard.spec.ts` 56/56 passed.
+  10. **GitHub Actions CI Run for Head SHA `7baaf02` (copied from GitHub API):**
+      - Commit `7baaf02`: Run ID [44045300458](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44045300458) — **Status: completed, Conclusion: success (Green)**. All lint, API tests, coverage, and all Admin E2E tests passed!
+
+
+### Step 1: /pos Header Layout Overhaul, Zero Text Overlap & Graceful Truncation
+- **Start Time:** 2026-11-17 14:40 +06:00
+- **Why the Old Header Test Passed While the Bug Existed:**
+  1. **Width Coverage:** The old `pos-header-layout.spec.ts` only asserted at 1366, 1024, and 375 px; it **never tested 1920 px**. At 1920 px, action button text (`2xl:inline`) expanded the right container while left container had fixed widths.
+  2. **Bounding Box vs Rendered Text Glyphs:** The old test measured element box boundaries (`boundingBox()`) instead of actual rendered text node glyph bounds via `Range.getBoundingClientRect()`.
+  3. **CSS Inline Overflow Behavior:** The branch name and cashier name spans were `display: inline` by default. In CSS, `overflow: hidden; text-overflow: ellipsis;` has no effect on inline elements, causing glyphs to bleed outside the element box into adjacent elements without expanding the element's box.
+- **What Was Built & Fixed:**
+  1. **3-Zone Header Architecture (`apps/admin/src/app/pos/page.tsx`):**
+     - **Left Zone:** Shop name (`Store` icon + truncate title), Branch name (responsive max-width with ellipsis & title tooltip), dot separator, and Register selector (`select` with title tooltip and responsive max-width).
+     - **Middle Zone:** Unified Shift + Cashier Pill (`● শিফট চলমান · Tariqul Islam ▾` / `🔒 শিফট বন্ধ · Tariqul Islam ▾`). Clicking opens the cashier menu dropdown containing cashier info, roles, shift start time, max discount limit, and back to admin link.
+     - **Right Zone:** Core actions visible at all widths (`cash-movement-button`, `shift-sales-button`, `pos-return-button`, `close-shift-button` / `open-shift-button`, `held-carts-badge`). Responsive overflow menu (`MoreHorizontal`) for less-used actions (shortcuts, theme, locale, back to admin) below `xl`.
+  2. **Layout Rules & Overlap Prevention:**
+     - Removed fixed pixel collision points. All names use `block truncate min-w-0` with title tooltips.
+     - Cashier pill uses `w-full max-w-full min-w-0 overflow-hidden` inside bounded wrapper, preventing any expansion into adjacent zones.
+     - Header height strictly <= 60px (single row) across all viewports >= 768px.
+  3. **Automated Layout & Text Node Overlap Test (`apps/admin/e2e/pos-header-layout.spec.ts`):**
+     - Tests all 8 viewports: 375, 768, 1024, 1280, 1366, 1440, 1536, and 1920 px.
+     - Tests with seed names and again with dynamic long names created and cleanly cleaned up via API:
+       - Cashier: "Mohammad Abdur Rahman Chowdhury"
+       - Branch: "Gulshan Flagship Store — Road 11, Block C"
+       - Register: "Main Counter Near Entrance Gate"
+     - Verifies `Range.getBoundingClientRect()` text node visibility with ancestor clipping containers: 0 collisions found.
+     - Verifies unhandled clipping: `scrollWidth <= clientWidth` unless intentional ellipsis with `title`.
+  4. **Screenshots (`docs/screenshots/pos-header/`):**
+     - Captured from Next.js production build (`next build` + `next start`):
+       - `header-375-bn-light.png`
+       - `header-768-bn-light.png`
+       - `header-1024-bn-light.png`
+       - `header-1280-bn-light.png`
+       - `header-1366-bn-light.png`
+       - `header-1440-bn-light.png`
+       - `header-1536-bn-light.png`
+       - `header-1920-bn-light.png`
+       - `header-1920-bn-dark.png`
+  5. **Full Verification:**
+     - `pos-header-layout.spec.ts`: 2/2 tests passed (11.5s).
+     - `pos-flow.spec.ts`: 5/5 tests passed including accessibility and discount limit check.
+     - `npm run lint`: 0 warnings, 0 errors across all workspaces.

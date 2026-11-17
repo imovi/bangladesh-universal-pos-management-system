@@ -1066,3 +1066,50 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
      - Strict file size limit compliance (<800 lines on every file).
    - **GitHub Actions CI Runs for C3 Commits (copied from GitHub API):**
      - Commit `ebe1420`: Run ID [44006052435](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44006052435) — **Status: completed, Conclusion: failure** (Failed at "Run Admin Dashboard E2E tests" due to unisolated shift state in `capture-c1-screenshots.spec.ts`)
+
+
+---
+
+### Step 4: CI Green Resolution (Fixing Inter-Suite Shift State & React Query Hydration Race)
+- **Start Time:** 2026-11-17 09:30 +06:00
+- **End Time:** 2026-11-17 10:45 +06:00
+- **Root Causes Identified & Fixed:**
+  1. **Shift State Collision in `capture-c1-screenshots.spec.ts`:** Earlier test runs left an active shift on `REG01` under cashier Sultana Razia. When `capture-c1-screenshots.spec.ts` ran with `owner@artisan.com`, it was blocked by `RegisterInUseDialog`, leaving `activeShift` null and failing to render `pos-return-button` (Timeout 10s). Fixed by adding `beforeAll` shift cleanup to close lingering shifts before running.
+  2. **React Query Hydration Race in `returns-flow.spec.ts`:** `const countText = await countLocator.textContent()` evaluated synchronously before the React Query network request completed, reading `"আজ কোনো ফেরত নেই"`. Replaced with Playwright's auto-retrying assertion `await expect(countLocator).toContainText(...)`.
+  3. **Focus Stealing in `pos/page.tsx`:** `handleStartNewSale` called `setTimeout(() => searchInputRef.current?.focus(), 50)` on return modal closure or sale start, which stole focus away from dialog inputs back to `pos-search-input`. Added check `if (document.querySelector('[role="dialog"]')) return;` before refocusing search.
+- **GitHub Actions CI Run for Head SHA `798769b`:**
+  - Commit `798769b`: Run ID [44018171956](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44018171956) — **Status: completed, Conclusion: success (Green)**. All lint, API tests, coverage, and 112 Admin E2E tests passed!
+
+---
+
+### Step 5: Milestone C4 — Barcode Label Generation, Thermal Templates & Scanner Verification
+- **Start Time:** 2026-11-17 10:48 +06:00
+- **End Time:** 2026-11-17 11:08 +06:00
+- **What Was Built & Fixed:**
+  1. **EAN-13 Barcode Algorithm & Math (`packages/shared/src/barcodes.ts`):**
+     - Pure TypeScript GS1 Modulo-10 checksum calculation with alternating weights of 1 and 3 (0-indexed: index 0 weight 1, index 1 weight 3).
+     - Standard in-store barcode prefix support (200-299).
+     - Pure SVG renderer `BarcodeSvg` (`apps/admin/src/components/barcodes/barcode-svg.tsx`) rendering EAN-13 bars (L-code, G-code, R-code, guard patterns 101, 01010, 101) with sharp vector output, no canvas blur or external image bloat.
+  2. **Database Migration & Concurrency Safety:**
+     - Migration `20261117010000_milestone_c4_barcode_counters`: Added `BarcodeCounter` table per tenant (`tenant_id`, `prefix`, `last_seq`, timestamps) with RLS policies and `tenantId_prefix` index.
+     - Endpoint `POST /api/v1/variants/:id/generate-barcode` and batch endpoint `POST /api/v1/variants/products/:productId/generate-barcodes`.
+     - Concurrent request safety: `test/barcodes-parallel.spec.ts` verified that concurrent generation requests never produce duplicate barcodes or violate unique constraints.
+  3. **Print Modal & Thermal Roll Templates (`BarcodePrintModal`):**
+     - Formats supported:
+       - `38×25 mm` thermal roll (compact fashion tags).
+       - `50×30 mm` thermal roll (standard price tags).
+       - `A4 3×8` sheet (24 labels per page).
+     - Interactive quantity multiplier per item, batch missing barcode generator, CSS `@media print` rules with `@page { size: ...; margin: 0; }` and page breaks.
+  4. **Scanner Integration on POS (`/pos`):**
+     - Scanner listener detects continuous barcode entry, matches against product variants by `variant_barcodes.barcode` (or SKU), and automatically appends to cart or increments quantity.
+  5. **Screenshots (`docs/screenshots/c4/`):**
+     - Captured from production build (`next start`):
+       1. `01-barcode-modal-thermal-38x25.png`: 38×25 mm thermal roll preview.
+       2. `02-barcode-modal-thermal-50x30.png`: 50×30 mm thermal roll preview.
+       3. `03-barcode-modal-sheet-a4.png`: A4 3×8 sheet layout preview.
+       4. `04-pos-scanned-ean13-cart.png`: POS cart after scanning generated EAN-13 barcode.
+  6. **Full Verification:**
+     - Vitest Unit: 14/14 tests passed (`barcodes-unit.spec.ts`).
+     - Vitest Parallel: 4/4 tests passed (`barcodes-parallel.spec.ts`).
+     - Playwright E2E: All 115 tests passed cleanly (`3.8m`).
+     - Lint: 0 warnings, 0 errors.

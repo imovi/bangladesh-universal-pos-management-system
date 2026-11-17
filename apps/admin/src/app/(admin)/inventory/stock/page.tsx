@@ -40,8 +40,10 @@ import {
   PlusCircle,
   AlertCircle,
   CheckCircle2,
+  Barcode,
 } from "lucide-react";
 import Link from "next/link";
+import { BarcodePrintModal } from "@/components/barcodes/barcode-print-modal";
 
 interface StockLevelItem {
   id: string;
@@ -112,6 +114,7 @@ export default function StockLevelsPage() {
   const [adjustError, setAdjustError] = useState<string | null>(null);
 
   const [historyItem, setHistoryItem] = useState<StockLevelItem | null>(null);
+  const [barcodePrintItem, setBarcodePrintItem] = useState<StockLevelItem | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
   // Fetch branches
@@ -471,6 +474,16 @@ export default function StockLevelsPage() {
                           size="sm"
                           variant="ghost"
                           className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground"
+                          onClick={() => setBarcodePrintItem(item)}
+                          data-testid="btn-print-row-barcode"
+                        >
+                          <Barcode className="h-3.5 w-3.5 mr-1" />
+                          <span>{locale === "bn" ? "বারকোড" : "Barcode"}</span>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground"
                           onClick={() => setHistoryItem(item)}
                           data-testid="btn-history-row"
                         >
@@ -655,6 +668,28 @@ export default function StockLevelsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Barcode Print Modal */}
+      {barcodePrintItem && (
+        <BarcodePrintModal
+          isOpen={!!barcodePrintItem}
+          onClose={() => setBarcodePrintItem(null)}
+          shopName={barcodePrintItem.branch?.name || "Universal POS"}
+          items={[
+            {
+              variantId: barcodePrintItem.variant.id,
+              productName: barcodePrintItem.variant.product.name,
+              variantName: barcodePrintItem.variant.sku,
+              priceMinor: barcodePrintItem.variant.priceMinor || 0,
+              barcode: barcodePrintItem.variant.barcodes?.[0]?.barcode,
+              quantity: Math.max(1, Number(barcodePrintItem.qty) || 1),
+            },
+          ]}
+          onBarcodesUpdated={() => {
+            queryClient.invalidateQueries({ queryKey: ["stock-levels"] });
+          }}
+        />
+      )}
     </div>
   );
 }

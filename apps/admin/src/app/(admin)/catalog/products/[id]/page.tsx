@@ -29,8 +29,10 @@ import {
   AlertCircle,
   CheckCircle2,
   DollarSign,
+  Printer,
 } from "lucide-react";
 import Link from "next/link";
+import { BarcodePrintModal } from "@/components/barcodes/barcode-print-modal";
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -45,6 +47,7 @@ export default function ProductDetailPage() {
   const [editPrice, setEditPrice] = useState<string>("");
   const [isBulkPriceOpen, setIsBulkPriceOpen] = useState(false);
   const [bulkPriceValue, setBulkPriceValue] = useState("");
+  const [isBarcodePrintOpen, setIsBarcodePrintOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
@@ -247,6 +250,16 @@ export default function ProductDetailPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsBarcodePrintOpen(true)}
+              className="flex items-center gap-1.5"
+              data-testid="print-barcodes-button"
+            >
+              <Printer className="h-4 w-4" />
+              <span>{locale === "bn" ? "বারকোড প্রিন্ট" : "Print Barcodes"}</span>
+            </Button>
             <Button
               size="sm"
               variant="outline"
@@ -539,6 +552,28 @@ export default function ProductDetailPage() {
             </Card>
           </div>
         )}
+
+        {/* Barcode Print Modal */}
+        <BarcodePrintModal
+          isOpen={isBarcodePrintOpen}
+          onClose={() => setIsBarcodePrintOpen(false)}
+          shopName="Universal POS"
+          items={variants.map((v: any) => ({
+            variantId: v.id,
+            productId: product.id,
+            productName: product.name,
+            variantName:
+              v.optionValues?.map((ov: any) => ov.optionValue?.name).filter(Boolean).join(" / ") ||
+              v.sku ||
+              "Default",
+            priceMinor: v.priceMinor,
+            barcode: v.barcodes?.[0]?.barcode,
+            quantity: 1,
+          }))}
+          onBarcodesUpdated={() => {
+            queryClient.invalidateQueries({ queryKey: ["product", productId] });
+          }}
+        />
       </div>
     </PermissionGate>
   );

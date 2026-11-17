@@ -9,8 +9,10 @@ import {
   ArrowLeft,
   Printer,
   PackageCheck,
+  Barcode,
 } from "lucide-react";
 import { formatMoney } from "@/lib/utils";
+import { BarcodePrintModal } from "@/components/barcodes/barcode-print-modal";
 
 interface GoodsReceiptItem {
   id: string;
@@ -70,6 +72,7 @@ export default function GoodsReceiptDetailPage({
   const [grn, setGrn] = useState<GoodsReceiptDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isBarcodePrintOpen, setIsBarcodePrintOpen] = useState(false);
 
   const fetchGrnDetail = useCallback(async () => {
     try {
@@ -134,16 +137,28 @@ export default function GoodsReceiptDetailPage({
           </div>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => window.print()}
-          data-testid="btn-print-grn"
-          className="flex items-center gap-1.5 h-9"
-        >
-          <Printer className="h-4 w-4" />
-          <span>{strings.purchasing.print}</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsBarcodePrintOpen(true)}
+            data-testid="btn-print-barcodes"
+            className="flex items-center gap-1.5 h-9"
+          >
+            <Barcode className="h-4 w-4" />
+            <span>বারকোড প্রিন্ট</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.print()}
+            data-testid="btn-print-grn"
+            className="flex items-center gap-1.5 h-9"
+          >
+            <Printer className="h-4 w-4" />
+            <span>{strings.purchasing.print}</span>
+          </Button>
+        </div>
       </div>
 
       {/* Printable Sheet View */}
@@ -305,6 +320,24 @@ export default function GoodsReceiptDetailPage({
           </div>
         </div>
       </div>
+
+      {/* Barcode Print Modal */}
+      <BarcodePrintModal
+        isOpen={isBarcodePrintOpen}
+        onClose={() => setIsBarcodePrintOpen(false)}
+        shopName="Universal POS"
+        items={grn.items.map((item) => ({
+          variantId: item.variantId,
+          productName: item.variant?.product?.name || "Product",
+          variantName: item.variant?.sku || "",
+          priceMinor: item.unitCostMinor,
+          barcode: (item.variant as any)?.barcodes?.[0]?.barcode,
+          quantity: item.qtyReceived,
+        }))}
+        onBarcodesUpdated={() => {
+          fetchGrnDetail();
+        }}
+      />
     </div>
   );
 }

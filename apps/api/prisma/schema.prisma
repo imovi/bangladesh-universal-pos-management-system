@@ -55,6 +55,7 @@ model Tenant {
   stockTransfers             StockTransfer[]
   stockTransferItems         StockTransferItem[]
   transferCounters           TransferCounter[]
+  barcodeCounters            BarcodeCounter[]
 
   @@map("tenants")
 }
@@ -1059,6 +1060,19 @@ model TransferCounter {
   @@unique([tenantId, dateKey])
   @@index([tenantId])
   @@map("transfer_counters")
+}
+
+model BarcodeCounter {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  tenantId  String   @unique @map("tenant_id") @db.Uuid
+  prefix    Int      @default(200) @map("prefix")
+  lastSeq   Int      @default(0) @map("last_seq")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("barcode_counters")
 }
 
 

@@ -138,4 +138,34 @@ export class VariantsController {
       ip,
     );
   }
+
+  @Post(":id/generate-barcode")
+  @RequirePermission(PERMISSIONS.CATALOG_MANAGE)
+  async generateBarcode(
+    @Req() req: any,
+    @Param("id") variantId: string,
+    @Ip() ip: string,
+  ) {
+    return this.variantsService.generateBarcodeForVariant(
+      req.user.tenantId,
+      variantId,
+      req.user.userId || req.user.id,
+      ip,
+    );
+  }
+
+  @Post("products/:productId/generate-barcodes")
+  @RequirePermission(PERMISSIONS.CATALOG_MANAGE)
+  async generateProductBarcodes(
+    @Req() req: any,
+    @Param("productId") productId: string,
+    @Ip() ip: string,
+  ) {
+    return this.variantsService.generateBarcodesForProduct(
+      req.user.tenantId,
+      productId,
+      req.user.userId || req.user.id,
+      ip,
+    );
+  }
 }

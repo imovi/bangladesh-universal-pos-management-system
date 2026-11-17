@@ -16,7 +16,9 @@ import {
   User,
   Calendar,
   AlertCircle,
+  Barcode,
 } from "lucide-react";
+import { BarcodePrintModal } from "@/components/barcodes/barcode-print-modal";
 import { useAuth } from "@/lib/auth-context";
 import { useTranslation } from "@/i18n/context";
 import { Button } from "@/components/ui/button";
@@ -43,6 +45,7 @@ export default function StockTransferDetailPage() {
   const [receiveError, setReceiveError] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [isBarcodePrintOpen, setIsBarcodePrintOpen] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
 
   // Fetch transfer details
@@ -285,6 +288,19 @@ export default function StockTransferDetailPage() {
 
         {/* Buttons */}
         <div className="flex items-center gap-2">
+          {transfer.status === "received" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsBarcodePrintOpen(true)}
+              data-testid="print-transfer-barcodes-btn"
+              className="gap-1.5 h-8 text-xs"
+            >
+              <Barcode className="w-3.5 h-3.5" />
+              {locale === "bn" ? "বারকোড প্রিন্ট" : "Print Barcodes"}
+            </Button>
+          )}
+
           <Button variant="outline" size="sm" onClick={handlePrint} data-testid="print-transfer-btn" className="gap-1.5 h-8 text-xs">
             <Printer className="w-3.5 h-3.5" />
             {locale === "bn" ? "চালান প্রিন্ট" : "Print Transfer Note"}
@@ -746,6 +762,25 @@ export default function StockTransferDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {transfer && (
+        <BarcodePrintModal
+          isOpen={isBarcodePrintOpen}
+          onClose={() => setIsBarcodePrintOpen(false)}
+          shopName={transfer.destinationBranch?.name || "Universal POS"}
+          items={transfer.items.map((item: any) => ({
+            variantId: item.variantId,
+            productName: item.variant?.product?.name || "Product",
+            variantName: item.variant?.sku || "",
+            priceMinor: item.variant?.priceMinor || 0,
+            barcode: item.variant?.barcodes?.[0]?.barcode,
+            quantity: Number(item.receivedQty || item.quantity),
+          }))}
+          onBarcodesUpdated={() => {
+            queryClient.invalidateQueries({ queryKey: ["stock-transfer-detail", id] });
+          }}
+        />
       )}
     </div>
   );

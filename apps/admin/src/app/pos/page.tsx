@@ -476,8 +476,12 @@ export default function PosPage() {
       // F4: Payment / Checkout
       if (e.key === "F4") {
         e.preventDefault();
-        if (cartItems.length > 0 && activeShift && !activeReceipt) {
-          setIsPaymentOpen(true);
+        if (cartItems.length > 0 && !activeReceipt) {
+          if (!activeShift) {
+            setIsOpenShiftOpen(true);
+          } else {
+            setIsPaymentOpen(true);
+          }
         }
         return;
       }
@@ -1925,17 +1929,22 @@ export default function PosPage() {
                 <button
                   type="button"
                   onClick={() => setIsBillDiscountOpen(true)}
-                  className="flex items-center gap-1 hover:text-primary transition-colors font-medium"
+                  className="flex items-center gap-1.5 hover:text-primary transition-colors font-medium text-xs rounded hover:bg-muted/60 px-1 py-0.5 -ml-1 cursor-pointer"
+                  title={locale === "bn" ? "পুরো বিলে ছাড় দিতে ক্লিক করুন" : "Click to apply bill discount"}
                 >
-                  <Tag className="h-3 w-3" />
-                  <span>{strings.pos.billDiscount}</span>
-                  {billDiscount && (
-                    <span className="text-[10px] text-primary font-mono">
+                  <Tag className="h-3 w-3 text-primary" />
+                  <span className="underline decoration-dotted underline-offset-2">{strings.pos.billDiscount}</span>
+                  {billDiscount ? (
+                    <span className="text-[10px] text-primary font-mono font-bold bg-primary/10 px-1 rounded">
                       (
                       {billDiscount.type === "percent"
                         ? `${billDiscount.percentBp! / 100}%`
                         : `৳${(billDiscount.amountMinor! / 100).toFixed(0)}`}
                       )
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-primary/80 font-medium">
+                      (+ {locale === "bn" ? "যোগ করুন" : "Add"})
                     </span>
                   )}
                 </button>
@@ -1978,15 +1987,35 @@ export default function PosPage() {
             </div>
 
             {/* Big Checkout Button (F4) */}
+            {!activeShift && cartItems.length > 0 && (
+              <div className="mb-2 flex items-center gap-1.5 rounded-md bg-amber-500/10 p-2 text-xs font-medium text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                <span>
+                  {locale === "bn"
+                    ? "পেমেন্ট নিতে প্রথমে শিফট শুরু করুন।"
+                    : "Please start a shift to take payment."}
+                </span>
+              </div>
+            )}
             <Button
               type="button"
-              onClick={() => setIsPaymentOpen(true)}
-              disabled={cartItems.length === 0 || !activeShift || !isOnline || isCompletingSale}
+              onClick={() => {
+                if (!activeShift) {
+                  setIsOpenShiftOpen(true);
+                  return;
+                }
+                setIsPaymentOpen(true);
+              }}
+              disabled={cartItems.length === 0 || !isOnline || isCompletingSale}
               data-testid="pos-checkout-button"
               className="w-full h-12 text-base font-bold tracking-wide shadow-md"
             >
               <CreditCard className="h-5 w-5 mr-2" />
-              <span>{strings.pos.checkout}</span>
+              <span>
+                {!activeShift
+                  ? (locale === "bn" ? "শিফট শুরু করে পেমেন্ট নিন (F4)" : "Start Shift & Pay (F4)")
+                  : strings.pos.checkout}
+              </span>
             </Button>
           </div>
         </aside>

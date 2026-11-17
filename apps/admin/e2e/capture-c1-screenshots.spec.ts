@@ -44,20 +44,28 @@ test.describe("Milestone C1: Capture Required Screenshots", () => {
     const registers = (await registersRes.json()).data;
     registerId = registers[0].id;
 
-    const shiftsRes = await request.get(`http://localhost:4000/api/v1/shifts?registerId=${registerId}&status=open`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const shifts = (await shiftsRes.json()).data;
-    const openShifts = Array.isArray(shifts) ? shifts : (shifts.items || []);
-    if (openShifts.length > 0) {
-      shiftId = openShifts[0].id;
-    } else {
-      const openRes = await request.post("http://localhost:4000/api/v1/shifts/open", {
+    // Close any lingering open shifts so register is clean for Owner
+    try {
+      const openShiftsRes = await request.get("http://localhost:4000/api/v1/shifts?status=open", {
         headers: { Authorization: `Bearer ${token}` },
-        data: { registerId, branchId, openingCashMinor: 500000 },
       });
-      shiftId = (await openRes.json()).data.id;
-    }
+      if (openShiftsRes.ok()) {
+        const shiftsData = await openShiftsRes.json();
+        const openShifts = Array.isArray(shiftsData.data) ? shiftsData.data : (shiftsData.data?.items || []);
+        for (const s of openShifts) {
+          await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
+            headers: { Authorization: `Bearer ${token}` },
+            data: { closingCashMinor: Number(s.openingCashMinor || 50000) },
+          }).catch(() => {});
+        }
+      }
+    } catch {}
+
+    const openRes = await request.post("http://localhost:4000/api/v1/shifts/open", {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { registerId, branchId, openingCashMinor: 500000 },
+    });
+    shiftId = (await openRes.json()).data.id;
 
     // 4. Products and stock
     const productsRes = await request.get("http://localhost:4000/api/v1/products?limit=5", {

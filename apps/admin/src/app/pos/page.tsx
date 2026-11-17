@@ -704,7 +704,13 @@ export default function PosPage() {
     if (selectedRegister?.id) {
       clearActiveCart(selectedRegister.id);
     }
-    setTimeout(() => searchInputRef.current?.focus(), 50);
+    setTimeout(() => {
+      // Only refocus search input if no modal dialog is open
+      const hasOpenDialog = document.querySelector('[role="dialog"]');
+      if (!hasOpenDialog) {
+        searchInputRef.current?.focus();
+      }
+    }, 50);
   };
 
   // Complete Sale (with UUID v7 idempotency & retry)
@@ -1097,11 +1103,14 @@ export default function PosPage() {
         checkRegisterShift();
         return closed;
       } else {
-        console.error("Failed to close shift:", data.error?.message || data.message);
+        const errMsg = data.error?.message || data.message || "Failed to close shift";
+        console.error("Failed to close shift:", errMsg);
+        setServerErrorBanner(errMsg);
         return null;
       }
     } catch (err: any) {
       console.error("Failed to close shift:", err.message);
+      setServerErrorBanner(err.message);
       return null;
     } finally {
       setIsShiftSubmitting(false);

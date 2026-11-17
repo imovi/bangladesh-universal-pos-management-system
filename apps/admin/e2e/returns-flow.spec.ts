@@ -284,17 +284,22 @@ test.describe("Milestone C1: Returns & Exchanges Flow", () => {
     await page.click('[data-testid="new-sale-button"]');
     await expect(receiptContainer).toBeHidden({ timeout: 5000 });
 
-    // 3. Press F6 to open return dialog
-    await page.keyboard.press("F6");
-    const returnInput = page.locator('[data-testid="return-invoice-input"]');
-    if (!await returnInput.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await page.click('[data-testid="pos-return-button"]');
+    // 3. Open return dialog
+    const returnBtn = page.locator('[data-testid="pos-return-button"]');
+    if (await returnBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await returnBtn.click();
+    } else {
+      await page.keyboard.press("F6");
     }
-    await expect(returnInput).toBeVisible({ timeout: 5000 });
+    const returnInput = page.locator('[data-testid="return-invoice-input"]');
+    await expect(returnInput).toBeVisible({ timeout: 8000 });
 
-    // Type invoice number and search
+    // Ensure focus, type invoice number and search
+    await returnInput.click();
     await returnInput.fill(saleInvoice);
-    await page.click('[data-testid="search-invoice-button"]');
+    const searchBtn = page.locator('[data-testid="search-invoice-button"]');
+    await expect(searchBtn).toBeEnabled({ timeout: 5000 });
+    await searchBtn.click();
 
     // Return lines appear
     const plusBtn = page.locator('[data-testid="return-qty-plus-0"]');
@@ -409,6 +414,9 @@ test.describe("Milestone C1: Returns & Exchanges Flow", () => {
     await page.fill("#password", "Password123!");
     await page.click('button[type="submit"]');
     await page.waitForURL(/\/(pos|dashboard)/, { timeout: 15000 });
+    await page.evaluate((bId) => {
+      localStorage.setItem("pos_selected_branch_id", bId);
+    }, branchId);
     await page.goto("/dashboard");
 
     // 3. Verify Returns KPI card
@@ -421,12 +429,11 @@ test.describe("Milestone C1: Returns & Exchanges Flow", () => {
     const countLocator = page.locator('[data-testid="dashboard-returns-count"]');
     await expect(countLocator).toBeVisible();
 
-    // Verify count reflects returnsCount
-    const countText = await countLocator.textContent();
+    // Verify count reflects returnsCount with auto-retrying locator assertion
     if (returnsCount > 0) {
-      expect(countText).toContain(String(returnsCount));
+      await expect(countLocator).toContainText(String(returnsCount), { timeout: 10000 });
     } else {
-      expect(countText).toMatch(/আজ কোনো ফেরত নেই|No returns today/i);
+      await expect(countLocator).toHaveText(/আজ কোনো ফেরত নেই|No returns today/i, { timeout: 10000 });
     }
   });
 });

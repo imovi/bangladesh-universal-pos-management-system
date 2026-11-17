@@ -349,6 +349,7 @@ export function CloseShiftDialog({
   const [showDenomCounter, setShowDenomCounter] = useState(false);
   const [notes, setNotes] = useState("");
   const [closedSummary, setClosedSummary] = useState<any | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -374,9 +375,20 @@ export function CloseShiftDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const result = await onConfirmClose(countedCashMinor, notes.trim() || undefined);
-    if (result) {
-      setClosedSummary(result);
+    setErrorMessage(null);
+    try {
+      const result = await onConfirmClose(countedCashMinor, notes.trim() || undefined);
+      if (result) {
+        setClosedSummary(result);
+      } else {
+        setErrorMessage(
+          locale === "bn"
+            ? "শিফট বন্ধ করা যায়নি। সার্ভার থেকে কোনো সাড়া মেলেনি বা শিফটটি ইতোমধ্যে বন্ধ রয়েছে।"
+            : "Failed to close shift. The shift may already be closed."
+        );
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || (locale === "bn" ? "শিফট বন্ধ করা সম্ভব হয়নি" : "Failed to close shift"));
     }
   };
 
@@ -590,6 +602,12 @@ export function CloseShiftDialog({
                   className="h-10 text-xs"
                 />
               </div>
+
+              {errorMessage && (
+                <div className="p-3 text-xs bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 rounded-lg">
+                  {errorMessage}
+                </div>
+              )}
 
               {/* Actions */}
               <div className="pt-2 flex justify-end gap-2 border-t border-border">

@@ -890,6 +890,12 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
      - `apps/admin/e2e/credit-due-flow.spec.ts`: 3 Playwright tests verifying POS credit sale with receipt due figures, customer detail ledger & collection modal, and due ageing report (3/3 passed).
      - Full API test suite: 43 test suites, 241 tests passed (89.12% line coverage).
      - Local dev database remained 100% clean and untouched.
+   - **GitHub Actions CI Runs for C2 Commits (copied from GitHub API):**
+     - Commit `97c2116`: Run ID [43970810816](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43970810816) — **Status: completed, Conclusion: failure** (Failed at "Run Admin Dashboard E2E tests" due to unisolated shift state in `capture-c1-screenshots.spec.ts`)
+     - Commit `7786fda`: Run ID [43988476878](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43988476878) — **Status: completed, Conclusion: failure** (Failed at "Run Admin Dashboard E2E tests")
+     - Commit `02a5f22`: Run ID [43993757566](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/43993757566) — **Status: completed, Conclusion: failure** (Failed at "Run Admin Dashboard E2E tests")
+     - Commit `048fb0b`: Run ID [44002150082](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44002150082) — **Status: completed, Conclusion: failure** (Failed at "Run Admin Dashboard E2E tests")
+     - Commit `5cca78e`: Run ID [44003944274](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44003944274) — **Status: completed, Conclusion: failure** (Failed at "Run Admin Dashboard E2E tests")
 
 
 
@@ -1058,3 +1064,5 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
      - `npm run lint`: 0 warnings, 0 errors.
      - Vitest API: 45 test files, 256 tests passed (0 failed).
      - Strict file size limit compliance (<800 lines on every file).
+   - **GitHub Actions CI Runs for C3 Commits (copied from GitHub API):**
+     - Commit `ebe1420`: Run ID [44006052435](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44006052435) — **Status: completed, Conclusion: failure** (Failed at "Run Admin Dashboard E2E tests" due to unisolated shift state in `capture-c1-screenshots.spec.ts`)

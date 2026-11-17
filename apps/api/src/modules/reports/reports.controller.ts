@@ -73,4 +73,19 @@ export class ReportsController {
   async getDueReport(@Request() req: any, @Query("branchId") branchId?: string) {
     return this.reportsService.getDueReport(req.user.tenantId, { branchId });
   }
+
+  @Get("returns")
+  @RequirePermission(PERMISSIONS.REPORT_SALES)
+  async getReturnsReport(
+    @Request() req: any,
+    @Query() query: ReportDateFilter & { reason?: string; condition?: string; productId?: string },
+  ) {
+    return this.reportsService.getReturnsReport(req.user.tenantId, query);
+  }
+
+  @Get("damaged-stock")
+  @RequirePermission(PERMISSIONS.REPORT_SALES)
+  async getDamagedStockReport(@Request() req: any, @Query() query: ReportDateFilter) {
+    return this.reportsService.getDamagedStockReport(req.user.tenantId, query);
+  }
 }

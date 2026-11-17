@@ -146,6 +146,7 @@ export default function DueReportPage() {
             size="sm"
             onClick={handleExportCsv}
             disabled={customers.length === 0}
+            data-testid="export-due-csv-btn"
             className="h-9"
           >
             <Download className="h-4 w-4 mr-1.5" />

@@ -93,6 +93,9 @@ export function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
         { titleKey: "salesReports", href: "/reports/sales", permission: "report.sales" },
         { titleKey: "stockReports", href: "/reports/stock", permission: "report.sales" },
         { titleKey: "profitReports", href: "/reports/profit", permission: "report.profit" },
+        { titleKey: "dueReports", href: "/reports/due", permission: "report.sales" },
+        { titleKey: "returnsReports", href: "/reports/returns", permission: "report.sales" },
+        { titleKey: "damagedStockReports", href: "/reports/damaged", permission: "report.sales" },
       ],
     },
     {

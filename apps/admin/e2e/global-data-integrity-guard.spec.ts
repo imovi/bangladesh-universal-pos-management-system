@@ -26,6 +26,8 @@ const routes = [
   "/pos",
   "/sales/returns",
   "/reports/due",
+  "/reports/returns",
+  "/reports/damaged",
 ];
 
 test.describe("Global Data Integrity Guard: No NaN, undefined, null, Invalid Date, or [object Object]", () => {

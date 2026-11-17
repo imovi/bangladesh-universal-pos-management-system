@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { TenantContextService } from "../../common/database/tenant-context.service.js";
 import { SystemDbService } from "../../common/database/system-db.service.js";
-import { calculateShiftCashTotals, parseDateFilterRange } from "@universal-pos/shared";
+import { calculateShiftCashTotals, parseDateFilterRange, formatBusinessDate } from "@universal-pos/shared";
 
 export interface ReportDateFilter {
   branchId?: string;
@@ -517,6 +517,315 @@ export class ReportsService {
           invoiceCount: sales.length,
         },
         customers: Array.from(customerMap.values()),
+      };
+    });
+  }
+
+  async getReturnsReport(
+    tenantId: string,
+    filter: ReportDateFilter & { reason?: string; condition?: string; productId?: string },
+  ) {
+    const tz = await this.getTimeZone(tenantId);
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const returnWhere: Prisma.SaleReturnWhereInput = {
+        tenantId,
+        ...this.buildReturnDateFilter(filter, tz),
+      };
+
+      const returns = await tx.saleReturn.findMany({
+        where: returnWhere,
+        include: {
+          sale: { select: { id: true, invoiceNumber: true } },
+          shift: {
+            include: {
+              register: {
+                include: { branch: { select: { id: true, name: true, code: true } } },
+              },
+            },
+          },
+          items: {
+            include: {
+              saleItem: {
+                include: {
+                  variant: {
+                    include: {
+                      product: { select: { id: true, name: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      let totalRefundMinor = 0n;
+      let totalReturnedUnits = 0;
+      let resellableUnits = 0;
+      let damagedUnits = 0;
+      let resellableRefundMinor = 0n;
+      let damagedRefundMinor = 0n;
+
+      const dailyMap = new Map<string, { date: string; returnsCount: number; totalRefundMinor: number; units: number }>();
+      const reasonMap = new Map<string, { reason: string; count: number; totalRefundMinor: number }>();
+      const productReturnMap = new Map<string, { productId: string; productName: string; returnedUnits: number }>();
+      const itemsList: any[] = [];
+
+      for (const ret of returns) {
+        const dateKey = formatBusinessDate(ret.createdAt, tz);
+        let returnIncludedInFilter = false;
+
+        for (const item of ret.items) {
+          if (filter.condition && item.condition !== filter.condition) continue;
+          if (filter.reason && ret.reason !== filter.reason) continue;
+          if (filter.productId && item.saleItem.variant.product.id !== filter.productId) continue;
+
+          returnIncludedInFilter = true;
+          const qty = Math.round(Number(item.quantity));
+          const refund = BigInt(item.totalRefundMinor);
+
+          totalRefundMinor += refund;
+          totalReturnedUnits += qty;
+
+          if (item.condition === "resellable") {
+            resellableUnits += qty;
+            resellableRefundMinor += refund;
+          } else {
+            damagedUnits += qty;
+            damagedRefundMinor += refund;
+          }
+
+          const rKey = ret.reason || "unspecified";
+          const currReason = reasonMap.get(rKey) || { reason: rKey, count: 0, totalRefundMinor: 0 };
+          currReason.count += qty;
+          currReason.totalRefundMinor += Number(refund);
+          reasonMap.set(rKey, currReason);
+
+          const pId = item.saleItem.variant.product.id;
+          const pName = item.saleItem.variant.product.name;
+          const currProd = productReturnMap.get(pId) || { productId: pId, productName: pName, returnedUnits: 0 };
+          currProd.returnedUnits += qty;
+          productReturnMap.set(pId, currProd);
+
+          itemsList.push({
+            id: item.id,
+            returnInvoiceNumber: ret.returnNumber,
+            saleInvoiceNumber: ret.sale.invoiceNumber,
+            createdAt: ret.createdAt.toISOString(),
+            branchName: ret.shift?.register?.branch?.name || "Main Branch",
+            productName: pName,
+            variantSku: item.saleItem.variant.sku,
+            quantity: qty,
+            refundMinor: Number(refund),
+            condition: item.condition,
+            reason: ret.reason || "unspecified",
+          });
+        }
+
+        if (returnIncludedInFilter) {
+          const currDay = dailyMap.get(dateKey) || { date: dateKey, returnsCount: 0, totalRefundMinor: 0, units: 0 };
+          currDay.returnsCount += 1;
+          currDay.totalRefundMinor += Number(ret.totalRefundMinor);
+          dailyMap.set(dateKey, currDay);
+        }
+      }
+
+      const salesDateFilter = this.buildDateFilter(filter, tz);
+      const salesItems = await tx.saleItem.findMany({
+        where: {
+          tenantId,
+          sale: { tenantId, ...salesDateFilter },
+        },
+        select: {
+          quantity: true,
+          variant: { select: { productId: true, product: { select: { name: true } } } },
+        },
+      });
+
+      const productSalesMap = new Map<string, { productId: string; productName: string; soldUnits: number }>();
+      for (const si of salesItems) {
+        const pId = si.variant.productId;
+        const pName = si.variant.product.name;
+        const curr = productSalesMap.get(pId) || { productId: pId, productName: pName, soldUnits: 0 };
+        curr.soldUnits += Math.round(Number(si.quantity));
+        productSalesMap.set(pId, curr);
+      }
+
+      const productReturnRates = Array.from(productReturnMap.values()).map((p) => {
+        const sold = productSalesMap.get(p.productId)?.soldUnits || 0;
+        const rate = sold > 0 ? Number(((p.returnedUnits / sold) * 100).toFixed(1)) : 100;
+        return {
+          productId: p.productId,
+          productName: p.productName,
+          soldUnits: sold,
+          returnedUnits: p.returnedUnits,
+          returnRatePercent: rate,
+        };
+      });
+
+      return {
+        summary: {
+          returnsCount: returns.length,
+          totalRefundMinor: Number(totalRefundMinor),
+          totalReturnedUnits,
+          resellableUnits,
+          damagedUnits,
+          resellableRefundMinor: Number(resellableRefundMinor),
+          damagedRefundMinor: Number(damagedRefundMinor),
+        },
+        byDay: Array.from(dailyMap.values()).sort((a, b) => b.date.localeCompare(a.date)),
+        byReason: Array.from(reasonMap.values()),
+        productReturnRates,
+        items: itemsList,
+      };
+    });
+  }
+
+  async getDamagedStockReport(tenantId: string, filter: ReportDateFilter) {
+    const tz = await this.getTimeZone(tenantId);
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const dateRange = (filter.startDate || filter.endDate)
+        ? parseDateFilterRange(filter.startDate, filter.endDate, tz)
+        : null;
+
+      // 1. Damaged sale return items
+      const returnWhere: Prisma.SaleReturnItemWhereInput = {
+        tenantId,
+        condition: "damaged",
+      };
+      if (filter.branchId) {
+        returnWhere.saleReturn = { branchId: filter.branchId };
+      }
+      if (dateRange) {
+        returnWhere.createdAt = {};
+        if (dateRange.gte) returnWhere.createdAt.gte = dateRange.gte;
+        if (dateRange.lte) returnWhere.createdAt.lte = dateRange.lte;
+      }
+
+      const damagedReturnItems = await tx.saleReturnItem.findMany({
+        where: returnWhere,
+        include: {
+          saleItem: true,
+          variant: { include: { product: { select: { id: true, name: true } } } },
+          saleReturn: {
+            include: {
+              shift: { include: { register: { include: { branch: true } } } },
+              sale: { select: { invoiceNumber: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      // 2. Transfer losses
+      const transferSubWhere: Prisma.StockTransferWhereInput = {
+        tenantId,
+        status: "received",
+      };
+      if (filter.branchId) {
+        transferSubWhere.destinationBranchId = filter.branchId;
+      }
+      if (dateRange) {
+        transferSubWhere.receivedAt = {};
+        if (dateRange.gte) transferSubWhere.receivedAt.gte = dateRange.gte;
+        if (dateRange.lte) transferSubWhere.receivedAt.lte = dateRange.lte;
+      }
+      const transferWhere: Prisma.StockTransferItemWhereInput = {
+        transfer: transferSubWhere,
+      };
+
+      const transferItems = await tx.stockTransferItem.findMany({
+        where: transferWhere,
+        include: {
+          variant: { include: { product: { select: { id: true, name: true } } } },
+          transfer: {
+            include: {
+              destinationBranch: true,
+            },
+          },
+        },
+      });
+
+      let totalDamagedUnits = 0;
+      let totalLossMinor = 0n;
+      let saleReturnDamagedUnits = 0;
+      let saleReturnDamagedLossMinor = 0n;
+      let transferLossUnits = 0;
+      let transferLossMinor = 0n;
+
+      const items: any[] = [];
+
+      for (const ri of damagedReturnItems) {
+        const qty = Math.round(Number(ri.quantity));
+        const unitCost = BigInt(ri.saleItem.unitCostMinor || ri.variant.costMinor || 0);
+        const loss = unitCost * BigInt(qty);
+
+        totalDamagedUnits += qty;
+        totalLossMinor += loss;
+        saleReturnDamagedUnits += qty;
+        saleReturnDamagedLossMinor += loss;
+
+        items.push({
+          id: ri.id,
+          createdAt: ri.createdAt.toISOString(),
+          branchName: ri.saleReturn.shift?.register?.branch?.name || "Main Branch",
+          productName: ri.variant.product.name,
+          variantSku: ri.variant.sku,
+          movementType: "sale_return_damaged",
+          quantity: qty,
+          unitCostMinor: Number(unitCost),
+          totalLossMinor: Number(loss),
+          reason: ri.saleReturn.reason || "Customer damaged return",
+          referenceId: ri.saleReturn.returnNumber,
+        });
+      }
+
+      for (const ti of transferItems) {
+        const sent = Number(ti.sentQty);
+        const received = Number(ti.receivedQty || 0);
+        if (sent > received) {
+          const lossQty = sent - received;
+          const unitCost = BigInt(ti.variant.costMinor || 0);
+          const loss = unitCost * BigInt(lossQty);
+
+          totalDamagedUnits += lossQty;
+          totalLossMinor += loss;
+          transferLossUnits += lossQty;
+          transferLossMinor += loss;
+
+          items.push({
+            id: ti.id,
+            createdAt: (ti.transfer.receivedAt || ti.transfer.updatedAt).toISOString(),
+            branchName: ti.transfer.destinationBranch.name,
+            productName: ti.variant.product.name,
+            variantSku: ti.variant.sku,
+            movementType: "transfer_loss",
+            quantity: lossQty,
+            unitCostMinor: Number(unitCost),
+            totalLossMinor: Number(loss),
+            reason: ti.lossReason || "Transfer loss in transit",
+            referenceId: ti.transfer.transferNumber,
+          });
+        }
+      }
+
+      items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+      return {
+        summary: {
+          totalDamagedUnits,
+          totalLossMinor: Number(totalLossMinor),
+          byMovementType: {
+            saleReturnDamagedUnits,
+            saleReturnDamagedLossMinor: Number(saleReturnDamagedLossMinor),
+            transferLossUnits,
+            transferLossMinor: Number(transferLossMinor),
+            otherLossUnits: 0,
+            otherLossMinor: 0,
+          },
+        },
+        items,
       };
     });
   }

@@ -1113,3 +1113,52 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
      - Vitest Parallel: 4/4 tests passed (`barcodes-parallel.spec.ts`).
      - Playwright E2E: All 115 tests passed cleanly (`3.8m`).
      - Lint: 0 warnings, 0 errors.
+    - **GitHub Actions CI Run for Head SHA `0437ccf` (copied from GitHub API):**
+      - Commit `0437ccf`: Run ID [44022020725](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44022020725) — **Status: completed, Conclusion: success (Green)**. All lint, API tests, coverage, and 115 Admin E2E tests passed!
+
+
+---
+
+## Phase 1C, run 3
+
+### Step 0: Milestone C5 — Reports for the New Features (Returns, Damaged Stock, Due Ageing CSV & Profit Returns Deduction)
+- **Start Time:** 2026-11-17 14:09 +06:00
+- **What Was Built & Fixed:**
+  1. **Prompt Document Ingestion:**
+     - Created `docs/prompts/antigravity-pos-phase1c-run3-prompt.md` capturing all directives: unattended mode, faster test loop, strict CI checking (max 3 attempts before BLOCKED), no memory-based hashes, production screenshots, API number checks.
+  2. **Shared Schemas (`packages/shared/src/schemas/reports.schemas.ts`):**
+     - `ReturnsReportQuerySchema`: branchId, startDate, endDate, condition (`resellable`, `damaged`, `all`).
+     - `DamagedStockReportQuerySchema`: branchId, startDate, endDate, movementType (`sale_return_damaged`, `transfer_loss`, `all`).
+  3. **Backend API Endpoints (`apps/api/src/modules/reports/`):**
+     - `GET /api/v1/reports/returns`: Aggregates returns by day, by branch, by reason, by condition (`resellable` vs `damaged`), calculates return rate per product `(returnedUnits / soldUnits) * 100`, and itemized return rows.
+     - `GET /api/v1/reports/damaged-stock`: Sourced from `SaleReturnItem` (`condition = 'damaged'`) and `StockTransferItem` (`receivedQty < sentQty`) with exact purchase unit costs and financial loss totals.
+     - `GET /api/v1/reports/profit`: Strictly subtracts returns from revenue, reverses COGS for resellable returns, and retains COGS for damaged returns.
+     - Permission guards: Restricted to `REPORT_VIEW` (`report.view`), Cashier receives 403 Forbidden.
+  4. **Integration Tests (`apps/api/test/reports-c5.spec.ts`):**
+     - 4/4 tests passed (1.8s) covering:
+       1. Returns report: returns by day, condition, reason, and product return rate.
+       2. Damaged stock report: captures damaged returns and records financial loss at cost.
+       3. Profit report: strictly subtracts returns from revenue and accounts for resellable vs damaged COGS with poisha-exact calculation.
+       4. Permission guards: Cashier forbidden (403) from viewing reports.
+  5. **Admin UI (`apps/admin`):**
+     - `/reports/returns`: Responsive view with KPI cards (total returns, refund amount, resellable vs damaged units), branch & condition filters, 3 tabs (Return items, Product return rates, Daily trend), and CSV export.
+     - `/reports/damaged`: Responsive view with KPI cards (total damaged units, total loss amount, return loss, transfer loss), branch & movement type filters, item loss table, and CSV export.
+     - `/reports/due`: Added `data-testid="export-due-csv-btn"` on CSV export button.
+     - Navigation & i18n: Added bilingual labels in `bn.ts` and `en.ts`, and sidebar items under Reports.
+  6. **E2E & Data Integrity Guard:**
+     - `apps/admin/e2e/reports-c5.spec.ts`: Passes in 8.6s, verifying that on-screen numbers for returns count and damaged units strictly match API query responses, and that CSV export buttons are functional.
+     - `apps/admin/e2e/global-data-integrity-guard.spec.ts`: All 56 route permutations pass with zero NaN, undefined, null, Invalid Date, or [object Object].
+  7. **Screenshots (`docs/screenshots/c5/`):**
+     - Captured from production build (`next start`) at 1440px desktop and 375px mobile:
+       1. `01-returns-report-desktop.png`: Returns report overview, KPI cards and return rate table at 1440px.
+       2. `02-returns-report-mobile.png`: Returns report mobile layout at 375px.
+       3. `03-damaged-stock-report-desktop.png`: Damaged stock loss report at 1440px.
+       4. `04-damaged-stock-report-mobile.png`: Damaged stock loss report mobile layout at 375px.
+       5. `05-due-ageing-report-desktop.png`: Customer due ageing report at 1440px.
+       6. `06-due-ageing-report-mobile.png`: Customer due ageing report mobile layout at 375px.
+  8. **File Size Compliance:**
+     - All files strictly under 800 lines (`reports.service.ts` 750 lines, `reports/returns/page.tsx` 365 lines, `reports/damaged/page.tsx` 295 lines).
+  9. **Full Verification:**
+     - `npm run lint`: 0 warnings, 0 errors across 94 admin files and 72 api files.
+     - Vitest API: `test/reports-c5.spec.ts` 4/4 passed.
+     - Playwright E2E: `reports-c5.spec.ts` 1/1 passed, `global-data-integrity-guard.spec.ts` 56/56 passed.

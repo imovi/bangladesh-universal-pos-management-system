@@ -1129,42 +1129,65 @@ export default function PosPage() {
       // 1. Unified local enqueue: atomically writes outbox, localSales, and decrements Dexie stock
       await enqueueSale(salePayload as any);
 
-      // 2. If online, trigger background outbox sync immediately
+      let serverInvoiceNumber: string | undefined = undefined;
+
+      // 2. If online, trigger outbox sync immediately and await response to acquire server invoice number
       if (isOnline) {
-        runSync({
-          customSender: async (item) => {
-            const endpoint = item.type === "sale" ? "/sales" : "/customers";
-            const res = await apiFetch(endpoint, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Idempotency-Key": item.idempotencyKey,
-                "x-idempotency-key": item.idempotencyKey,
-              },
-              body: JSON.stringify(item.payload),
-            });
-            let body: any = null;
-            try {
-              body = await res.json();
-            } catch {}
-            return {
-              status: res.status,
-              body,
-              error: !res.ok ? (body?.message || `HTTP ${res.status}`) : undefined,
-            };
-          },
-          onStatusChange: setOutboxStats,
-        }).catch((err) => {
+        try {
+          await runSync({
+            customSender: async (item) => {
+              const endpoint = item.type === "sale" ? "/sales" : "/customers";
+              const res = await apiFetch(endpoint, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Idempotency-Key": item.idempotencyKey,
+                  "x-idempotency-key": item.idempotencyKey,
+                },
+                body: JSON.stringify(item.payload),
+              });
+              let body: any = null;
+              try {
+                body = await res.json();
+              } catch {}
+              if (res.ok && item.idempotencyKey === saleId) {
+                const sInv = body?.data?.invoiceNumber || body?.invoiceNumber;
+                if (sInv) {
+                  serverInvoiceNumber = sInv;
+                }
+              }
+              return {
+                status: res.status,
+                body,
+                error: !res.ok ? (body?.message || `HTTP ${res.status}`) : undefined,
+              };
+            },
+            onStatusChange: setOutboxStats,
+          });
+        } catch (err) {
           console.warn("[POS] Immediate outbox sync error:", err);
-        });
+        }
       }
 
-      // 3. Format receipt data immediately from local sale data
+      const displayInvoiceNumber = serverInvoiceNumber || assignedInvoiceNumber;
+      const isReceiptOffline = !serverInvoiceNumber && isActuallyOffline;
+
+      if (serverInvoiceNumber) {
+        try {
+          await db.localSales.put({
+            invoiceNumber: serverInvoiceNumber,
+            saleData: { ...salePayload, invoiceNumber: serverInvoiceNumber, isOffline: false } as any,
+            createdAt: Date.now(),
+          });
+        } catch {}
+      }
+
+      // 3. Format receipt data
       const totalPaid = payments.reduce((sum, p) => sum + p.amountMinor, 0);
       const receiptData: ReceiptData = {
         saleId,
-        invoiceNumber: assignedInvoiceNumber,
-        isOffline: isActuallyOffline,
+        invoiceNumber: displayInvoiceNumber,
+        isOffline: isReceiptOffline,
         createdAt: new Date(clampedOccurredAt).toISOString(),
         cashierName: user?.name || "Cashier",
         registerName: selectedRegister?.name || "Register 1",

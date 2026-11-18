@@ -1558,6 +1558,25 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
     5. `pos-header-layout.spec.ts` lacked branch and register localStorage keys and did not close foreign open shifts on REG01 from demo seed data.
   - Fix: Applied fixes across `outbox.ts`, `sync-worker.ts`, `catalog-sync.ts`, `pos-catalog.service.ts`, `pos/page.tsx`, `tab-lock.ts`, and `pos-header-layout.spec.ts`.
   - Re-verification: `pos-flow.spec.ts` (5/5 passed), `pos-header-layout.spec.ts` (3/3 passed), `npm run lint` (0 errors), `npm test` (351 tests passed).
+- **Commit & CI (Second Attempt):**
+  - Commit: `c1c78aa`
+  - GitHub Actions CI Run: [44326494450](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44326494450) — **Status: completed, Conclusion: failure (Red)**
+  - Cause of failure in CI:
+    - In `apps/admin/e2e/returns-flow.spec.ts:280`, `expect(invMatch).toBeTruthy()` failed with `null` on regex `/REG\d{2}-\d{6}-\d{4}/`.
+    - Online sales immediately printed the client offline counter `${regCode}-O-${YYMMDD}-${seq}` without waiting for the server-generated online invoice number, causing downstream return lookups (`/sales/invoice/:invoiceNumber`) expecting the standard online format to fail.
+  - Fix:
+    1. In `apps/admin/src/app/pos/page.tsx`, when online (`isOnline === true`), await immediate `runSync` execution to acquire `serverInvoiceNumber`.
+    2. Render `serverInvoiceNumber` on the receipt with `isOffline: false` for successfully synced online sales, falling back to `${regCode}-O-${YYMMDD}-${seq}` with `isOffline: true` strictly when offline or when sync fails.
+    3. Update `db.localSales` with `serverInvoiceNumber` in both `page.tsx` and `sync-worker.ts` so subsequent local lookups resolve both offline and online numbers.
+- **Verification:**
+  - `returns-flow.spec.ts`: All 5 tests passed (including line 226).
+  - `pos-header-layout.spec.ts`: All 3 tests passed across all 8 viewports.
+  - `npm run lint`: 0 errors, 0 warnings.
+  - `npm test`: 351 unit tests passed across all workspaces.
+  - `npm run build`: Clean production build for `@universal-pos/admin`.
+- **Commit & CI (Final Fix):**
+  - Commit: will record next commit
+
 
 
 

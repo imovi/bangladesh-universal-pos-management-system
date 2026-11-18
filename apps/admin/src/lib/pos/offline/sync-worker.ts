@@ -127,6 +127,18 @@ export async function runSync(config: SyncWorkerConfig = {}): Promise<{
           syncedAt: Date.now(),
           lastError: null,
         });
+
+        const serverInv = result.body?.data?.invoiceNumber || result.body?.invoiceNumber;
+        if (serverInv && item.type === "sale") {
+          try {
+            await targetDb.localSales.put({
+              invoiceNumber: serverInv,
+              saleData: { ...(item.payload as any), invoiceNumber: serverInv },
+              createdAt: Date.now(),
+            });
+          } catch {}
+        }
+
         synced++;
       } else if (result.status >= 400 && result.status < 500 && result.status !== 408 && result.status !== 429) {
         // 2. Fatal client error (e.g. 400, 422 TOTALS_MISMATCH, etc.)

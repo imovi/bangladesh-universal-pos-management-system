@@ -262,7 +262,7 @@ export default function SaleReturnDetailPage({
               <CheckCircle2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
               <div>
                 <p className="text-sm font-semibold text-blue-950 dark:text-blue-100">
-                  {locale === "bn" ? "এই ফেরতের সাথে পণ্য বদল (Exchange) সম্পন্ন হয়েছে" : "This return was part of an exchange"}
+                  {locale === "bn" ? "এই ফেরতের সাথে পণ্য বদল সম্পন্ন হয়েছে" : "This return was part of an exchange"}
                 </p>
                 <p className="text-xs text-blue-700 dark:text-blue-300">
                   {locale === "bn" ? "নতুন বিক্রয় ইনভয়েস:" : "New Sale Invoice:"}{" "}

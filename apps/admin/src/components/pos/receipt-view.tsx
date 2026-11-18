@@ -164,7 +164,7 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
           )}
           {receipt.isExchange && (
             <p className="font-bold text-xs uppercase bg-gray-200 py-0.5 rounded mt-1 font-mono">
-              {locale === "bn" ? "পণ্য বদল চালান (EXCHANGE)" : "EXCHANGE RECEIPT"}
+              {locale === "bn" ? "পণ্য বদল চালান" : "EXCHANGE RECEIPT"}
             </p>
           )}
         </div>
@@ -203,7 +203,7 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
         {receipt.exchangeInfo && (
           <div className="pb-2 mb-2 border-b border-dashed border-gray-400 text-[11px] space-y-1 bg-gray-50 p-2 rounded">
             <div className="font-bold text-gray-800">
-              {locale === "bn" ? "ফেরতকৃত পণ্য (Return):" : "Returned Items:"}
+              {locale === "bn" ? "ফেরতকৃত পণ্য:" : "Returned Items:"}
             </div>
             <div className="text-[10px] text-gray-600">
               {locale === "bn" ? "মূল চালান:" : "Orig Invoice:"} {receipt.exchangeInfo.originalInvoice}

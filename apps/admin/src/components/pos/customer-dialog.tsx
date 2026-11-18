@@ -250,7 +250,7 @@ export function CustomerDialog({
                       <div className="flex flex-col items-end text-right">
                         {Number(c.currentDueMinor || 0) > 0 && (
                           <span className="text-[11px] font-mono font-semibold text-destructive">
-                            {locale === "bn" ? "বকেয়া: " : "Due: "}{formatMoney(Number(c.currentDueMinor))}
+                            {locale === "bn" ? "বাকি: " : "Due: "}{formatMoney(Number(c.currentDueMinor))}
                           </span>
                         )}
                         {Number(c.creditLimitMinor || 0) > 0 && (

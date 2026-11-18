@@ -226,7 +226,7 @@ export function PaymentDialog({
             ) : isExchangeEven ? (
               <div className="text-center py-2">
                 <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400 block">
-                  {locale === "bn" ? "সমান মূল্যের বদল (Even Exchange)" : "Even Value Exchange"}
+                  {locale === "bn" ? "সমান মূল্যের বদল" : "Even Value Exchange"}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {locale === "bn" ? "কোন অর্থ আদান-প্রদান প্রয়োজন নেই" : "No payment or refund required"}
@@ -415,7 +415,7 @@ export function PaymentDialog({
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
                   <CreditCard className="h-4 w-4" />
-                  {locale === "bn" ? "ধারে / বাকিতে বিক্রি (Credit Sale)" : "Sale on Credit (Baki)"}
+                  {locale === "bn" ? "বাকিতে বিক্রি" : "Sale on Credit (Baki)"}
                 </span>
                 <span className="font-bold text-amber-800 dark:text-amber-300 font-mono text-sm">
                   {formatMoney(calculation.balanceDueMinor)}

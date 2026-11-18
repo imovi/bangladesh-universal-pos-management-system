@@ -599,13 +599,13 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
             <div className="mt-3 pt-3 border-t border-border flex justify-between text-xs">
               <div>
-                <span className="text-muted-foreground">{locale === "bn" ? "পূর্ববর্তী ব্যালেন্স (Opening): " : "Opening Balance: "}</span>
+                <span className="text-muted-foreground">{locale === "bn" ? "পূর্ববর্তী বকেয়া: " : "Opening Balance: "}</span>
                 <span className="font-mono font-bold text-foreground">
                   {formatMoney(statement?.openingBalanceMinor || 0)}
                 </span>
               </div>
               <div>
-                <span className="text-muted-foreground">{locale === "bn" ? "সর্বশেষ ব্যালেন্স (Closing): " : "Closing Due: "}</span>
+                <span className="text-muted-foreground">{locale === "bn" ? "সর্বশেষ বকেয়া: " : "Closing Due: "}</span>
                 <span className="font-mono font-bold text-amber-700 dark:text-amber-400">
                   {formatMoney(statement?.closingBalanceMinor || 0)}
                 </span>
@@ -832,10 +832,10 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                 onChange={(e) => setPaymentMethod(e.target.value)}
                 className="w-full h-9 px-3 text-sm rounded-md border border-input bg-background text-foreground"
               >
-                <option value="cash">{locale === "bn" ? "ক্যাশ (নগদ)" : "Cash"}</option>
-                <option value="bkash">bKash (বিকাশ)</option>
-                <option value="nagad">Nagad (নগদ)</option>
-                <option value="rocket">Rocket (রকেট)</option>
+                <option value="cash">{locale === "bn" ? "ক্যাশ" : "Cash"}</option>
+                <option value="bkash">{locale === "bn" ? "বিকাশ" : "bKash"}</option>
+                <option value="nagad">{locale === "bn" ? "নগদ" : "Nagad"}</option>
+                <option value="rocket">{locale === "bn" ? "রকেট" : "Rocket"}</option>
                 <option value="card">{locale === "bn" ? "কার্ড" : "Card"}</option>
                 <option value="bank_transfer">{locale === "bn" ? "ব্যাংক ট্রান্সফার" : "Bank Transfer"}</option>
               </select>

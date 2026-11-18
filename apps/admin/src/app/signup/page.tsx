@@ -204,12 +204,12 @@ export default function SignupPage() {
                       {...register("businessType")}
                       className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     >
-                      <option value="fashion">{locale === "bn" ? "পোশাক / ফ্যাশন (Fashion)" : "Fashion & Apparel"}</option>
-                      <option value="retail">{locale === "bn" ? "খুচরা সাধারণ (General Retail)" : "General Retail"}</option>
-                      <option value="grocery">{locale === "bn" ? "মুদি / সুপারশপ (Grocery)" : "Grocery & Supermarket"}</option>
-                      <option value="pharmacy">{locale === "bn" ? "ফার্মেসি (Pharmacy)" : "Pharmacy"}</option>
-                      <option value="electronics">{locale === "bn" ? "ইলেকট্রনিক্স (Electronics)" : "Electronics"}</option>
-                      <option value="other">{locale === "bn" ? "অন্যান্য (Other)" : "Other"}</option>
+                      <option value="fashion">{locale === "bn" ? "পোশাক ও ফ্যাশন" : "Fashion & Apparel"}</option>
+                      <option value="retail">{locale === "bn" ? "সাধারণ খুচরা দোকান" : "General Retail"}</option>
+                      <option value="grocery">{locale === "bn" ? "মুদি ও সুপারশপ" : "Grocery & Supermarket"}</option>
+                      <option value="pharmacy">{locale === "bn" ? "ফার্মেসি" : "Pharmacy"}</option>
+                      <option value="electronics">{locale === "bn" ? "ইলেকট্রনিক্স" : "Electronics"}</option>
+                      <option value="other">{locale === "bn" ? "অন্যান্য" : "Other"}</option>
                     </select>
                   </div>
                 </div>

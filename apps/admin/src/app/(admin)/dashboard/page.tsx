@@ -132,6 +132,17 @@ export default function DashboardPage() {
     },
   });
 
+  // Query Offline Review Open Flags Count
+  const { data: openReviewFlagsCount = 0 } = useQuery<number>({
+    queryKey: ["dashboard-offline-review-count"],
+    queryFn: async () => {
+      const res = await apiFetch("/sales/offline-review/count");
+      if (!res.ok) return 0;
+      const json = await res.json();
+      return json.data?.count ?? json.count ?? 0;
+    },
+  });
+
   const salesCount = salesSummary?.salesCount ?? 0;
   const totalNetMinor = salesSummary?.totalNetMinor ?? 0;
   const avgSaleMinor = salesCount > 0 ? Math.round(totalNetMinor / salesCount) : 0;
@@ -310,8 +321,8 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* Due / Credit Metrics for Today */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+      {/* Due / Credit / Returns / Offline Review Metrics for Today */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         <Link href="/reports/due" className="block focus:outline-none">
           <Card className="shadow-sm hover:border-amber-400/50 transition-colors bg-amber-500/5 border-amber-500/20">
             <CardHeader className="flex flex-row items-center justify-between pb-1.5 space-y-0">
@@ -384,6 +395,33 @@ export default function DashboardPage() {
                   : locale === "bn"
                   ? "আজ কোনো ফেরত নেই"
                   : "No returns today"}
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        {/* Offline Review Flags */}
+        <Link href="/sales/offline-review" className="block focus:outline-none">
+          <Card data-testid="dashboard-offline-review-card" className="shadow-sm hover:border-amber-400/50 transition-colors bg-amber-500/5 border-amber-500/20 h-full">
+            <CardHeader className="flex flex-row items-center justify-between pb-1.5 space-y-0">
+              <CardTitle className="text-xs font-semibold text-amber-800 dark:text-amber-300 uppercase tracking-wider">
+                {strings.offlineReview.title}
+              </CardTitle>
+              <div className="h-7 w-7 rounded-full bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                <AlertTriangle className="h-3.5 w-3.5" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div
+                className="text-2xl font-bold font-mono tracking-tight text-amber-900 dark:text-amber-200 tabular-nums"
+                data-testid="open-review-flags-count"
+              >
+                {openReviewFlagsCount}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {openReviewFlagsCount > 0
+                  ? `${openReviewFlagsCount} ${strings.offlineReview.openFlags}`
+                  : strings.offlineReview.noFlagsFound}
               </p>
             </CardContent>
           </Card>

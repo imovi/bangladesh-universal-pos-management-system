@@ -1611,7 +1611,35 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - `npm test`: 351 unit tests passed across admin (47 tests) and api (304 tests).
   - `npm run build`: Clean production build bundling `/sw.js` and all static/dynamic routes.
 - **Commit & CI:**
+  - Commit: `6272c90`
+  - GitHub Actions CI Run: [44343438389](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44343438389) — **Status: completed, Conclusion: success (Green)**
+
+### Milestone D5: Back Office Offline Review & Register Settings
+- **Features Implemented:**
+  1. **Offline Sales Review Page (`apps/admin/src/app/(admin)/sales/offline-review/page.tsx`):**
+     - Full management view for reviewing flagged offline sales (Negative Stock, Price Changed, Stale Catalog, New Customer).
+     - Filter by status (`all`, `open`, `resolved`) and flag type.
+     - Details preview for inventory and price changes.
+     - Modal resolution dialog (`PATCH /sales/offline-review/:id/resolve`) capturing manager resolution notes and marking items resolved.
+  2. **Navigation & Dashboard Flag Count:**
+     - Added `offlineReview` link in admin sidebar under sales section gated on `sale.offline_review` permission.
+     - Added `openReviewFlagsCount` query and KPI card (`data-testid="open-review-flags-count"`, `data-testid="dashboard-offline-review-card"`) to `/dashboard`.
+  3. **Register Offline Permission Setting (`/registers`):**
+     - Added `allowOffline` column with status badges (`data-testid="register-allow-offline-badge"`) and quick-toggle action (`data-testid="toggle-allow-offline-button"`).
+     - Added `allowOffline` toggle checkbox in register create/edit modal (`data-testid="allow-offline-checkbox"`).
+  4. **User POS PIN Management (`/settings/users`):**
+     - Added POS Offline PIN field (`data-testid="user-pos-pin-input"`) in user create/edit dialog.
+     - Added quick "পিন সেট" (Set PIN) action in table (`data-testid="set-pin-${u.id}"`) opening a dedicated PIN reset modal (`data-testid="pos-pin-input"`, `data-testid="save-pos-pin-button"`) calling `PATCH /users/:id/pin`.
+  5. **Clean i18n & Translation Structure:**
+     - Added comprehensive bilingual translation dictionaries in `bn.ts` and `en.ts` under `offlineReview`, `registers`, and `settings`, maintaining 0 mixed labels and satisfying strict `test/inline-i18n-count.spec.ts` ceiling.
+- **Verification:**
+  - `npm run lint`: 0 warnings, 0 errors across all workspaces (110 admin files, 74 api files).
+  - `npm test`: 351 unit tests passed across admin (47 tests) and api (304 tests).
+  - `npm run build`: Clean production build bundling `/sw.js` and all static/dynamic routes.
+- **Commit & CI:**
   - Commit: will record next commit
+
+
 
 
 

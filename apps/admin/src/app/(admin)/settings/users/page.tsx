@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   X,
   Search,
+  KeyRound,
 } from "lucide-react";
 
 interface RoleOption {
@@ -64,10 +65,17 @@ export default function UsersSettingsPage() {
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
   const [formPassword, setFormPassword] = useState("");
+  const [formPin, setFormPin] = useState("");
   const [formSelectedRoles, setFormSelectedRoles] = useState<string[]>([]);
   const [formSelectedBranches, setFormSelectedBranches] = useState<string[]>([]);
   const [formIsActive, setFormIsActive] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Quick PIN Dialog State
+  const [pinDialogUser, setPinDialogUser] = useState<UserItem | null>(null);
+  const [quickPin, setQuickPin] = useState("");
+  const [quickPinError, setQuickPinError] = useState<string | null>(null);
+  const [isSubmittingPin, setIsSubmittingPin] = useState(false);
 
   const loadData = async () => {
     try {
@@ -111,6 +119,7 @@ export default function UsersSettingsPage() {
     setFormName("");
     setFormEmail("");
     setFormPassword("");
+    setFormPin("");
     setFormSelectedRoles(availableRoles.length > 0 ? [availableRoles[0].id] : []);
     setFormSelectedBranches(availableBranches.map((b) => b.id));
     setFormIsActive(true);
@@ -123,11 +132,50 @@ export default function UsersSettingsPage() {
     setFormName(u.name);
     setFormEmail(u.email);
     setFormPassword("");
+    setFormPin("");
     setFormSelectedRoles(u.userRoles.map((ur) => ur.role.id));
     setFormSelectedBranches(u.userBranches.map((ub) => ub.branch.id));
     setFormIsActive(u.isActive);
     setFormError(null);
     setIsDialogOpen(true);
+  };
+
+  const handleSaveQuickPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pinDialogUser) return;
+    setQuickPinError(null);
+    if (!/^\d{4,6}$/.test(quickPin)) {
+      setQuickPinError(
+        locale === "bn"
+          ? "পিন অবশ্যই ৪ থেকে ৬ ডিজিটের সংখ্যা হতে হবে"
+          : "PIN must be 4 to 6 numeric digits"
+      );
+      return;
+    }
+    setIsSubmittingPin(true);
+    try {
+      const res = await apiFetch(`/users/${pinDialogUser.id}/pin`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: quickPin }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Failed to update PIN");
+      }
+      setSuccessMessage(
+        locale === "bn"
+          ? `${pinDialogUser.name}-এর POS পিন সফলভাবে সংরক্ষিত হয়েছে`
+          : `POS PIN updated successfully for ${pinDialogUser.name}`
+      );
+      setPinDialogUser(null);
+      setQuickPin("");
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      setQuickPinError(err.message || "Failed to save PIN");
+    } finally {
+      setIsSubmittingPin(false);
+    }
   };
 
   const toggleFormRole = (roleId: string) => {
@@ -171,6 +219,15 @@ export default function UsersSettingsPage() {
       return;
     }
 
+    if (formPin && !/^\d{4,6}$/.test(formPin)) {
+      setFormError(
+        locale === "bn"
+          ? "পিন অবশ্যই ৪ থেকে ৬ ডিজিটের সংখ্যা হতে হবে"
+          : "PIN must be 4 to 6 numeric digits"
+      );
+      return;
+    }
+
     // Protection check: Cannot deactivate oneself
     if (editingUser && editingUser.id === currentLoggedInUser?.id && !formIsActive) {
       setFormError(strings.settings.cannotDeactivateSelf);
@@ -188,6 +245,9 @@ export default function UsersSettingsPage() {
         };
         if (formPassword && formPassword.length >= 8) {
           payload.password = formPassword;
+        }
+        if (formPin) {
+          payload.pin = formPin;
         }
 
         const res = await apiFetch(`/users/${editingUser.id}`, {
@@ -210,6 +270,7 @@ export default function UsersSettingsPage() {
             password: formPassword,
             roleIds: formSelectedRoles,
             branchIds: formSelectedBranches,
+            ...(formPin ? { pin: formPin } : {}),
           }),
         });
         if (!res.ok) {
@@ -395,16 +456,33 @@ export default function UsersSettingsPage() {
                           )}
                         </td>
                         <td className="px-4 py-2 text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            data-testid={`edit-user-${u.id}`}
-                            onClick={() => openEditDialog(u)}
-                            className="h-8 px-2 text-xs"
-                          >
-                            <Edit2 className="h-3.5 w-3.5 mr-1" />
-                            <span>{strings.common.edit}</span>
-                          </Button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              data-testid={`set-pin-${u.id}`}
+                              onClick={() => {
+                                setPinDialogUser(u);
+                                setQuickPin("");
+                                setQuickPinError(null);
+                              }}
+                              className="h-8 px-2 text-xs"
+                              title={strings.settings.posPin}
+                            >
+                              <KeyRound className="h-3.5 w-3.5 mr-1 text-primary" />
+                              <span>{strings.settings.setPin}</span>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              data-testid={`edit-user-${u.id}`}
+                              onClick={() => openEditDialog(u)}
+                              className="h-8 px-2 text-xs"
+                            >
+                              <Edit2 className="h-3.5 w-3.5 mr-1" />
+                              <span>{strings.common.edit}</span>
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -501,6 +579,24 @@ export default function UsersSettingsPage() {
                     }
                     required={!editingUser}
                   />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="userPinInput">
+                    {strings.settings.posPin}
+                  </Label>
+                  <Input
+                    id="userPinInput"
+                    data-testid="user-pos-pin-input"
+                    type="password"
+                    maxLength={6}
+                    value={formPin}
+                    onChange={(e) => setFormPin(e.target.value.replace(/\D/g, ""))}
+                    placeholder="1234"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    {strings.settings.posPinDesc}
+                  </p>
                 </div>
 
                 {/* Roles Selector */}
@@ -618,6 +714,89 @@ export default function UsersSettingsPage() {
                   {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : strings.common.save}
                 </Button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Quick Set POS PIN */}
+        {pinDialogUser && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="pin-modal-title"
+              className="bg-card border border-border w-full max-w-md rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in"
+            >
+              <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="h-5 w-5 text-primary" />
+                  <h2 id="pin-modal-title" className="text-base font-semibold tracking-tight">
+                    {strings.settings.posPin}
+                  </h2>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setPinDialogUser(null)}
+                  className="h-8 w-8 rounded-full"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <form onSubmit={handleSaveQuickPin} className="p-6 space-y-4">
+                {quickPinError && (
+                  <div role="alert" className="p-3 text-xs bg-destructive/10 text-destructive rounded-lg border border-destructive/20">
+                    {quickPinError}
+                  </div>
+                )}
+
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">{pinDialogUser.name}</span> ({pinDialogUser.email})
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="quickPinInput" className="text-xs font-semibold">
+                    {strings.settings.posPin}
+                  </Label>
+                  <Input
+                    id="quickPinInput"
+                    data-testid="pos-pin-input"
+                    type="password"
+                    maxLength={6}
+                    autoFocus
+                    required
+                    value={quickPin}
+                    onChange={(e) => setQuickPin(e.target.value.replace(/\D/g, ""))}
+                    placeholder="1234"
+                    className="font-mono text-center tracking-widest text-lg h-10"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    {strings.settings.posPinDesc}
+                  </p>
+                </div>
+
+                <div className="pt-2 flex items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setPinDialogUser(null)}
+                    disabled={isSubmittingPin}
+                  >
+                    {strings.common.cancel}
+                  </Button>
+                  <Button
+                    type="submit"
+                    data-testid="save-pos-pin-button"
+                    disabled={isSubmittingPin || quickPin.length < 4}
+                  >
+                    {isSubmittingPin ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    ) : null}
+                    {strings.common.save}
+                  </Button>
+                </div>
+              </form>
             </div>
           </div>
         )}

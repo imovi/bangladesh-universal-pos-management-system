@@ -79,6 +79,7 @@ export function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
       subItems: [
         { titleKey: "salesList", href: "/sales", permission: "sale.read" },
         { titleKey: "returns", href: "/sales/returns", permission: "sale.read" },
+        { titleKey: "offlineReview", href: "/sales/offline-review", permission: "sale.offline_review" },
         { titleKey: "shifts", href: "/shifts", permission: "shift.manage" },
         { titleKey: "registers", href: "/registers", permission: "shift.manage" },
         { titleKey: "customers", href: "/customers", permission: "customer.read" },

@@ -44,6 +44,7 @@ interface RegisterRecord {
   name: string;
   code: string;
   isActive: boolean;
+  allowOffline?: boolean;
   branchId: string;
   branch?: {
     id: string;
@@ -77,6 +78,7 @@ export default function RegistersPage() {
     code: "",
     branchId: "",
     isActive: true,
+    allowOffline: true,
   });
   const [modalLoading, setModalLoading] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
@@ -143,6 +145,7 @@ export default function RegistersPage() {
       code: "",
       branchId: branches[0]?.id || "",
       isActive: true,
+      allowOffline: true,
     });
     setModalError(null);
     setModalSuccess(false);
@@ -156,10 +159,27 @@ export default function RegistersPage() {
       code: r.code,
       branchId: r.branchId,
       isActive: r.isActive,
+      allowOffline: r.allowOffline !== false,
     });
     setModalError(null);
     setModalSuccess(false);
     setShowModal(true);
+  };
+
+  const handleToggleAllowOffline = async (r: RegisterRecord) => {
+    try {
+      const nextValue = r.allowOffline === false ? true : false;
+      const res = await apiFetch(`/registers/${r.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ allowOffline: nextValue }),
+      });
+      if (res.ok) {
+        setRegisters((prev) =>
+          prev.map((reg) => (reg.id === r.id ? { ...reg, allowOffline: nextValue } : reg))
+        );
+      }
+    } catch {}
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -186,7 +206,11 @@ export default function RegistersPage() {
 
       const res = await apiFetch(url, {
         method,
-        body: JSON.stringify(validation.data),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...validation.data,
+          allowOffline: formData.allowOffline,
+        }),
       });
 
       if (res.ok) {
@@ -272,6 +296,7 @@ export default function RegistersPage() {
               <TableHead>{strings.registers.registerName}</TableHead>
               <TableHead className="w-40">{strings.registers.registerCode}</TableHead>
               <TableHead className="w-56">{strings.registers.branch}</TableHead>
+              <TableHead className="text-center w-36">{strings.registers.allowOffline}</TableHead>
               <TableHead className="text-center w-28">{strings.registers.status}</TableHead>
               <TableHead className="text-right w-20">{strings.common.actions}</TableHead>
             </TableRow>
@@ -279,14 +304,14 @@ export default function RegistersPage() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-8 text-center text-muted-foreground text-xs sm:text-sm">
+                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground text-xs sm:text-sm">
                   <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-primary" />
                   {strings.common.loading}
                 </TableCell>
               </TableRow>
             ) : registers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-8 text-center text-muted-foreground text-xs sm:text-sm">
+                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground text-xs sm:text-sm">
                   {strings.common.noData}
                 </TableCell>
               </TableRow>
@@ -299,6 +324,29 @@ export default function RegistersPage() {
                     <TableCell className="font-mono text-xs text-foreground font-semibold">{r.code}</TableCell>
                     <TableCell className="text-muted-foreground text-xs">
                       {branchObj?.name || "—"}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <button
+                        type="button"
+                        data-testid="toggle-allow-offline-button"
+                        onClick={() => handleToggleAllowOffline(r)}
+                        className="cursor-pointer focus:outline-hidden"
+                        title={strings.registers.allowOffline}
+                      >
+                        <Badge
+                          variant="outline"
+                          data-testid="register-allow-offline-badge"
+                          className={
+                            r.allowOffline !== false
+                              ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[11px]"
+                              : "bg-muted text-muted-foreground text-[11px]"
+                          }
+                        >
+                          {r.allowOffline !== false
+                            ? strings.registers.allowed
+                            : strings.registers.disabled}
+                        </Badge>
+                      </button>
                     </TableCell>
                     <TableCell className="text-center">
                       <Badge
@@ -412,6 +460,20 @@ export default function RegistersPage() {
               />
               <Label htmlFor="regActive" className="text-xs font-medium cursor-pointer">
                 {strings.common.active}
+              </Label>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="regAllowOffline"
+                data-testid="allow-offline-checkbox"
+                checked={formData.allowOffline}
+                onChange={(e) => setFormData((f) => ({ ...f, allowOffline: e.target.checked }))}
+                className="h-4 w-4 rounded border-input cursor-pointer"
+              />
+              <Label htmlFor="regAllowOffline" className="text-xs font-medium cursor-pointer">
+                {strings.registers.allowOfflineCheckbox}
               </Label>
             </div>
 

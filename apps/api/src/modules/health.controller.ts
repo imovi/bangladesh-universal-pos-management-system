@@ -17,10 +17,12 @@ export class HealthController {
       dbStatus = "unreachable";
     }
 
+    const isProduction = process.env.NODE_ENV === "production";
+
     return {
       status: "ok",
       database: dbStatus,
-      databaseName: dbName,
+      ...(isProduction ? {} : { databaseName: dbName }),
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
     };

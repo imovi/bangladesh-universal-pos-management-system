@@ -24,6 +24,7 @@ export const en: TranslationKeys = {
     back: "Back",
     submit: "Submit",
     refresh: "Refresh",
+    date: "Date",
     error: "An error occurred",
     success: "Success",
     noData: "No data available",

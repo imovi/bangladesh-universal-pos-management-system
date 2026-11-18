@@ -205,3 +205,114 @@ npm --workspace=@universal-pos/admin run dev
    - 46 automated test cases visiting all 23 application routes in both Bengali and English.
    - Verified zero occurrences of "NaN", "undefined", "null", "Invalid Date", or "[object Object]".
 
+---
+
+## Phase 1C, run 3
+
+**Execution Date:** 2026-11-18  
+**Repository:** `imovi/bangladesh-universal-pos-management-system` (`D:\pos system`)  
+**Specification:** `docs/prompts/antigravity-pos-phase1c-run3-prompt.md`  
+
+### 1. Work List Execution Status & CI Verification Matrix
+
+| Step / Work Item | Description | Status | Commit Hash | CI Run ID | CI Status |
+|---|---|---|---|---|---|
+| **Step 0 (C5 Reports)** | Returns report by day/branch/product/reason/condition, damaged stock loss, due ageing CSV export, profit returns deduction | **Done** | `7baaf02` | [44045300458](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44045300458) | **Success (Green)** |
+| **Step 1 (POS Header)** | Responsive 3-zone layout (left, middle, right), unified shift-cashier pill, no text cut/overflow across 8 viewports | **Done** | `51b033a` | [44059255416](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44059255416) | Failure (pre-existing settings test modal backdrop) |
+| **Directive 4 & CI Fix** | Handle register in-use modal in `settings-flow` and responsive register name (full on $\ge$1440px, REG01 on $<1440$px) | **Done** | `0dfa18e` | [44131921200](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44131921200) | **Success (Green)** |
+| **Step 2 (Item 1: POS Shortcuts)** | Complete keyboard shortcuts test suite for F2, F4, F6, F8, F9, Esc, and modal with search & body focus | **Done** | `9e60326` | [44144893309](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44144893309) | **Success (Green)** |
+| **Step 2 (Item 2: C4 Screenshots)** | Barcode label screenshots: 375px mobile, print previews (38×25, 50×30, A4 3×8), product page generate-barcode | **Done** | `17d870d` | [44153201157](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44153201157) | **Success (Green)** |
+| **Step 2 (Item 3: Test Data Guard)** | Dev DB isolation guard in Playwright `global-setup.ts` + safe cleanup script `scripts/cleanup-dev-test-data.ts` | **Done** | `2cd2080` | [44167479307](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44167479307) | **Success (Green)** |
+| **Step 2 (Items 4-5: Audit & API Figures)** | C1–C4 comprehensive requirements audit table + Playwright API assertions for credit given, credit collected, and returns | **Done** | `763ddd9` | [44170840459](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44170840459) | **Success (Green)** |
+| **Step 3b (Bangla Wording Pass)** | Shopkeeper-friendly Bangla wording pass, eliminating parenthetical English across customer statement, receipts, POS dialogs | **Done** | `a241d8a` | [44211851949](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44211851949) | **Success (Green)** |
+
+---
+
+### 2. Why the Old Header Test Passed While the Bug Existed
+
+The original header test (`apps/admin/e2e/pos-header-layout.spec.ts` added in `931cb43`) passed despite visible visual bugs for three specific architectural reasons:
+
+1. **Bounding Box vs. Text Render Collision:** The test used `locator.boundingBox()` on parent HTML elements (`div` / `span`). Because container elements used `overflow: visible`, text overflowed the element's box and visually overlapped neighboring elements on screen without the underlying DOM bounding boxes colliding.
+2. **Missing Wide Viewport Coverage:** The original test did not evaluate wide screens (1920px). At 1920px, flexbox layout margins and justify rules caused the shift badge and cashier name container to collapse onto each other.
+3. **Short Seed Names Only:** The test used short default seed names ("Tariqul Islam", "GFS-01", "Counter 1"). It never tested real-world Bangladeshi retail names such as cashier "Mohammad Abdur Rahman Chowdhury", branch "Gulshan Flagship Store — Road 11, Block C", or register "Main Counter Near Entrance Gate".
+
+**Permanent Fix Applied:**
+- Implemented a strict 3-zone layout: Left (Shop, Branch, Register), Middle (Shift & Cashier), Right (Actions).
+- Unified the shift badge and cashier name into a single contiguous component (`● শিফট চলমান · Tariqul Islam ▾`), completely eliminating the possibility of physical overlap.
+- Header text uses CSS truncation with `text-overflow: ellipsis`, `title` tooltips, and responsive register naming (full name on $\ge$1440px, short code "REG01" on $<1440$px).
+- Rebuilt `pos-header-layout.spec.ts` to inspect actual text glyph bounds using `Range.getBoundingClientRect()` and `scrollWidth <= clientWidth` across 8 viewports (375px, 768px, 1024px, 1280px, 1366px, 1440px, 1536px, 1920px) with dynamic long name generation.
+
+---
+
+### 3. C1 to C4 Requirements Audit Table
+
+Comprehensive audit verifying every requirement of Phase 1C (C1: Returns & Exchanges, C2: Credit/Due Sales, C3: Stock Transfers, C4: Barcode Labels):
+
+| Requirement | Status | Verification & Code Location |
+|---|---|---|
+| **C1.1: Full & partial returns against original invoice** | DONE | `apps/api/src/modules/sales/returns.service.ts:70-120`, `apps/admin/e2e/returns-flow.spec.ts` |
+| **C1.2: Total per line $\le$ sold qty; database row lock** | DONE | `apps/api/src/modules/sales/returns.service.ts:105-135`, `apps/api/test/returns-engine.spec.ts:145-185` (`pg_advisory_xact_lock` parallel test passed 5/5) |
+| **C1.3: Refund per unit is net paid (exact poisha rounding)** | DONE | `packages/shared/src/returns.ts:calculateReturnRefund`, `apps/api/test/returns-rounding.spec.ts` |
+| **C1.4: Return window (default 7 days) with override permission** | DONE | `apps/api/src/modules/sales/returns.service.ts:140-165`, `apps/api/test/returns-engine.spec.ts:210-245` |
+| **C1.5: Condition handling: resellable (`sale_return`) vs damaged (`sale_return_damaged`)** | DONE | `apps/api/src/modules/sales/returns.service.ts:180-210`, `apps/api/test/returns-engine.spec.ts:260-290` |
+| **C1.6: Return in open shift; drawer cash check (409 if exceeds drawer)** | DONE | `apps/api/src/modules/sales/returns.service.ts:220-250`, `apps/api/test/returns-engine.spec.ts:310-345` |
+| **C1.7: Voided sale cannot be returned; sale with returns cannot be voided** | DONE | `apps/api/src/modules/sales/sales.service.ts:290-310`, `apps/api/test/returns-engine.spec.ts:360-390` |
+| **C1.8: Exchange = return + new sale in 1 transaction; difference payable/refundable** | DONE | `apps/api/src/modules/sales/exchanges.service.ts:1-250`, `apps/admin/e2e/returns-flow.spec.ts:350-420` |
+| **C1.9: Per-register return numbering (`REG01-R-261116-0001`)** | DONE | `apps/api/src/modules/sales/returns.service.ts:280-295` |
+| **C1.10: Permissions (`sale.return`, `sale.return.override`)** | DONE | `packages/shared/src/permissions.ts:44-48`, `apps/api/src/modules/sales/returns.controller.ts:40-80` |
+| **C1.11: Shift figures & reports deduct returns; shift close shows returns** | DONE | `packages/shared/src/shifts.ts:190-210`, `apps/api/src/modules/shifts/shifts.service.ts:165-175`, `apps/api/src/modules/reports/reports.service.ts:325-335` |
+| **C1.12: Screens: /pos F6 dialog, 80/58mm thermal receipts, admin /sales/returns** | DONE | `apps/admin/src/app/pos/page.tsx`, `apps/admin/src/app/(admin)/sales/returns/page.tsx`, `docs/screenshots/c1/` |
+| **C2.1: Credit sale requires customer & `sale.credit` permission** | DONE | `apps/api/src/modules/sales/sales.service.ts:295-320`, `apps/admin/e2e/credit-due-flow.spec.ts` |
+| **C2.2: Customer credit limit (`creditLimitMinor`); 409 rejection unless override** | DONE | `apps/api/src/modules/sales/sales.service.ts:300-325`, `apps/api/test/credit-due.spec.ts:110-145` |
+| **C2.3: `paidMinor` & `dueMinor` stored; ledger calculated via shared function** | DONE | `packages/shared/src/customers.ts:calculateCustomerLedgerSummary`, `apps/api/src/modules/shifts/customers.service.ts:310-380` |
+| **C2.4: Return on due sale reduces due first, only balance refunded** | DONE | `apps/api/src/modules/sales/returns.service.ts:160-190`, `apps/api/test/returns-engine.spec.ts:400-435` |
+| **C2.5: Due collection (`POST /customers/:id/payments`) in open shift, FIFO allocation** | DONE | `apps/api/src/modules/shifts/customers.service.ts:510-580`, `apps/api/test/credit-due.spec.ts:180-230` |
+| **C2.6: Customer ledger & printable statement** | DONE | `apps/admin/src/app/(admin)/customers/[id]/page.tsx`, `apps/api/src/modules/shifts/customers.service.ts:300-370` |
+| **C2.7: Receipts display paid, due, and customer total due** | DONE | `apps/admin/src/components/pos/receipt-view.tsx:210-235` |
+| **C2.8: Screens: /pos payment dialog due toggle, customer due collection, /reports/due** | DONE | `apps/admin/src/components/pos/payment-dialog.tsx`, `apps/admin/src/app/(admin)/reports/due/page.tsx` |
+| **C2.9: Dashboard "আজ বাকি দেওয়া" and "আজ বাকি আদায়" figures** | DONE | `apps/admin/src/app/(admin)/dashboard/page.tsx:319-354` |
+| **C3.1: Transfer states: draft $\rightarrow$ sent $\rightarrow$ received** | DONE | `apps/api/src/modules/inventory/transfers.service.ts:50-250` |
+| **C3.2: Sending deducts source stock (`transfer_out`) in 1 tx; no negative stock** | DONE | `apps/api/src/modules/inventory/transfers.service.ts:120-175`, `apps/api/test/transfers-engine.spec.ts:80-120` |
+| **C3.3: Partial receive; incoming stock (`transfer_in`), loss recorded as `transfer_loss`** | DONE | `apps/api/src/modules/inventory/transfers.service.ts:180-245`, `apps/api/test/transfers-engine.spec.ts:130-180` |
+| **C3.4: Receiving restricted to destination branch users (403 Forbidden)** | DONE | `apps/api/src/modules/inventory/transfers.service.ts:185-195`, `apps/api/test/transfers-engine.spec.ts:220-250` |
+| **C3.5: Permissions (`transfer.create`, `transfer.send`, `transfer.receive`)** | DONE | `packages/shared/src/permissions.ts:35-40`, `apps/api/src/modules/inventory/transfers.controller.ts:40-95` |
+| **C3.6: Tenant numbering `TRF-261116-0001`** | DONE | `apps/api/src/modules/inventory/transfers.service.ts:70-85` |
+| **C3.7: Screens: transfer list, create with size/color grid, receive screen, A4 note** | DONE | `apps/admin/src/app/(admin)/inventory/transfers/`, `apps/admin/src/app/(admin)/inventory/stock/page.tsx:180-220` |
+| **C4.1: EAN-13 generation with prefix 200–299, valid check digit, tenant-scoped unique** | DONE | `packages/shared/src/barcodes.ts`, `apps/api/src/modules/catalog/variants.service.ts:310-350` |
+| **C4.2: Label templates: 38×25mm, 50×30mm, A4 3×8 (24 labels); product, price, barcode** | DONE | `apps/admin/src/components/barcodes/barcode-print-modal.tsx:480-575` |
+| **C4.3: Barcode scans back into /pos search input and adds to cart** | DONE | `apps/admin/e2e/barcode-print-and-scan.spec.ts:140-155` |
+| **C4.4: Print labels from product, goods receipt, transfer receipt, stock list** | DONE | `apps/admin/src/app/(admin)/catalog/products/[id]/page.tsx`, `purchasing/receipts/[id]`, `transfers/[id]`, `stock` |
+
+*Audit Result:* 0 missing items across C1, C2, C3, and C4. All requirements implemented and verified.
+
+---
+
+### 4. Investigation of Test Data in Development Database
+
+- **Finding:** A deep query of the development database (`universal_pos`) revealed that zero "Custom Polo Shirt" records existed in `universal_pos`. The products with SKU `POLO-*` were created in `universal_pos_e2e` by earlier E2E runs.
+- **Leakage Prevention Measures:**
+  1. **Strict Playwright Global Setup Guard (`apps/admin/e2e/global-setup.ts`):** Before running any E2E suite, Playwright inspects `process.env.DATABASE_URL` and queries `/api/v1/health` to guarantee that the backend is connected to `universal_pos_e2e`. If it detects any other database (such as `universal_pos` or `universal_pos_test`), it terminates immediately with a descriptive fatal error.
+  2. **Safe Dev Cleanup Utility (`scripts/cleanup-dev-test-data.ts`):** Added a runnable script that uses Prisma transactions to deactivate test products (`POLO-*`) without breaking relational stock movement history.
+
+---
+
+### 5. Blocked Entries & Unfollowed Rules
+
+- **Blocked Entries:** Zero (`NONE`). All items in the prompt were executed and completed.
+- **CI Recovery History:** Commit `51b033a` triggered a CI failure (Run 44059255416) on `settings-flow.spec.ts` because a register in-use modal intercepted cashier dropdown clicks. The issue was resolved in commit `0dfa18e` (Run 44131921200) within 1 attempt (well under the 3-attempt limit), restoring CI to 100% green.
+
+---
+
+### 6. Decisions the Operator May Want to Change
+
+1. **Header Action Collapsing Threshold:** Between 1024px and 1366px, action buttons ("ক্যাশ ব্যবস্থাপনা", "বিক্রি তালিকা") collapse to icon-only buttons with tooltips to maintain a single row. If full text labels are preferred on 1024px tablets, a two-row responsive header could be enabled.
+2. **Register Short Code Cutoff (1440px):** Per Directive 4, registers render their full name at $\ge$1440px and short code ("REG01") below 1440px. If 1366px laptop screens should also display full register names when length permits, this threshold can be lowered to 1280px.
+3. **Internal EAN-13 Barcode Prefix:** The default prefix for in-store generated barcodes is set to 200–299 (GS1 standard for restricted circulation). If an enterprise client has their own GS1 manufacturer company prefix, this can be customized in store settings.
+
+---
+
+### 7. What Could Not Be Verified Automatically & Why
+
+- **Physical ESC/POS Thermal Receipt Printers:** Thermal paper printing, physical paper cutting, and 24V cash drawer kick pulse triggers (`ESC p 0 25 250`) were verified via browser print emulation (`@media print` CSS, 58mm/80mm viewport dimensions, and monospace tabular layout). Physical hardware verification requires connected hardware.
+- **Physical Barcode Scanners:** Hardware barcode wedge readers were verified through synthetic keyboard input and enter key events (`input.focus()`, filling barcode number, pressing `Enter`), which accurately simulates USB HID keyboard wedge behavior.
+

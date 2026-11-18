@@ -56,6 +56,7 @@ model Tenant {
   stockTransferItems         StockTransferItem[]
   transferCounters           TransferCounter[]
   barcodeCounters            BarcodeCounter[]
+  saleReviewFlags            SaleReviewFlag[]
 
   @@map("tenants")
 }
@@ -117,6 +118,7 @@ model User {
   transfersCreated StockTransfer[] @relation("TransferCreatedByUser")
   transfersSent    StockTransfer[] @relation("TransferSentByUser")
   transfersReceived StockTransfer[] @relation("TransferReceivedByUser")
+  flagsResolved    SaleReviewFlag[] @relation("SaleReviewFlagResolvedBy")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -658,6 +660,7 @@ model Register {
   name      String
   code      String
   isActive  Boolean  @default(true) @map("is_active")
+  allowOffline Boolean @default(true) @map("allow_offline")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -747,6 +750,10 @@ model Sale {
   voidReason       String?   @map("void_reason")
   voidedAt         DateTime? @map("voided_at")
   voidedByUserId   String?   @map("voided_by_user_id") @db.Uuid
+  occurredAt       DateTime  @default(now()) @map("occurred_at")
+  syncedAt         DateTime? @map("synced_at")
+  isOffline        Boolean   @default(false) @map("is_offline")
+  catalogVersion   String?   @map("catalog_version")
   createdAt        DateTime  @default(now()) @map("created_at")
 
   tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -760,6 +767,7 @@ model Sale {
   returns     SaleReturn[]  @relation("SaleReturns")
   exchangeReturns SaleReturn[] @relation("ExchangeSaleReturn")
   customerPaymentAllocations CustomerPaymentAllocation[]
+  reviewFlags SaleReviewFlag[]
 
   @@unique([tenantId, invoiceNumber])
   @@index([tenantId])
@@ -768,6 +776,7 @@ model Sale {
   @@index([cashierUserId])
   @@index([customerId])
   @@index([status])
+  @@index([occurredAt])
   @@index([createdAt])
   @@map("sales")
 }
@@ -1073,6 +1082,29 @@ model BarcodeCounter {
 
   @@index([tenantId])
   @@map("barcode_counters")
+}
+
+model SaleReviewFlag {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  saleId            String    @map("sale_id") @db.Uuid
+  flag              String
+  details           Json?
+  status            String    @default("open")
+  resolvedAt        DateTime? @map("resolved_at")
+  resolvedByUserId  String?   @map("resolved_by_user_id") @db.Uuid
+  resolutionNotes   String?   @map("resolution_notes")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sale             Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  resolvedByUser   User?     @relation("SaleReviewFlagResolvedBy", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([saleId])
+  @@index([status])
+  @@map("sale_review_flags")
 }
 
 

@@ -55,10 +55,17 @@ export class CustomersService {
     const normalizedPhone = normalizePhone(dto.phone);
 
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      if (dto.id) {
+        const existingById = await tx.customer.findUnique({ where: { id: dto.id } });
+        if (existingById && existingById.tenantId === tenantId) {
+          return existingById;
+        }
+      }
       await this.checkPhoneConflict(tx, tenantId, normalizedPhone);
 
       const customer = await tx.customer.create({
         data: {
+          ...(dto.id ? { id: dto.id } : {}),
           tenantId,
           name: dto.name,
           phone: normalizedPhone,

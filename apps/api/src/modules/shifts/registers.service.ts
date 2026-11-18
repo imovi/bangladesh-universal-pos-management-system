@@ -44,6 +44,7 @@ export class RegistersService {
           branchId: dto.branchId,
           name: dto.name,
           code: dto.code,
+          allowOffline: dto.allowOffline ?? true,
         },
       });
 
@@ -85,6 +86,7 @@ export class RegistersService {
           name: dto.name,
           code: dto.code,
           isActive: dto.isActive,
+          ...(dto.allowOffline !== undefined ? { allowOffline: dto.allowOffline } : {}),
         },
       });
 

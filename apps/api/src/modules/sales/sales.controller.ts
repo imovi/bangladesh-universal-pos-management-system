@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Param,
   Body,
   Query,
@@ -27,6 +28,7 @@ import {
   CreateSaleReturnSchema,
   CreateSaleExchangeSchema,
   ListReturnsQuerySchema,
+  ResolveSaleReviewFlagSchema,
 } from "@universal-pos/shared";
 
 @Controller("sales")
@@ -223,6 +225,56 @@ export class SalesController {
   @RequirePermission(PERMISSIONS.SALE_RETURN)
   async getReturnById(@Req() req: any, @Param("id") id: string) {
     return this.returnsService.findById(req.user.tenantId, id);
+  }
+
+  @Get("offline-review/count")
+  @RequirePermission(PERMISSIONS.SALE_OFFLINE_REVIEW)
+  async getOfflineReviewCount(@Req() req: any) {
+    return this.salesService.getOfflineReviewCount(req.user.tenantId);
+  }
+
+  @Get("offline-review")
+  @RequirePermission(PERMISSIONS.SALE_OFFLINE_REVIEW)
+  async listOfflineReview(
+    @Req() req: any,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+    @Query("status") status?: string,
+    @Query("flag") flag?: string,
+    @Query("branchId") branchId?: string,
+  ) {
+    return this.salesService.getOfflineReviewFlags(req.user.tenantId, {
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      status,
+      flag,
+      branchId,
+    });
+  }
+
+  @Patch("offline-review/:id/resolve")
+  @RequirePermission(PERMISSIONS.SALE_OFFLINE_REVIEW)
+  async resolveOfflineReviewFlag(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @Ip() ip: string,
+  ) {
+    const parse = ResolveSaleReviewFlagSchema.safeParse(body);
+    if (!parse.success) {
+      throw new BadRequestException({
+        code: "VALIDATION_ERROR",
+        errors: parse.error.flatten(),
+      });
+    }
+    const userId = req.user.sub || req.user.userId || req.user.id;
+    return this.salesService.resolveOfflineReviewFlag(
+      req.user.tenantId,
+      id,
+      parse.data,
+      userId,
+      ip,
+    );
   }
 
   @Get(":id")

@@ -3,6 +3,8 @@ import { SalesService } from "./sales.service.js";
 import { ReturnsService } from "./returns.service.js";
 import { ExchangesService } from "./exchanges.service.js";
 import { SalesController } from "./sales.controller.js";
+import { PosController } from "./pos.controller.js";
+import { PosCatalogService } from "./pos-catalog.service.js";
 import { AuditModule } from "../audit/audit.module.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { InventoryModule } from "../inventory/inventory.module.js";
@@ -14,16 +16,17 @@ import { SystemDbService } from "../../common/database/system-db.service.js";
 
 @Module({
   imports: [AuthModule, AuditModule, InventoryModule, ShiftsModule],
-  controllers: [SalesController],
+  controllers: [SalesController, PosController],
   providers: [
     SalesService,
     ReturnsService,
     ExchangesService,
+    PosCatalogService,
     PrismaService,
     TenantContextService,
     ConfigService,
     SystemDbService,
   ],
-  exports: [SalesService, ReturnsService, ExchangesService],
+  exports: [SalesService, ReturnsService, ExchangesService, PosCatalogService],
 })
 export class SalesModule {}

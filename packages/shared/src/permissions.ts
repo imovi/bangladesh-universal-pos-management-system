@@ -28,6 +28,7 @@ export const PERMISSIONS = {
   SALE_RETURN_OVERRIDE: "sale.return.override",
   SALE_CREDIT: "sale.credit",
   SALE_CREDIT_OVERRIDE: "sale.credit.override",
+  SALE_OFFLINE_REVIEW: "sale.offline_review",
 
   // Stock Transfers
   TRANSFER_READ: "transfer.read",
@@ -44,6 +45,7 @@ export const PERMISSIONS = {
 
   // Shifts & Registers
   REGISTER_MANAGE: "register.manage",
+  REGISTER_MANAGE_OFFLINE: "register.manage_offline",
   SHIFT_MANAGE: "shift.manage",
   SHIFT_OPEN: "shift.open",
   SHIFT_CLOSE: "shift.close",
@@ -94,6 +96,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     PERMISSIONS.SALE_RETURN,
     PERMISSIONS.SALE_RETURN_OVERRIDE,
     PERMISSIONS.SALE_CREDIT,
+    PERMISSIONS.SALE_OFFLINE_REVIEW,
     PERMISSIONS.TRANSFER_READ,
     PERMISSIONS.TRANSFER_CREATE,
     PERMISSIONS.TRANSFER_SEND,
@@ -104,6 +107,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     PERMISSIONS.INVENTORY_MANAGE,
     PERMISSIONS.STOCK_ADJUST,
     PERMISSIONS.REGISTER_MANAGE,
+    PERMISSIONS.REGISTER_MANAGE_OFFLINE,
     PERMISSIONS.SHIFT_MANAGE,
     PERMISSIONS.SHIFT_OPEN,
     PERMISSIONS.SHIFT_CLOSE,

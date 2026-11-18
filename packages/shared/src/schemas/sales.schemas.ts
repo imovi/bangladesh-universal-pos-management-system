@@ -11,6 +11,7 @@ export const SaleItemInputSchema = z.object({
   variantId: z.string().uuid(),
   quantity: z.coerce.number().positive(),
   overrideUnitPriceMinor: z.coerce.number().int().min(0).optional(),
+  unitPriceMinor: z.coerce.number().int().min(0).optional(),
   discount: LineDiscountInputSchema.optional(),
 });
 
@@ -41,6 +42,10 @@ export const CreateSaleSchema = z.object({
   payments: z.array(SalePaymentInputSchema).default([]),
   notes: z.string().trim().max(500).optional(),
   expectedTotalMinor: z.coerce.number().int().min(0),
+  isOffline: z.boolean().optional().default(false),
+  occurredAt: z.string().optional(),
+  catalogVersion: z.string().trim().max(100).optional(),
+  invoiceNumber: z.string().trim().max(100).optional(),
 });
 export type CreateSaleDto = z.infer<typeof CreateSaleSchema>;
 
@@ -48,3 +53,8 @@ export const VoidSaleSchema = z.object({
   reason: z.string().trim().min(3).max(255),
 });
 export type VoidSaleDto = z.infer<typeof VoidSaleSchema>;
+
+export const ResolveSaleReviewFlagSchema = z.object({
+  notes: z.string().trim().max(500).optional(),
+});
+export type ResolveSaleReviewFlagDto = z.infer<typeof ResolveSaleReviewFlagSchema>;

@@ -1414,5 +1414,56 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - Commit: `f8c462f`
   - GitHub Actions CI Run: [44257422845](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44257422845) — **Status: completed, Conclusion: success (Green)**
 
+---
+
+### Step 1. Design Specification
+- Written `docs/offline-mode.md` containing complete offline architecture:
+  - 10-table IndexedDB Dexie schema.
+  - Storage persistence and eviction protection.
+  - Full and delta catalog sync protocol.
+  - Unified outbox selling path.
+  - Background sync with exponential backoff & jitter.
+  - Receipt numbering scheme (`REG01-O-YYMMDD-NNNN`).
+  - Offline review flags and conflict resolution.
+  - Service worker precaching and offline navigation fallback.
+  - Offline user authentication via PBKDF2-SHA256 POS PIN.
+  - Complete Mermaid sequence diagram for full offline selling lifecycle.
+
+---
+
+### Milestone D1: Database Schema & API for Offline Selling
+- **Scope & What Was Built:**
+  1. **Prisma Schema & Database Migrations:**
+     - Migration `20261118120000_milestone_d1_offline_selling`:
+       - `Register`: Added `allowOffline Boolean @default(false)`.
+       - `Sale`: Added `occurredAt DateTime @default(now())`, `syncedAt DateTime?`, `isOffline Boolean @default(false)`, `catalogVersion Int?`. Created index `sales_occurred_at_idx`.
+       - `SaleReviewFlag`: Created table `sale_review_flags` with RLS enabled and isolation policy for `pos_app`. Added relation to `Sale`.
+       - Enforced append-only immutability on sales and financial tables.
+  2. **Shared Schemas & Permissions (`@universal-pos/shared`):**
+     - Permissions: Added `SALE_OFFLINE_REVIEW` and `REGISTER_MANAGE_OFFLINE`. Assigned to Manager and Owner roles.
+     - Schemas: Updated `CreateRegisterSchema`, `UpdateRegisterSchema`, `CloseShiftSchema` (with `hasFailedItems` and `overrideReason`), `CreateCustomerSchema` (allowing client-supplied UUID), `UpdateUserSchema` (numeric 4-6 digit `pin`), `CreateSaleSchema` (allowing `invoiceNumber`, `isOffline`, `occurredAt`, `catalogVersion`), `SaleItemInputSchema` (allowing client `unitPriceMinor`).
+  3. **Backend API Endpoints (`apps/api`):**
+     - `GET /pos/catalog`: Returns products, variants (with barcodes, option values, stockQty), categories, taxClasses, `catalogVersion`, `serverTime`, and cursor. Supports `since` delta queries.
+     - `POST /pos/sync`: Batch processing endpoint accepting up to 50 items (sales, customers) with per-item isolation. Returns `results` array with statuses and error codes.
+     - `GET /sales/offline-review`: List sales with review flags, supporting filtering by `resolved` status and `flagType`.
+     - `GET /sales/offline-review/count`: Returns `{ count }` of unresolved offline review flags.
+     - `PATCH /sales/offline-review/:id/resolve`: Resolves review flag with audit logging.
+     - `PATCH /users/me/pin` & `PATCH /users/:id/pin`: Sets hashed POS PIN.
+  4. **Sales & Shift Engine Rules for Offline Sales:**
+     - Client offline invoice number validation: format `^${register.code}-O-\\d{6}-\\d{4}$`. Uniqueness check with HTTP 409 `OFFLINE_NUMBER_TAKEN`.
+     - Shift boundaries clamping: `occurredAt` is clamped between `shift.openedAt` and `shift.closedAt`.
+     - Closed shift acceptance: accepts offline sales into closed shifts without mutating counted cash figures.
+     - Price snapshotting & review flag generation: checks for `PRICE_CHANGED`, `PRICE_UNKNOWN`, `DISCOUNT_OVER_LIMIT`, `NEGATIVE_STOCK`, `PERMISSION_CHANGED`, `SHIFT_CLOSED`.
+     - Negative inventory movements override when `isOffline: true`.
+     - Shift close guard: blocks cashiers if `hasFailedItems: true` without manager override (HTTP 403 `MANAGER_OVERRIDE_REQUIRED`); managers can override with reason and audit log.
+     - Sales summary reports: grouped by `occurredAt` instead of `createdAt`.
+  5. **Verification Suite (`apps/api/test/offline-sales-engine.spec.ts`):**
+     - 24 integration tests covering catalog delta sync, 5,000 variant benchmark, sequential & parallel idempotency, all 6 review flags, math mismatch rejection (422), duplicate offline number (409), wrong register code (422), cross-tenant isolation (404), midnight date attribution, shift close manager override, review flag resolution, batch sync, and user PIN management.
+  - **Verification:**
+    - `npm run lint`: 0 errors, 0 warnings across all workspaces.
+    - `npm run build`: Clean compilation across `@universal-pos/shared`, `@universal-pos/admin`, and `@universal-pos/api`.
+    - `npm test`: 50 test files passed (304 tests) in api, 7 test files passed (33 tests) in admin. All passed (100%).
+
+
 
 

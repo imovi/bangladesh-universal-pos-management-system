@@ -68,6 +68,24 @@ export class UsersController {
     return this.usersService.create(user.tenantId, body, user.sub);
   }
 
+  @Patch("me/pin")
+  async setMyPin(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { pin: string },
+  ) {
+    return this.usersService.setPin(user.tenantId, user.sub, body.pin);
+  }
+
+  @Patch(":id/pin")
+  @RequirePermission(PERMISSIONS.USER_MANAGE)
+  async setUserPin(
+    @CurrentUser() user: JwtPayload,
+    @Param("id") id: string,
+    @Body() body: { pin: string },
+  ) {
+    return this.usersService.setPin(user.tenantId, id, body.pin);
+  }
+
   @Patch(":id")
   @RequirePermission(PERMISSIONS.USER_MANAGE)
   async updateUser(

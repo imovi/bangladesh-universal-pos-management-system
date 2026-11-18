@@ -80,8 +80,10 @@ function checkLineDiscountLimits(
   lineInputs: any[],
   userMaxDiscountBp: number,
   canOverrideDiscount: boolean,
-): boolean {
+  isOffline = false,
+): { overrideUsed: boolean; overLimit?: { limitBp: number; attemptedBp: number } } {
   let overrideUsed = false;
+  let overLimit: { limitBp: number; attemptedBp: number } | undefined;
   for (const l of lineInputs) {
     if (!l.discount) continue;
     const qtyThousandths = parseQuantityThousandths(l.quantity);
@@ -93,17 +95,21 @@ function checkLineDiscountLimits(
     const lineEffectiveBp = computeEffectiveBp(l.discount, lineGross);
     if (lineEffectiveBp > userMaxDiscountBp) {
       if (!canOverrideDiscount) {
-        throw new ForbiddenException({
-          code: "LINE_DISCOUNT_LIMIT_EXCEEDED",
-          message: `Line discount of ${lineEffectiveBp} bp exceeds role limit of ${userMaxDiscountBp} bp`,
-          limitBp: userMaxDiscountBp,
-          attemptedBp: lineEffectiveBp,
-        });
+        if (isOffline) {
+          overLimit = { limitBp: userMaxDiscountBp, attemptedBp: lineEffectiveBp };
+        } else {
+          throw new ForbiddenException({
+            code: "LINE_DISCOUNT_LIMIT_EXCEEDED",
+            message: `Line discount of ${lineEffectiveBp} bp exceeds role limit of ${userMaxDiscountBp} bp`,
+            limitBp: userMaxDiscountBp,
+            attemptedBp: lineEffectiveBp,
+          });
+        }
       }
       overrideUsed = true;
     }
   }
-  return overrideUsed;
+  return { overrideUsed, overLimit };
 }
 
 function checkTotalDiscountLimits(
@@ -112,7 +118,8 @@ function checkTotalDiscountLimits(
   userMaxDiscountBp: number,
   canOverrideDiscount: boolean,
   totals?: { grossMinor: bigint; totalDiscountMinor: bigint },
-): boolean {
+  isOffline = false,
+): { overrideUsed: boolean; overLimit?: { limitBp: number; attemptedBp: number } } {
   if (totals && totals.grossMinor > 0n) {
     const totalEffectiveBp = Number(
       (totals.totalDiscountMinor * 10000n + totals.grossMinor - 1n) /
@@ -120,6 +127,9 @@ function checkTotalDiscountLimits(
     );
     if (totalEffectiveBp > userMaxDiscountBp) {
       if (!canOverrideDiscount) {
+        if (isOffline) {
+          return { overrideUsed: true, overLimit: { limitBp: userMaxDiscountBp, attemptedBp: totalEffectiveBp } };
+        }
         throw new ForbiddenException({
           code: "DISCOUNT_LIMIT_EXCEEDED",
           message: `Effective discount of ${totalEffectiveBp} bp exceeds role limit of ${userMaxDiscountBp} bp`,
@@ -127,9 +137,9 @@ function checkTotalDiscountLimits(
           attemptedBp: totalEffectiveBp,
         });
       }
-      return true;
+      return { overrideUsed: true };
     }
-    return false;
+    return { overrideUsed: false };
   }
 
   if (dto.billDiscount) {
@@ -144,6 +154,9 @@ function checkTotalDiscountLimits(
     const effectiveBp = computeEffectiveBp(dto.billDiscount, grossSum);
     if (effectiveBp > userMaxDiscountBp) {
       if (!canOverrideDiscount) {
+        if (isOffline) {
+          return { overrideUsed: true, overLimit: { limitBp: userMaxDiscountBp, attemptedBp: effectiveBp } };
+        }
         throw new ForbiddenException({
           code: "DISCOUNT_LIMIT_EXCEEDED",
           message: `Bill discount of ${effectiveBp} bp exceeds role limit of ${userMaxDiscountBp} bp`,
@@ -151,41 +164,41 @@ function checkTotalDiscountLimits(
           attemptedBp: effectiveBp,
         });
       }
-      return true;
+      return { overrideUsed: true };
     }
   }
-  return false;
+  return { overrideUsed: false };
 }
 
-/**
- * Note on price overrides vs discounts:
- * A price override is NOT a discount for this check (it has its own permission `sale.price_override`).
- * The gross amount for discount calculations is based on the unit price actually charged
- * (i.e. overrideUnitPriceMinor when present, else unitPriceMinor).
- */
 export function validateUserDiscountLimits(
   dto: CreateSaleDto,
   lineInputs: any[],
   userMaxDiscountBp: number | null,
   canOverrideDiscount: boolean,
   totals?: { grossMinor: bigint; totalDiscountMinor: bigint },
-): boolean {
-  if (userMaxDiscountBp === null) return false;
+  isOffline = false,
+): { discountOverrideUsed: boolean; discountOverLimit?: { limitBp: number; attemptedBp: number } } {
+  if (userMaxDiscountBp === null) return { discountOverrideUsed: false };
 
-  const lineOverrideUsed = checkLineDiscountLimits(
+  const lineResult = checkLineDiscountLimits(
     lineInputs,
     userMaxDiscountBp,
     canOverrideDiscount,
+    isOffline,
   );
-  const totalOverrideUsed = checkTotalDiscountLimits(
+  const totalResult = checkTotalDiscountLimits(
     dto,
     lineInputs,
     userMaxDiscountBp,
     canOverrideDiscount,
     totals,
+    isOffline,
   );
 
-  return lineOverrideUsed || totalOverrideUsed;
+  return {
+    discountOverrideUsed: lineResult.overrideUsed || totalResult.overrideUsed,
+    discountOverLimit: lineResult.overLimit || totalResult.overLimit,
+  };
 }
 
 export async function enforceDiscountAndOverrideLimits(
@@ -196,6 +209,7 @@ export async function enforceDiscountAndOverrideLimits(
   lineInputs: any[],
   user?: { isOwner?: boolean; permissions?: string[] },
   totals?: { grossMinor: bigint; totalDiscountMinor: bigint },
+  isOffline = false,
 ) {
   const userMaxDiscountBp = await resolveUserMaxDiscountBp(
     tx,
@@ -208,15 +222,16 @@ export async function enforceDiscountAndOverrideLimits(
       user?.permissions?.includes("sale.discount_override") ||
       user?.permissions?.includes("*"),
   );
-  const discountOverrideUsed = validateUserDiscountLimits(
+  const { discountOverrideUsed, discountOverLimit } = validateUserDiscountLimits(
     dto,
     lineInputs,
     userMaxDiscountBp,
     canOverrideDiscount,
     totals,
+    isOffline,
   );
   const priceOverrideUsed = dto.items.some(
     (it) => it.overrideUnitPriceMinor !== undefined,
   );
-  return { discountOverrideUsed, priceOverrideUsed };
+  return { discountOverrideUsed, priceOverrideUsed, discountOverLimit };
 }

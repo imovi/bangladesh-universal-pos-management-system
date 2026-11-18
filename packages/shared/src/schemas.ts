@@ -102,6 +102,7 @@ export const UpdateUserSchema = z.object({
   name: z.string().trim().min(2).max(100).optional(),
   phone: z.string().trim().min(10).max(20).optional(),
   isActive: z.boolean().optional(),
+  pin: z.string().regex(/^\d{4,6}$/, "PIN must be 4 to 6 digits").optional(),
   roleIds: z.array(z.string().uuid()).optional(),
   branchIds: z.array(z.string().uuid()).optional(),
 });
@@ -370,6 +371,7 @@ export type CreateSupplierPaymentDto = z.infer<typeof CreateSupplierPaymentSchem
 // --- M5 Customers, Registers & Shifts Schemas ---
 
 export const CreateCustomerSchema = z.object({
+  id: z.string().uuid().optional(),
   name: z.string().trim().min(1).max(150),
   phone: z.string().trim().min(6).max(30),
   email: z.string().email().optional().or(z.literal("")),
@@ -404,6 +406,7 @@ export const CreateRegisterSchema = z.object({
   branchId: z.string().uuid(),
   name: z.string().trim().min(1).max(100),
   code: z.string().trim().min(1).max(50),
+  allowOffline: z.boolean().optional().default(true),
 });
 export type CreateRegisterDto = z.infer<typeof CreateRegisterSchema>;
 
@@ -411,6 +414,7 @@ export const UpdateRegisterSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
   code: z.string().trim().min(1).max(50).optional(),
   isActive: z.boolean().optional(),
+  allowOffline: z.boolean().optional(),
 });
 export type UpdateRegisterDto = z.infer<typeof UpdateRegisterSchema>;
 
@@ -425,6 +429,8 @@ export type OpenShiftDto = z.infer<typeof OpenShiftSchema>;
 export const CloseShiftSchema = z.object({
   closingCashMinor: z.coerce.number().int().min(0),
   notes: z.string().trim().max(500).optional(),
+  hasFailedItems: z.boolean().optional(),
+  overrideReason: z.string().trim().max(500).optional(),
 });
 export type CloseShiftDto = z.infer<typeof CloseShiftSchema>;
 

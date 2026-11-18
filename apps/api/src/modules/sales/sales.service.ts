@@ -69,6 +69,8 @@ export class SalesService {
     variantMap: Map<string, any>,
     defaultTaxRateBp: number,
     user?: { isOwner?: boolean; permissions?: string[] },
+    isOffline = false,
+    catalogVersion?: string,
   ) {
     const canOverride = Boolean(
       user?.isOwner ||
@@ -77,32 +79,68 @@ export class SalesService {
     );
 
     const originalPrices: (bigint | null)[] = [];
+    const priceFlags: Array<{ flag: string; details?: any }> = [];
 
     const lineInputs = items.map((it) => {
       const v = variantMap.get(it.variantId);
       if (!v || !v.isActive || !v.product || !v.product.isActive) {
-        throw new UnprocessableEntityException({
-          code: "INACTIVE_PRODUCT_OR_VARIANT",
-          message: `Variant ${it.variantId} or its product is inactive or not found`,
-        });
+        if (!isOffline) {
+          throw new UnprocessableEntityException({
+            code: "INACTIVE_PRODUCT_OR_VARIANT",
+            message: `Variant ${it.variantId} or its product is inactive or not found`,
+          });
+        }
       }
 
-      let unitPriceMinor = v.priceMinor;
-      if (it.overrideUnitPriceMinor !== undefined) {
-        if (!canOverride) {
+      const catalogPrice = v ? v.priceMinor : 0n;
+      let unitPriceMinor = catalogPrice;
+      let priceDiffered = false;
+
+      if (it.unitPriceMinor !== undefined) {
+        if (BigInt(it.unitPriceMinor) !== catalogPrice) {
+          priceDiffered = true;
+          unitPriceMinor = BigInt(it.unitPriceMinor);
+        }
+        originalPrices.push(catalogPrice);
+      } else if (it.overrideUnitPriceMinor !== undefined) {
+        if (!canOverride && !isOffline) {
           throw new ForbiddenException("Price override requires sale.price_override permission");
         }
-        originalPrices.push(v.priceMinor);
+        originalPrices.push(catalogPrice);
         unitPriceMinor = BigInt(it.overrideUnitPriceMinor);
+        priceDiffered = true;
       } else {
         originalPrices.push(null);
       }
 
-      const taxRateBp = v.product.taxClass ? v.product.taxClass.rateBp : defaultTaxRateBp;
+      if (priceDiffered && isOffline) {
+        if (catalogVersion) {
+          priceFlags.push({
+            flag: "PRICE_CHANGED",
+            details: {
+              variantId: it.variantId,
+              catalogPriceMinor: Number(catalogPrice),
+              soldPriceMinor: Number(unitPriceMinor),
+              catalogVersion,
+            },
+          });
+        } else {
+          priceFlags.push({
+            flag: "PRICE_UNKNOWN",
+            details: {
+              variantId: it.variantId,
+              catalogPriceMinor: Number(catalogPrice),
+              soldPriceMinor: Number(unitPriceMinor),
+            },
+          });
+        }
+      }
+
+      const taxRateBp = v?.product?.taxClass ? v.product.taxClass.rateBp : defaultTaxRateBp;
       return { variantId: it.variantId, unitPriceMinor, quantity: it.quantity, discount: it.discount, taxRateBp };
     });
 
-    return { lineInputs, originalPrices };
+    return { lineInputs, originalPrices, priceFlags };
   }
 
   private computeAndValidateTotals(
@@ -115,8 +153,8 @@ export class SalesService {
 
     if (BigInt(dto.expectedTotalMinor) !== calculated.totalMinor) {
       throw new UnprocessableEntityException({
-        code: "CALCULATION_MISMATCH",
-        message: "Calculation mismatch: client total differs from server recomputation",
+        code: dto.isOffline ? "TOTALS_MISMATCH" : "CALCULATION_MISMATCH",
+        message: "Totals mismatch: client total differs from server recomputation",
         details: [{
           field: "expectedTotalMinor",
           issue: `Expected total ${dto.expectedTotalMinor} does not match computed total ${calculated.totalMinor}`,
@@ -179,7 +217,11 @@ export class SalesService {
 
   private async executeSaleInsert(
     tx: Prisma.TransactionClient, tenantId: string, dto: CreateSaleDto,
-    meta: { saleId: string; inv: string; calc: any; paid: bigint; change: bigint; due: bigint; userId: string; costMap: Map<string, bigint>; originalPrices: (bigint | null)[]; payloadHash: string },
+    meta: {
+      saleId: string; inv: string; calc: any; paid: bigint; change: bigint; due: bigint;
+      userId: string; costMap: Map<string, bigint>; originalPrices: (bigint | null)[]; payloadHash: string;
+      occurredAt: Date; syncedAt: Date | null; isOffline: boolean; catalogVersion: string | null;
+    },
   ) {
     return tx.sale.create({
       data: {
@@ -188,6 +230,7 @@ export class SalesService {
         status: "completed", subtotalMinor: meta.calc.grossMinor, discountMinor: meta.calc.totalDiscountMinor,
         taxMinor: meta.calc.taxMinor, totalMinor: meta.calc.totalMinor, paidMinor: meta.paid,
         changeMinor: meta.change, dueMinor: meta.due, notes: dto.notes, requestPayloadHash: meta.payloadHash,
+        occurredAt: meta.occurredAt, syncedAt: meta.syncedAt, isOffline: meta.isOffline, catalogVersion: meta.catalogVersion,
         items: { create: this.buildSaleItemsData(tenantId, meta.calc.lines, meta.costMap, meta.originalPrices) },
         payments: {
           create: dto.payments.map((p) => ({ id: uuidv7(), tenantId, paymentMethod: p.paymentMethod, amountMinor: BigInt(p.amountMinor), reference: p.reference })),
@@ -199,9 +242,23 @@ export class SalesService {
 
   private async loadShiftAndVariants(tx: Prisma.TransactionClient, tenantId: string, dto: CreateSaleDto) {
     const shift = await tx.shift.findUnique({ where: { id: dto.shiftId }, include: { register: true } });
-    if (!shift || shift.tenantId !== tenantId || shift.status !== "open") {
-      throw new BadRequestException("Active open shift required for sale");
+    if (!shift || shift.tenantId !== tenantId) {
+      throw new NotFoundException("Shift not found");
     }
+
+    let isShiftClosed = false;
+    if (shift.status !== "open") {
+      if (dto.isOffline && shift.status === "closed") {
+        isShiftClosed = true;
+      } else {
+        throw new BadRequestException("Active open shift required for sale");
+      }
+    }
+
+    if (dto.isOffline && !shift.register.allowOffline) {
+      throw new BadRequestException("Offline selling is not allowed on this register");
+    }
+
     if (shift.register.branchId !== dto.branchId) {
       throw new UnprocessableEntityException({
         code: "BRANCH_SHIFT_MISMATCH",
@@ -213,21 +270,25 @@ export class SalesService {
       where: { id: { in: dto.items.map((i) => i.variantId) }, tenantId },
       include: { product: { include: { taxClass: true } } },
     });
-    return { shift, defaultTaxRateBp: defaultTax?.rateBp ?? 0, variants };
+    return { shift, defaultTaxRateBp: defaultTax?.rateBp ?? 0, variants, isShiftClosed };
   }
 
   private async finalizeSaleOperations(
     tx: Prisma.TransactionClient,
     tenantId: string,
-    meta: { saleId: string; inv: string; calc: any; branchId: string; customerId?: string; userId: string; ip?: string; costMap: Map<string, bigint> },
+    meta: {
+      saleId: string; inv: string; calc: any; branchId: string; customerId?: string;
+      userId: string; ip?: string; costMap: Map<string, bigint>; isOffline?: boolean;
+    },
   ) {
-    await this.inventoryService.applyMovements(
+    const { negativeStockItems } = await this.inventoryService.applyMovements(
       tenantId, tx,
       meta.calc.lines.map((l: any) => ({
         branchId: meta.branchId, variantId: l.variantId, qtyDelta: -Number(l.quantity),
         unitCostMinor: meta.costMap.get(l.variantId) ?? 0n,
         type: "sale", refType: "sale", refId: meta.saleId, reason: `Sale ${meta.inv}`, actorUserId: meta.userId,
       })),
+      { allowNegativeOverride: Boolean(meta.isOffline) },
     );
     await this.updateCustomerMetrics(tx, meta.customerId, meta.calc.totalMinor, false);
     await this.auditService.log(
@@ -237,6 +298,7 @@ export class SalesService {
       },
       tx,
     );
+    return { negativeStockItems };
   }
 
   private async getTenantSettings(tenantId: string) {
@@ -283,14 +345,47 @@ export class SalesService {
         const duplicate = await this.checkIdempotency(tx, dto.id, tenantId, dto, payloadHash);
         if (duplicate) return duplicate;
 
-        const { shift, defaultTaxRateBp, variants } = await this.loadShiftAndVariants(tx, tenantId, dto);
+        const { shift, defaultTaxRateBp, variants, isShiftClosed } = await this.loadShiftAndVariants(tx, tenantId, dto);
         const variantMap = new Map(variants.map((v) => [v.id, v]));
-        const { lineInputs, originalPrices } = this.resolveItemPricingAndTaxes(dto.items, variantMap, defaultTaxRateBp, user);
+        const { lineInputs, originalPrices, priceFlags } = this.resolveItemPricingAndTaxes(
+          dto.items,
+          variantMap,
+          defaultTaxRateBp,
+          user,
+          dto.isOffline,
+          dto.catalogVersion,
+        );
         const { calculated, paidMinor, changeMinor, dueMinor } = this.computeAndValidateTotals(dto, lineInputs, pricesIncludeTax);
+
+        const reviewFlags: Array<{ flag: string; details?: any }> = [...priceFlags];
+
+        if (isShiftClosed) {
+          reviewFlags.push({ flag: "SHIFT_CLOSED", details: { shiftId: shift.id, closedAt: shift.closedAt } });
+        }
+
+        if (dto.isOffline) {
+          const cashier = await tx.user.findUnique({
+            where: { id: userId },
+            include: { userRoles: { include: { role: { include: { rolePermissions: true } } } } },
+          });
+          if (!cashier || !cashier.isActive) {
+            reviewFlags.push({ flag: "PERMISSION_CHANGED", details: { reason: "Cashier user deactivated or deleted", cashierUserId: userId } });
+          } else {
+            const hasSaleCreate = cashier.userRoles.some((ur) =>
+              ur.role.rolePermissions.some((rp) => rp.permissionKey === "sale.create" || rp.permissionKey === "*")
+            );
+            if (!hasSaleCreate) {
+              reviewFlags.push({ flag: "PERMISSION_CHANGED", details: { reason: "Cashier user lost sale.create permission", cashierUserId: userId } });
+            }
+          }
+        }
 
         if (dueMinor > 0n) {
           if (!dto.customerId) {
             throw new BadRequestException("Customer is required for credit / due sales");
+          }
+          if (dto.isOffline) {
+            throw new BadRequestException("Credit sales are not supported offline");
           }
           const canSellCredit = Boolean(
             user?.isOwner ||
@@ -323,20 +418,93 @@ export class SalesService {
         const ov = await enforceDiscountAndOverrideLimits(
           tx, userId, tenantId, dto, lineInputs, user,
           { grossMinor: calculated.grossMinor, totalDiscountMinor: calculated.totalDiscountMinor },
+          Boolean(dto.isOffline),
         );
 
+        if (ov.discountOverLimit) {
+          reviewFlags.push({
+            flag: "DISCOUNT_OVER_LIMIT",
+            details: {
+              limitPercent: ov.discountOverLimit.limitBp / 100,
+              attemptedPercent: ov.discountOverLimit.attemptedBp / 100,
+              limitBp: ov.discountOverLimit.limitBp,
+              attemptedBp: ov.discountOverLimit.attemptedBp,
+            },
+          });
+        }
+
+        let inv: string;
+        if (dto.isOffline) {
+          if (!dto.invoiceNumber) {
+            throw new BadRequestException("Offline invoice number is required for offline sales");
+          }
+          const regCode = shift.register.code;
+          const offlinePattern = new RegExp(`^${regCode}-O-\\d{6}-\\d{4}$`);
+          if (!offlinePattern.test(dto.invoiceNumber)) {
+            throw new UnprocessableEntityException({
+              code: "INVALID_OFFLINE_INVOICE_NUMBER",
+              message: `Offline invoice number '${dto.invoiceNumber}' does not match register ${regCode} or format ${regCode}-O-YYMMDD-NNNN`,
+            });
+          }
+          const existingInv = await tx.sale.findUnique({
+            where: { tenantId_invoiceNumber: { tenantId, invoiceNumber: dto.invoiceNumber } },
+          });
+          if (existingInv && existingInv.id !== dto.id) {
+            throw new ConflictException({
+              code: "OFFLINE_NUMBER_TAKEN",
+              message: `Invoice number ${dto.invoiceNumber} is already taken`,
+            });
+          }
+          inv = dto.invoiceNumber;
+        } else {
+          inv = await this.generateInvoiceNumber(tenantId, shift.registerId, tx, timeZone);
+        }
+
+        let occurredAt = dto.isOffline && dto.occurredAt ? new Date(dto.occurredAt) : new Date();
+        if (dto.isOffline) {
+          if (occurredAt < shift.openedAt) occurredAt = shift.openedAt;
+          if (shift.closedAt && occurredAt > shift.closedAt) occurredAt = shift.closedAt;
+        }
+        const syncedAt = dto.isOffline ? new Date() : null;
+        const isOffline = Boolean(dto.isOffline);
+        const catalogVersion = dto.catalogVersion || null;
+
         const saleId = dto.id;
-        const inv = await this.generateInvoiceNumber(tenantId, shift.registerId, tx, timeZone);
         const costMap = new Map(variants.map((v) => [v.id, v.costMinor]));
 
         const sale = await this.executeSaleInsert(tx, tenantId, dto, {
           saleId, inv, calc: calculated, paid: paidMinor, change: changeMinor, due: dueMinor,
-          userId, costMap, originalPrices, payloadHash,
+          userId, costMap, originalPrices, payloadHash, occurredAt, syncedAt, isOffline, catalogVersion,
         });
 
-        await this.finalizeSaleOperations(tx, tenantId, {
-          saleId, inv, calc: calculated, branchId: dto.branchId, customerId: dto.customerId, userId, ip, costMap,
+        const { negativeStockItems } = await this.finalizeSaleOperations(tx, tenantId, {
+          saleId, inv, calc: calculated, branchId: dto.branchId, customerId: dto.customerId, userId, ip, costMap, isOffline,
         });
+
+        if (negativeStockItems && negativeStockItems.length > 0) {
+          for (const neg of negativeStockItems) {
+            reviewFlags.push({
+              flag: "NEGATIVE_STOCK",
+              details: { variantId: neg.variantId, branchId: neg.branchId, remainingQty: neg.newQty },
+            });
+          }
+        }
+
+        if (reviewFlags.length > 0) {
+          for (const rf of reviewFlags) {
+            await tx.saleReviewFlag.create({
+              data: {
+                id: uuidv7(),
+                tenantId,
+                saleId,
+                flag: rf.flag,
+                details: rf.details ? rf.details : Prisma.JsonNull,
+                status: "open",
+              },
+            });
+          }
+        }
+
         await this.handleOverrideAudit(tx, tenantId, userId, saleId, inv, ov, ip);
         return sale;
       });
@@ -461,19 +629,19 @@ export class SalesService {
         where.invoiceNumber = { contains: query.search, mode: "insensitive" };
       }
       if (query.startDate || query.endDate) {
-        where.createdAt = {};
-        if (query.startDate) where.createdAt.gte = new Date(query.startDate);
-        if (query.endDate) where.createdAt.lte = new Date(query.endDate);
+        where.occurredAt = {};
+        if (query.startDate) where.occurredAt.gte = new Date(query.startDate);
+        if (query.endDate) where.occurredAt.lte = new Date(query.endDate);
       }
 
       const page = Math.max(1, query.page || 1);
       const limit = Math.min(100, Math.max(1, query.limit || 50));
       const skip = (page - 1) * limit;
 
-      const allowedSortFields = ["createdAt", "invoiceNumber", "totalMinor"];
+      const allowedSortFields = ["occurredAt", "createdAt", "invoiceNumber", "totalMinor"];
       const sortBy = allowedSortFields.includes(query.sortBy || "")
         ? (query.sortBy as string)
-        : "createdAt";
+        : "occurredAt";
       const sortOrder: Prisma.SortOrder = query.sortOrder === "asc" ? "asc" : "desc";
 
       const [total, items] = await Promise.all([
@@ -491,6 +659,122 @@ export class SalesService {
         }),
       ]);
       return { items, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    });
+  }
+
+  async getOfflineReviewFlags(
+    tenantId: string,
+    query: {
+      page?: number;
+      limit?: number;
+      status?: string;
+      flag?: string;
+      branchId?: string;
+    } = {},
+  ) {
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const where: Prisma.SaleReviewFlagWhereInput = { tenantId };
+      if (query.status && query.status !== "all") {
+        where.status = query.status;
+      }
+      if (query.flag) {
+        where.flag = query.flag;
+      }
+      if (query.branchId) {
+        where.sale = { branchId: query.branchId };
+      }
+
+      const [total, flags] = await Promise.all([
+        tx.saleReviewFlag.count({ where }),
+        tx.saleReviewFlag.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { createdAt: "desc" },
+          include: {
+            sale: {
+              include: {
+                cashierUser: { select: { id: true, name: true, email: true } },
+                branch: { select: { id: true, name: true, code: true } },
+                items: {
+                  include: {
+                    variant: { include: { product: true } },
+                  },
+                },
+              },
+            },
+            resolvedByUser: { select: { id: true, name: true, email: true } },
+          },
+        }),
+      ]);
+
+      return {
+        data: flags,
+        meta: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    });
+  }
+
+  async resolveOfflineReviewFlag(
+    tenantId: string,
+    flagId: string,
+    dto: { notes?: string },
+    userId: string,
+    ip?: string,
+  ) {
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const flag = await tx.saleReviewFlag.findUnique({
+        where: { id: flagId },
+      });
+      if (!flag || flag.tenantId !== tenantId) {
+        throw new NotFoundException("Review flag not found");
+      }
+      if (flag.status === "resolved") {
+        return flag;
+      }
+
+      const updated = await tx.saleReviewFlag.update({
+        where: { id: flagId },
+        data: {
+          status: "resolved",
+          resolvedAt: new Date(),
+          resolvedByUserId: userId,
+          resolutionNotes: dto.notes || null,
+        },
+      });
+
+      await this.auditService.log(
+        {
+          tenantId,
+          actorUserId: userId,
+          action: "sale.offline_review_resolve",
+          entityType: "sale_review_flag",
+          entityId: flagId,
+          after: { status: "resolved", notes: dto.notes },
+          ip,
+        },
+        tx,
+      );
+
+      return updated;
+    });
+  }
+
+  async getOfflineReviewCount(tenantId: string) {
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const count = await tx.saleReviewFlag.count({
+        where: { tenantId, status: "open" },
+      });
+      return { count };
     });
   }
 }

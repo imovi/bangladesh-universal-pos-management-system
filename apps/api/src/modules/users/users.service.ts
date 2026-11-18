@@ -2,6 +2,7 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
+  BadRequestException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { TenantContextService } from "../../common/database/tenant-context.service.js";
@@ -232,12 +233,14 @@ export class UsersService {
         throw new NotFoundException("User not found");
       }
 
+      const pinHash = dto.pin ? await argon2.hash(dto.pin) : undefined;
       const updated = await tx.user.update({
         where: { id, tenantId },
         data: {
           ...(dto.name ? { name: dto.name } : {}),
           ...(dto.phone !== undefined ? { phone: dto.phone } : {}),
           ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+          ...(pinHash ? { pinHash } : {}),
         },
       });
 
@@ -294,6 +297,22 @@ export class UsersService {
           userBranches: { include: { branch: true } },
         },
       });
+    });
+  }
+
+  async setPin(tenantId: string, userId: string, pin: string) {
+    if (!pin || !/^\d{4,6}$/.test(pin)) {
+      throw new BadRequestException("PIN must be 4 to 6 digits");
+    }
+    const pinHash = await argon2.hash(pin);
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const user = await tx.user.findFirst({ where: { id: userId, tenantId } });
+      if (!user) throw new NotFoundException("User not found");
+      await tx.user.update({
+        where: { id: userId, tenantId },
+        data: { pinHash },
+      });
+      return { success: true };
     });
   }
 }

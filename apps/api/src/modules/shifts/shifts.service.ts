@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { v7 as uuidv7 } from "uuid";
@@ -116,7 +117,43 @@ export class ShiftsService {
     dto: CloseShiftDto,
     userId?: string,
     ip?: string,
+    user?: { isOwner?: boolean; permissions?: string[] },
   ) {
+    if (dto.hasFailedItems) {
+      if (!dto.overrideReason || dto.overrideReason.trim().length < 3) {
+        throw new BadRequestException({
+          code: "FAILED_SYNC_ITEMS_EXIST",
+          message: "Cannot close shift while unsynced/failed items exist without a manager override reason",
+        });
+      }
+      const canOverride = Boolean(
+        user?.isOwner ||
+          user?.permissions?.includes("sale.offline_review") ||
+          user?.permissions?.includes("*"),
+      );
+      if (!canOverride) {
+        throw new ForbiddenException({
+          code: "MANAGER_OVERRIDE_REQUIRED",
+          message: "Manager or Owner permission required to close shift with failed items",
+        });
+      }
+      await this.auditService.log(
+        {
+          tenantId,
+          actorUserId: userId,
+          action: "shift.close_override_failed_items",
+          entityType: "shift",
+          entityId: shift.id,
+          after: {
+            reason: dto.overrideReason,
+            registerId: shift.registerId,
+          },
+          ip,
+        },
+        tx,
+      );
+    }
+
     const calc = calculateShiftCashTotals({
       openingCashMinor: shift.openingCashMinor,
       cashMovements: shift.cashMovements,
@@ -178,6 +215,7 @@ export class ShiftsService {
     dto: CloseShiftDto,
     userId?: string,
     ip?: string,
+    user?: { isOwner?: boolean; permissions?: string[] },
   ) {
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const shift = await tx.shift.findUnique({
@@ -199,7 +237,7 @@ export class ShiftsService {
         throw new BadRequestException("Shift is already closed");
       }
 
-      return this.executeShiftClose(tx, tenantId, shift, dto, userId, ip);
+      return this.executeShiftClose(tx, tenantId, shift, dto, userId, ip, user);
     });
   }
 

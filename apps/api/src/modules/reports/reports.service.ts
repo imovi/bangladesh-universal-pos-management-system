@@ -55,9 +55,9 @@ export class ReportsService {
     if (filter.branchId) where.branchId = filter.branchId;
     if (filter.startDate || filter.endDate) {
       const { gte, lte } = parseDateFilterRange(filter.startDate, filter.endDate, timeZone);
-      where.createdAt = {};
-      if (gte) where.createdAt.gte = gte;
-      if (lte) where.createdAt.lte = lte;
+      where.occurredAt = {};
+      if (gte) where.occurredAt.gte = gte;
+      if (lte) where.occurredAt.lte = lte;
     }
     return where;
   }
@@ -394,7 +394,7 @@ export class ReportsService {
       });
 
       const transactions = [
-        ...shift.sales.map((s) => ({ type: "sale", id: s.id, inv: s.invoiceNumber, totalMinor: Number(s.totalMinor), at: s.createdAt })),
+        ...shift.sales.map((s) => ({ type: "sale", id: s.id, inv: s.invoiceNumber, totalMinor: Number(s.totalMinor), at: (s.occurredAt || s.createdAt).toISOString() })),
         ...shift.returns.map((r) => ({ type: "return", id: r.id, inv: r.returnNumber, totalMinor: -Number(r.totalRefundMinor), at: r.createdAt })),
         ...(shift.customerPayments || []).map((cp: any) => ({ type: "payment", id: cp.id, inv: cp.paymentNumber, totalMinor: Number(cp.amountMinor), at: cp.createdAt })),
         ...shift.cashMovements.map((m) => ({ type: m.type, id: m.id, amountMinor: Number(m.amountMinor), reason: m.reason, at: m.createdAt })),
@@ -444,7 +444,7 @@ export class ReportsService {
           customer: true,
           branch: { select: { id: true, name: true, code: true } },
         },
-        orderBy: { createdAt: "asc" },
+        orderBy: { occurredAt: "asc" },
       });
 
       const now = new Date();
@@ -460,7 +460,8 @@ export class ReportsService {
         const due = BigInt(s.dueMinor);
         totalDueMinor += due;
 
-        const ageDays = Math.floor((now.getTime() - s.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+        const saleDate = s.occurredAt || s.createdAt;
+        const ageDays = Math.floor((now.getTime() - saleDate.getTime()) / (1000 * 60 * 60 * 24));
         let b0 = 0n;
         let b31 = 0n;
         let b61 = 0n;
@@ -493,7 +494,7 @@ export class ReportsService {
           bucket31to60Minor: 0,
           bucket61to90Minor: 0,
           bucketOver90Minor: 0,
-          oldestInvoiceDate: s.createdAt.toISOString(),
+          oldestInvoiceDate: saleDate.toISOString(),
           unpaidInvoicesCount: 0,
         };
 

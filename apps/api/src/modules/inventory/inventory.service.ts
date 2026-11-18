@@ -57,7 +57,9 @@ export class InventoryService {
     tenantId: string,
     tx: Prisma.TransactionClient,
     movements: ApplyMovementInput[],
+    allowNegativeOverride = false,
   ): Promise<void> {
+    if (allowNegativeOverride) return;
     const hasNegative = movements.some((m) => m.qtyDelta < 0);
     if (!hasNegative) return;
 
@@ -147,14 +149,44 @@ export class InventoryService {
     tenantId: string,
     tx: Prisma.TransactionClient,
     movements: ApplyMovementInput[],
-  ): Promise<void> {
-    if (!movements || movements.length === 0) return;
+    options?: { allowNegativeOverride?: boolean },
+  ): Promise<{ negativeStockItems: Array<{ branchId: string; variantId: string; newQty: number }> }> {
+    if (!movements || movements.length === 0) return { negativeStockItems: [] };
 
-    await this.assertStockAvailability(tenantId, tx, movements);
+    await this.assertStockAvailability(tenantId, tx, movements, options?.allowNegativeOverride);
 
     for (const m of movements) {
       await this.recordMovement(tenantId, tx, m);
     }
+
+    const negativeStockItems: Array<{ branchId: string; variantId: string; newQty: number }> = [];
+    const checked = new Set<string>();
+    for (const m of movements) {
+      if (m.qtyDelta < 0) {
+        const key = `${m.branchId}:${m.variantId}`;
+        if (!checked.has(key)) {
+          checked.add(key);
+          const level = await tx.stockLevel.findUnique({
+            where: {
+              tenantId_branchId_variantId: {
+                tenantId,
+                branchId: m.branchId,
+                variantId: m.variantId,
+              },
+            },
+          });
+          if (level && Number(level.qty) < 0) {
+            negativeStockItems.push({
+              branchId: m.branchId,
+              variantId: m.variantId,
+              newQty: Number(level.qty),
+            });
+          }
+        }
+      }
+    }
+
+    return { negativeStockItems };
   }
 
   async createOpeningStock(

@@ -769,7 +769,7 @@ export default function SuppliersPage() {
               <label htmlFor="payment-method" className="text-xs font-semibold text-muted-foreground block mb-1">
                 {strings.purchasing.paymentMethod} *
               </label>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+              <Select value={paymentMethod} onValueChange={(val: any) => setPaymentMethod(val)}>
                 <SelectTrigger id="payment-method" data-testid="payment-method-select" className="w-full h-10">
                   <SelectValue />
                 </SelectTrigger>

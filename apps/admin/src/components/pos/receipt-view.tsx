@@ -11,6 +11,7 @@ import { Printer, RotateCcw, CheckCircle2 } from "lucide-react";
 export interface ReceiptData {
   saleId: string;
   invoiceNumber: string;
+  isOffline?: boolean;
   createdAt: string;
   cashierName: string;
   registerName: string;
@@ -164,9 +165,16 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
 
         {/* Metadata */}
         <div className="space-y-1 pb-2 mb-2 border-b border-dashed border-gray-400 text-[11px]">
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center">
             <span>{strings.pos.invoiceNum}:</span>
-            <span className="font-bold">{receipt.invoiceNumber}</span>
+            <span className="font-bold inline-flex items-center gap-1">
+              {receipt.invoiceNumber}
+              {(receipt.isOffline || receipt.invoiceNumber.includes("-O-")) && (
+                <span className="text-[9px] bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.2 rounded font-sans uppercase font-bold print:border-black">
+                  {strings.pos.offlineMark}
+                </span>
+              )}
+            </span>
           </div>
           <div className="flex justify-between">
             <span>{strings.pos.date}:</span>

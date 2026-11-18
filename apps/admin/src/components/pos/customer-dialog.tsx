@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatMoney } from "@/lib/utils";
 import { X, Search, UserPlus, Check, User } from "lucide-react";
+import { db, enqueueCustomer } from "@/lib/pos/offline";
 
 export interface SelectedCustomer {
   id?: string;
@@ -51,13 +52,33 @@ export function CustomerDialog({
     }
     setIsSearching(true);
     try {
-      const res = await apiFetch(`/customers?search=${encodeURIComponent(query.trim())}&limit=10`);
-      if (res.ok) {
-        const data = await res.json();
-        setSearchResults(data.data?.items || data.items || []);
+      if (typeof window !== "undefined" && navigator.onLine) {
+        const res = await apiFetch(`/customers?search=${encodeURIComponent(query.trim())}&limit=10`);
+        if (res.ok) {
+          const data = await res.json();
+          setSearchResults(data.data?.items || data.items || []);
+          return;
+        }
       }
+      // Offline fallback: search IndexedDB
+      const lower = query.toLowerCase();
+      const localMatches = await db.customers
+        .filter((c) => Boolean((c.name && c.name.toLowerCase().includes(lower)) || (c.phone && c.phone.includes(query))))
+        .limit(10)
+        .toArray();
+      setSearchResults(localMatches);
     } catch {
-      // Ignore
+      // Local fallback on fetch failure
+      try {
+        const lower = query.toLowerCase();
+        const localMatches = await db.customers
+          .filter((c) => Boolean((c.name && c.name.toLowerCase().includes(lower)) || (c.phone && c.phone.includes(query))))
+          .limit(10)
+          .toArray();
+        setSearchResults(localMatches);
+      } catch {
+        setSearchResults([]);
+      }
     } finally {
       setIsSearching(false);
     }
@@ -77,6 +98,21 @@ export function CustomerDialog({
 
     setIsCreating(true);
     try {
+      if (typeof window !== "undefined" && !navigator.onLine) {
+        // Direct offline creation via outbox
+        const { customerId } = await enqueueCustomer({
+          name: name.trim(),
+          phone: phone.trim(),
+        });
+        onSelectCustomer({
+          id: customerId,
+          name: name.trim(),
+          phone: phone.trim(),
+        });
+        onClose();
+        return;
+      }
+
       const res = await apiFetch("/customers", {
         method: "POST",
         body: JSON.stringify({ name: name.trim(), phone: phone.trim() }),
@@ -84,6 +120,13 @@ export function CustomerDialog({
       const data = await res.json();
       if (res.ok && data.success) {
         const created = data.data;
+        // Save to local cache as well
+        await db.customers.put({
+          id: created.id,
+          name: created.name,
+          phone: created.phone,
+          updatedAt: new Date().toISOString(),
+        });
         onSelectCustomer({
           id: created.id,
           name: created.name,
@@ -93,8 +136,22 @@ export function CustomerDialog({
       } else {
         setCreateError(data.error?.message || "Failed to create customer");
       }
-    } catch (err: any) {
-      setCreateError(err.message || "Failed to create customer");
+    } catch {
+      // If network fails during request, save offline via outbox
+      try {
+        const { customerId } = await enqueueCustomer({
+          name: name.trim(),
+          phone: phone.trim(),
+        });
+        onSelectCustomer({
+          id: customerId,
+          name: name.trim(),
+          phone: phone.trim(),
+        });
+        onClose();
+      } catch (saveErr: any) {
+        setCreateError(saveErr.message || "Failed to create customer offline");
+      }
     } finally {
       setIsCreating(false);
     }

@@ -383,4 +383,73 @@ test.describe("Step 1: POS Header Layout, Text Node Overlap & Overflow Verificat
       });
     }
   });
+
+  // 3. Connection Status Pill States across all 8 widths (Milestone D3/D4)
+  test("header connection pill states (online & offline) across all 8 widths: no overlap", async ({
+    page,
+    context,
+    request,
+  }) => {
+    test.setTimeout(120000);
+
+    const loginRes = await request.post("http://localhost:4000/api/v1/auth/login", {
+      data: {
+        tenantSlug: "artisan-apparel",
+        email: "owner@artisan.com",
+        password: "Password123!",
+      },
+    });
+    expect(loginRes.ok()).toBe(true);
+    const token = (await loginRes.json()).data.accessToken;
+    await ensureOpenShift(request, token);
+
+    // Sign in on UI
+    await page.goto("http://localhost:3000/login?from=/pos");
+    await page.fill("#tenantSlug", "artisan-apparel");
+    await page.fill("#email", "owner@artisan.com");
+    await page.fill("#password", "Password123!");
+    await page.click('button[type="submit"]');
+    await page.waitForURL("**/pos", { timeout: 15000 });
+
+    const header = page.locator("header");
+    await expect(header).toBeVisible({ timeout: 10000 });
+
+    const connPill = page.locator('[data-testid="connection-status-pill"]');
+    await expect(connPill).toBeVisible({ timeout: 5000 });
+
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForTimeout(200);
+
+      // (a) Online state check
+      await expect(connPill).toContainText(/অনলাইন|Online/);
+      if (width >= 768) {
+        const box = await header.boundingBox();
+        expect(box!.height).toBeLessThanOrEqual(60);
+      }
+
+      // (b) Offline state check
+      await context.setOffline(true);
+      await page.waitForTimeout(300);
+
+      await expect(connPill).toContainText(/অফলাইন|Offline/);
+      if (width >= 768) {
+        const box = await header.boundingBox();
+        expect(box!.height).toBeLessThanOrEqual(60);
+      }
+
+      // Core actions disabled offline
+      const returnBtn = page.locator('[data-testid="pos-return-button"]');
+      const closeBtn = page.locator('[data-testid="close-shift-button"]');
+      const cashBtn = page.locator('[data-testid="cash-movement-button"]');
+      await expect(returnBtn).toBeDisabled();
+      await expect(closeBtn).toBeDisabled();
+      await expect(cashBtn).toBeDisabled();
+
+      // (c) Restore online
+      await context.setOffline(false);
+      await page.waitForTimeout(300);
+      await expect(connPill).toContainText(/অনলাইন|Online/);
+    }
+  });
 });

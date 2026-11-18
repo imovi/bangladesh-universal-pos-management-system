@@ -32,6 +32,7 @@ import {
 
 interface PaymentDialogProps {
   isOpen: boolean;
+  isOnline?: boolean;
   onClose: () => void;
   totalPayableMinor: number;
   onCompleteSale: (payments: PaymentItemInput[], refundMethod?: string) => Promise<void>;
@@ -53,6 +54,7 @@ const PAYMENT_METHODS = [
 
 export function PaymentDialog({
   isOpen,
+  isOnline,
   onClose,
   totalPayableMinor,
   onCompleteSale,
@@ -148,7 +150,7 @@ export function PaymentDialog({
       : []),
   ];
 
-  const isCreditAllowed = Boolean(customer && canSellCredit);
+  const isCreditAllowed = Boolean(customer && canSellCredit && isOnline !== false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -404,7 +406,9 @@ export function PaymentDialog({
             <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
               <AlertCircle className="h-4 w-4 shrink-0" />
               <span>
-                {strings.pos.fullPaymentRequired}: {formatMoney(calculation.balanceDueMinor)}
+                {isOnline === false && customer
+                  ? strings.pos.creditSaleOnlineOnly
+                  : `${strings.pos.fullPaymentRequired}: ${formatMoney(calculation.balanceDueMinor)}`}
               </span>
             </div>
           )}

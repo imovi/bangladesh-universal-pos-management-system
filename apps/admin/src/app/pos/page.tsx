@@ -45,6 +45,21 @@ import { VariantPickerModal } from "@/components/pos/variant-picker-modal";
 import { HoldCartDialog } from "@/components/pos/hold-cart-dialog";
 import { ShiftSalesModal } from "@/components/pos/shift-sales-modal";
 import { ReturnModal, ReturnSelectedLine } from "@/components/pos/return-modal";
+import { FailedSyncModal } from "@/components/pos/failed-sync-modal";
+import {
+  db,
+  initPersistentStorage,
+  getNextOfflineInvoiceNumber,
+  getServerClockOffset,
+  clampSaleTime,
+  enqueueSale,
+  runSync,
+  startSyncWorker,
+  stopSyncWorker,
+  getOutboxStats,
+  acquireRegisterTabLock,
+  syncCatalog,
+} from "@/lib/pos/offline";
 import {
   Store,
   Search,
@@ -59,7 +74,6 @@ import {
   Lock,
   Unlock,
   Receipt,
-  WifiOff,
   Sun,
   Moon,
   Keyboard,
@@ -81,6 +95,10 @@ export default function PosPage() {
 
   // Network & Online state
   const [isOnline, setIsOnline] = useState(true);
+  const [outboxStats, setOutboxStats] = useState({ pending: 0, syncing: 0, synced: 0, failed: 0 });
+  const [isFailedSyncModalOpen, setIsFailedSyncModalOpen] = useState(false);
+  const [isTabLockedOut, setIsTabLockedOut] = useState(false);
+  const [statusBanner, setStatusBanner] = useState<{ message: string; type: "info" | "success" | "warning" } | null>(null);
 
   // Tenant / POS Settings
   const [posConfig, setPosConfig] = useState({
@@ -237,18 +255,121 @@ export default function PosPage() {
   const isDiscountLimitExceeded =
     maxDiscountBp !== null && cartTotals.effectiveDiscountBp > maxDiscountBp;
 
-  // Online / Offline listeners
+  // Initialize storage persistence & outbox stats
+  useEffect(() => {
+    initPersistentStorage();
+    getOutboxStats().then(setOutboxStats).catch(() => {});
+  }, []);
+
+  // Background sync worker
+  useEffect(() => {
+    startSyncWorker(
+      {
+        customSender: async (item) => {
+          const endpoint = item.type === "sale" ? "/sales" : "/customers";
+          const res = await apiFetch(endpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-idempotency-key": item.idempotencyKey,
+            },
+            body: JSON.stringify(item.payload),
+          });
+          let body: any = null;
+          try {
+            body = await res.json();
+          } catch {}
+          return {
+            status: res.status,
+            body,
+            error: !res.ok ? (body?.message || `HTTP ${res.status}`) : undefined,
+          };
+        },
+        onStatusChange: setOutboxStats,
+      },
+      5000
+    );
+
+    return () => {
+      stopSyncWorker();
+    };
+  }, [apiFetch]);
+
+  // Online / Offline listeners & auto-sync trigger
   useEffect(() => {
     setIsOnline(typeof window !== "undefined" ? window.navigator.onLine : true);
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      runSync({
+        customSender: async (item) => {
+          const endpoint = item.type === "sale" ? "/sales" : "/customers";
+          const res = await apiFetch(endpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-idempotency-key": item.idempotencyKey,
+            },
+            body: JSON.stringify(item.payload),
+          });
+          let body: any = null;
+          try {
+            body = await res.json();
+          } catch {}
+          return {
+            status: res.status,
+            body,
+            error: !res.ok ? (body?.message || `HTTP ${res.status}`) : undefined,
+          };
+        },
+        onStatusChange: (stats) => {
+          setOutboxStats(stats);
+          if (stats.pending === 0 && stats.syncing === 0) {
+            setStatusBanner({
+              message: strings.pos.allSalesSyncedToast,
+              type: "success",
+            });
+            setTimeout(() => setStatusBanner(null), 4000);
+          }
+        },
+      }).catch(() => {});
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      setStatusBanner({
+        message: strings.pos.offlineModeToast,
+        type: "warning",
+      });
+      setTimeout(() => setStatusBanner(null), 4000);
+    };
+
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, []);
+  }, [apiFetch, strings.pos]);
+
+  // Tab lock per register
+  useEffect(() => {
+    if (!selectedRegister?.id) return;
+    let lockHandle: any = null;
+
+    acquireRegisterTabLock(selectedRegister.id, () => {
+      setIsTabLockedOut(true);
+    }).then((handle) => {
+      lockHandle = handle;
+      setIsTabLockedOut(!handle.hasLock);
+    });
+
+    return () => {
+      if (lockHandle) {
+        lockHandle.release();
+      }
+    };
+  }, [selectedRegister?.id]);
 
   // Check URL query parameters for returnInvoice
   useEffect(() => {
@@ -351,21 +472,49 @@ export default function PosPage() {
     checkRegisterShift();
   }, [checkRegisterShift]);
 
-  // Load Products & Categories for Branch
+  // Load Products & Categories for Branch (Local IndexedDB as source of truth)
   const loadCatalog = useCallback(async () => {
     const branchId = currentBranch?.id || user?.branches?.[0]?.id;
+    if (!branchId) return;
+
+    // 1. Immediately render cached catalog from Dexie if available
     try {
-      const prodUrl = branchId
-        ? `/products?branchId=${branchId}&limit=100`
-        : `/products?limit=100`;
-      const [prodRes, catRes] = await Promise.all([
-        apiFetch(prodUrl),
-        apiFetch(`/categories`),
-      ]);
-      if (prodRes.ok) {
-        const data = await prodRes.json();
-        setProducts(data.data || []);
+      const cached = await db.catalog.toArray();
+      if (cached.length > 0) {
+        setProducts(cached as any);
       }
+    } catch {}
+
+    // 2. If online, perform catalog delta sync
+    if (typeof window !== "undefined" && navigator.onLine) {
+      try {
+        await syncCatalog({
+          branchId,
+          customFetcher: async (url, init) => {
+            const path = url.replace(/^https?:\/\/[^/]+(\/api\/v1)?/, "");
+            return apiFetch(path, init);
+          },
+        });
+        const updated = await db.catalog.toArray();
+        if (updated.length > 0) {
+          setProducts(updated as any);
+        }
+      } catch {
+        // Fallback to legacy endpoint if catalog sync fails
+        try {
+          const prodUrl = `/products?branchId=${branchId}&limit=100`;
+          const prodRes = await apiFetch(prodUrl);
+          if (prodRes.ok) {
+            const data = await prodRes.json();
+            setProducts(data.data || []);
+          }
+        } catch {}
+      }
+    }
+
+    // Categories
+    try {
+      const catRes = await apiFetch(`/categories`);
       if (catRes.ok) {
         const data = await catRes.json();
         setCategories(data.data || []);
@@ -896,10 +1045,39 @@ export default function PosPage() {
       }
     }
 
+    // UNIFIED OUTBOX SELLING PATH (Online & Offline alike)
+    const nowOffset = await getServerClockOffset();
+    const rawOccurredAt = Date.now() + nowOffset;
+    const shiftOpenedAtMs = new Date(activeShift.openedAt).getTime();
+    const shiftClosedAtMs = activeShift.closedAt ? new Date(activeShift.closedAt).getTime() : undefined;
+    const clampedOccurredAt = clampSaleTime(rawOccurredAt, shiftOpenedAtMs, shiftClosedAtMs, Date.now() + 60_000);
+
+    const counterResult = await getNextOfflineInvoiceNumber({
+      registerId: selectedRegister.id,
+      registerCode: selectedRegister.code || "REG01",
+      timeZone: posConfig.timezone,
+      timestampMs: clampedOccurredAt,
+    });
+    const assignedInvoiceNumber = counterResult.invoiceNumber;
+    const isActuallyOffline = !isOnline;
+
+    let currentCatalogVersion: number | undefined = undefined;
+    try {
+      const cv = await db.settings.get("catalogVersion");
+      if (cv && typeof cv.value === "number") {
+        currentCatalogVersion = cv.value;
+      }
+    } catch {}
+
     const salePayload = {
       id: saleId,
       shiftId: activeShift.id,
       branchId: currentBranch.id,
+      registerId: selectedRegister.id,
+      invoiceNumber: assignedInvoiceNumber,
+      occurredAt: new Date(clampedOccurredAt).toISOString(),
+      isOffline: isActuallyOffline,
+      catalogVersion: currentCatalogVersion,
       customerId: selectedCustomer.id || undefined,
       billDiscount: billDiscount
         ? {
@@ -910,8 +1088,10 @@ export default function PosPage() {
         : undefined,
       items: cartItems.map((it) => ({
         variantId: it.variantId,
+        productId: it.productId,
         quantity: it.quantity,
         overrideUnitPriceMinor: it.overrideUnitPriceMinor,
+        unitPriceMinor: it.overrideUnitPriceMinor !== undefined ? it.overrideUnitPriceMinor : it.unitPriceMinor,
         discount: it.discount
           ? {
               type: it.discount.type,
@@ -931,56 +1111,46 @@ export default function PosPage() {
       expectedTotalMinor: cartTotals.expectedTotalMinor,
     };
 
-    const submitSaleWithRetry = async (attempt = 1): Promise<any> => {
-      try {
-        const res = await apiFetch("/sales", {
-          method: "POST",
-          headers: {
-            "Idempotency-Key": saleId,
-          },
-          body: JSON.stringify(salePayload),
-        });
-
-        const json = await res.json();
-
-        if (res.ok && (json.success || json.id || json.data?.id)) {
-          return json.data || json;
-        }
-
-        // Handle Discount limit exceeded error (403)
-        if (res.status === 403 && (json.code === "DISCOUNT_LIMIT_EXCEEDED" || json.code === "LINE_DISCOUNT_LIMIT_EXCEEDED")) {
-          const limitPct = json.limitBp !== undefined ? json.limitBp / 100 : maxDiscountPercent;
-          const attemptedPct = json.attemptedBp !== undefined ? (json.attemptedBp / 100).toFixed(1) : "";
-          throw new Error(
-            locale === "bn"
-              ? `ডিসকাউন্ট সীমা অতিক্রম করেছে: অনুমোদিত ${limitPct}%, চেষ্টা করা হয়েছে ${attemptedPct}%`
-              : `Discount limit exceeded: permitted ${limitPct}%, attempted ${attemptedPct}%`,
-          );
-        }
-
-        // Server rejected with specific 409 / 422
-        if (res.status === 409 || res.status === 422) {
-          throw new Error(json.message || json.error?.message || "Sale validation failed");
-        }
-
-        throw new Error(json.error?.message || json.message || "Failed to create sale");
-      } catch (err: any) {
-        // Network error or timeout: auto-retry once with same UUID v7
-        if (attempt === 1 && (err.name === "TypeError" || err.message?.includes("network") || err.message?.includes("fetch"))) {
-          return submitSaleWithRetry(2);
-        }
-        throw err;
-      }
-    };
-
     try {
-      const createdSale = await submitSaleWithRetry();
+      // 1. Unified local enqueue: atomically writes outbox, localSales, and decrements Dexie stock
+      await enqueueSale(salePayload as any);
 
-      // Format receipt data
+      // 2. If online, trigger background outbox sync immediately
+      if (isOnline) {
+        runSync({
+          customSender: async (item) => {
+            const endpoint = item.type === "sale" ? "/sales" : "/customers";
+            const res = await apiFetch(endpoint, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-idempotency-key": item.idempotencyKey,
+              },
+              body: JSON.stringify(item.payload),
+            });
+            let body: any = null;
+            try {
+              body = await res.json();
+            } catch {}
+            return {
+              status: res.status,
+              body,
+              error: !res.ok ? (body?.message || `HTTP ${res.status}`) : undefined,
+            };
+          },
+          onStatusChange: setOutboxStats,
+        }).catch((err) => {
+          console.warn("[POS] Immediate outbox sync error:", err);
+        });
+      }
+
+      // 3. Format receipt data immediately from local sale data
+      const totalPaid = payments.reduce((sum, p) => sum + p.amountMinor, 0);
       const receiptData: ReceiptData = {
-        saleId: createdSale.id,
-        invoiceNumber: createdSale.invoiceNumber,
-        createdAt: createdSale.createdAt || new Date().toISOString(),
+        saleId,
+        invoiceNumber: assignedInvoiceNumber,
+        isOffline: isActuallyOffline,
+        createdAt: new Date(clampedOccurredAt).toISOString(),
         cashierName: user?.name || "Cashier",
         registerName: selectedRegister?.name || "Register 1",
         branchName: currentBranch?.name || "Main Branch",
@@ -1009,16 +1179,12 @@ export default function PosPage() {
         discountMinor: cartTotals.totalDiscountMinor,
         taxMinor: cartTotals.taxMinor,
         totalMinor: cartTotals.totalMinor,
-        paidMinor: payments.reduce((sum, p) => sum + p.amountMinor, 0),
-        changeMinor: Math.max(0, payments.reduce((sum, p) => sum + p.amountMinor, 0) - cartTotals.totalMinor),
-        dueMinor: createdSale?.dueMinor !== undefined
-          ? Number(createdSale.dueMinor)
-          : Math.max(0, cartTotals.totalMinor - payments.reduce((sum, p) => sum + p.amountMinor, 0)),
+        paidMinor: totalPaid,
+        changeMinor: Math.max(0, totalPaid - cartTotals.totalMinor),
+        dueMinor: payments.find((p) => (p.paymentMethod as string) === "credit")?.amountMinor || 0,
         customerTotalDueMinor: selectedCustomer.id
           ? (customerBalance?.currentDueMinor ?? Number(selectedCustomer.currentDueMinor || 0)) +
-            (createdSale?.dueMinor !== undefined
-              ? Number(createdSale.dueMinor)
-              : Math.max(0, cartTotals.totalMinor - payments.reduce((sum, p) => sum + p.amountMinor, 0)))
+            (payments.find((p) => (p.paymentMethod as string) === "credit")?.amountMinor || 0)
           : undefined,
         payments,
       };
@@ -1414,13 +1580,37 @@ export default function PosPage() {
 
         {/* Right Zone: Actions, Held Carts, Menus */}
         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-          {/* Offline warning indicator */}
-          {!isOnline && (
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-semibold shrink-0">
-              <WifiOff className="h-3.5 w-3.5" />
-              <span className="hidden md:inline">{locale === "bn" ? "অফলাইন" : "Offline"}</span>
-            </div>
-          )}
+          {/* Connection Status Pill with 4 states */}
+          <div
+            data-testid="connection-status-pill"
+            onClick={() => {
+              if (outboxStats.failed > 0) {
+                setIsFailedSyncModalOpen(true);
+              }
+            }}
+            className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold shrink-0 transition-colors select-none ${
+              outboxStats.failed > 0
+                ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 cursor-pointer hover:bg-rose-500/20"
+                : isOnline && (outboxStats.pending > 0 || outboxStats.syncing > 0)
+                ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 animate-pulse"
+                : !isOnline
+                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+            }`}
+            title={outboxStats.failed > 0 ? strings.pos.viewFailedSalesTooltip : undefined}
+          >
+            {outboxStats.failed > 0 ? (
+              <span>{strings.pos.syncFailedCount.replace("{count}", String(outboxStats.failed))}</span>
+            ) : isOnline && (outboxStats.pending > 0 || outboxStats.syncing > 0) ? (
+              <span>
+                {strings.pos.syncingRemaining.replace("{count}", String(outboxStats.pending + outboxStats.syncing))}
+              </span>
+            ) : !isOnline ? (
+              <span>{strings.pos.offlinePill}</span>
+            ) : (
+              <span>{strings.pos.onlinePill}</span>
+            )}
+          </div>
 
           {/* Core Shift Actions */}
           {activeShift ? (
@@ -1429,9 +1619,10 @@ export default function PosPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setIsCashMoveOpen(true)}
-                className="h-8 px-2 text-xs font-medium"
+                disabled={!isOnline}
+                className="h-8 px-2 text-xs font-medium disabled:opacity-50"
                 data-testid="cash-movement-button"
-                title={strings.pos.cashManagement}
+                title={!isOnline ? strings.pos.availableWhenOnline : strings.pos.cashManagement}
                 aria-label={strings.pos.cashManagement}
               >
                 <ArrowRightLeft className="h-3.5 w-3.5 xl:mr-1" />
@@ -1455,9 +1646,10 @@ export default function PosPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setIsReturnOpen(true)}
-                className="h-8 px-2 text-xs font-medium text-amber-600 hover:text-amber-700 hover:bg-amber-500/10"
+                disabled={!isOnline}
+                className="h-8 px-2 text-xs font-medium text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 disabled:opacity-50"
                 data-testid="pos-return-button"
-                title={locale === "bn" ? "পণ্য ফেরত / বদল (F6)" : "Returns & Exchanges (F6)"}
+                title={!isOnline ? strings.pos.availableWhenOnline : (locale === "bn" ? "পণ্য ফেরত / বদল (F6)" : "Returns & Exchanges (F6)")}
                 aria-label={locale === "bn" ? "পণ্য ফেরত / বদল (F6)" : "Returns & Exchanges (F6)"}
               >
                 <RotateCcw className="h-3.5 w-3.5 xl:mr-1" />
@@ -1468,9 +1660,10 @@ export default function PosPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setIsCloseShiftOpen(true)}
-                className="h-8 px-2 text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-500/10"
+                disabled={!isOnline}
+                className="h-8 px-2 text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-500/10 disabled:opacity-50"
                 data-testid="close-shift-button"
-                title={strings.pos.closeShift}
+                title={!isOnline ? strings.pos.availableWhenOnline : strings.pos.closeShift}
                 aria-label={strings.pos.closeShift}
               >
                 <Lock className="h-3.5 w-3.5 xl:mr-1" />
@@ -1627,13 +1820,31 @@ export default function PosPage() {
         </div>
       </header>
 
-      {/* Offline Alert Banner */}
-      {!isOnline && (
-        <div className="bg-rose-600 text-white px-4 py-2 text-xs font-medium flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <WifiOff className="h-4 w-4 shrink-0" />
-            <span>{strings.pos.offlineNotice} {strings.pos.offlineSubtext}</span>
-          </div>
+      {/* Tab lockout banner */}
+      {isTabLockedOut && (
+        <div className="bg-rose-600 text-white px-4 py-2 text-xs font-semibold flex items-center justify-center gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>{strings.pos.concurrentTabBlocked}</span>
+        </div>
+      )}
+
+      {/* Non-blocking Status Toast/Banner */}
+      {statusBanner && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`px-4 py-2 text-xs font-semibold flex items-center justify-between border-b transition-all ${
+            statusBanner.type === "warning"
+              ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
+              : statusBanner.type === "success"
+              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+              : "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30"
+          }`}
+        >
+          <span>{statusBanner.message}</span>
+          <button onClick={() => setStatusBanner(null)} className="text-xs hover:underline ml-2">
+            ✕
+          </button>
         </div>
       )}
 
@@ -2113,21 +2324,22 @@ export default function PosPage() {
             <Button
               type="button"
               onClick={() => {
+                if (isTabLockedOut) {
+                  return;
+                }
                 if (!activeShift) {
                   setIsOpenShiftOpen(true);
                   return;
                 }
                 setIsPaymentOpen(true);
               }}
-              disabled={cartItems.length === 0 || !isOnline || isCompletingSale}
+              disabled={cartItems.length === 0 || isCompletingSale || isTabLockedOut}
               data-testid="pos-checkout-button"
               className="w-full h-12 text-base font-bold tracking-wide shadow-md"
             >
               <CreditCard className="h-5 w-5 mr-2" />
               <span>
-                {!activeShift
-                  ? (locale === "bn" ? "শিফট শুরু করে পেমেন্ট নিন (F4)" : "Start Shift & Pay (F4)")
-                  : strings.pos.checkout}
+                {!activeShift ? strings.pos.startShiftAndPay : strings.pos.checkout}
               </span>
             </Button>
           </div>
@@ -2139,6 +2351,7 @@ export default function PosPage() {
       {/* 1. Payment Dialog (F4) */}
       <PaymentDialog
         isOpen={isPaymentOpen}
+        isOnline={isOnline}
         onClose={() => setIsPaymentOpen(false)}
         totalPayableMinor={exchangeContext ? exchangeDifferenceMinor : cartTotals.expectedTotalMinor}
         isExchange={Boolean(exchangeContext)}
@@ -2599,6 +2812,12 @@ export default function PosPage() {
           </div>
         </div>
       )}
+
+      {/* 13. Failed Outbox Sync Modal */}
+      <FailedSyncModal
+        isOpen={isFailedSyncModalOpen}
+        onClose={() => setIsFailedSyncModalOpen(false)}
+      />
     </div>
   );
 }

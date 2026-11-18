@@ -1513,6 +1513,42 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - Commit: `44cc765`
   - GitHub Actions CI Run: [44274605380](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44274605380) — **Status: completed, Conclusion: success (Green)**
 
+---
+
+### Milestone D3: Unified Outbox Selling Path
+- **Scope & What Was Built:**
+  1. **Unified Outbox Selling Flow (`apps/admin/src/app/pos/page.tsx`):**
+     - Single codebase path for online and offline sales alike: all sales go through local Dexie `enqueueSale(...)` transaction first.
+     - Decrements local stock in Dexie immediately so UI cart and variant pickers reflect stock changes without waiting for server roundtrip.
+     - Saves local receipt copy in `localSales` table and queues payload in `outbox`.
+     - When online, immediately triggers `runSync()` in the background to sync without latency.
+     - Cashier sees instantaneous receipt modal with offline invoice number (`${registerCode}-O-${YYMMDD}-${seq}`) and small "অফলাইন" mark.
+  2. **Local Dexie Catalog as Source of Truth (`loadCatalog`):**
+     - Instantly populates products and categories from local Dexie `db.catalog` on mount.
+     - Runs cursor-based delta sync against `GET /pos/catalog?branchId=&since=` when online to keep local store fresh.
+  3. **Header Connection Status Pill (`data-testid="connection-status-pill"`):**
+     - Four distinct states:
+       - Green: "● অনলাইন" (synced and online).
+       - Amber: "● অফলাইন" (offline with zero failures).
+       - Blue: "সিঙ্ক হচ্ছে… Xটি বাকি" (outbox items syncing in progress).
+       - Red: "সিঙ্ক হয়নি: Xটি" (failed items; clicking opens `FailedSyncModal`).
+  4. **Failed Sync Modal (`apps/admin/src/components/pos/failed-sync-modal.tsx`):**
+     - Modal displaying rejected/failed outbox sales, invoice numbers, and server rejection reasons.
+  5. **Non-blocking Status Banners & Tab Lock Protection:**
+     - Non-blocking notification banner on network transition ("অফলাইন মোড চালু হয়েছে — বিক্রি চালিয়ে যান" and "সব বিক্রি পাঠানো হয়েছে").
+     - Single-tab selling lock: displays blocking warning banner if another tab on the same register is active.
+     - Action guards: Return (`pos-return-button`), Close Shift (`close-shift-button`), Cash Movement (`cash-movement-button`), and Credit Sale (বাকি) are disabled offline with tooltip explaining "অনলাইনে ফিরলে করা যাবে".
+  6. **Customer Creation & Search Offline (`CustomerDialog`):**
+     - Queries local IndexedDB `db.customers` when offline or on network failure.
+     - Offline customer creation queues customer in outbox via `enqueueCustomer` and assigns generated UUID v7 immediately.
+  7. **E2E Test Suite Expansion (`apps/admin/e2e/pos-header-layout.spec.ts`):**
+     - Added connection pill verification (online and offline) across all 8 viewport widths (375px to 1920px), verifying height constraint (<=60px at >=768px), zero text collisions, and correct disabled action states.
+- **Verification:**
+  - `npm run lint`: 0 errors, 0 warnings across all workspaces.
+  - `npm test`: 8 test files passed (47 tests) in admin, 50 test files passed (304 tests) in api. All 58 test files (351 tests) passed (100%).
+  - `npm run build`: Clean compilation across `@universal-pos/shared`, `@universal-pos/admin`, and `@universal-pos/api`.
+
+
 
 
 

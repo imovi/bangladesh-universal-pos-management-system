@@ -129,7 +129,8 @@ test.describe("Milestone A5: Purchasing Flow E2E", () => {
 
     // Fill Payment: 2500 Tk via Cash
     await page.fill('[data-testid="payment-amount-input"]', "2500");
-    await page.selectOption('[data-testid="payment-method-select"]', "cash");
+    await page.click('[data-testid="payment-method-select"]');
+    await page.locator('[role="option"]').filter({ hasText: /Cash|ক্যাশ/ }).click();
     await page.fill('[data-testid="payment-ref-input"]', "PAY-001");
     await page.click('[data-testid="payment-submit-btn"]');
 

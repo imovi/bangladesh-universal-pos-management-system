@@ -1340,3 +1340,47 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
      - Verified all 3 match the API down to the poisha.
 - **Verification:**
   - `apps/admin/e2e/credit-due-flow.spec.ts`: 4/4 passed (8.0s).
+
+### Step 3(b): Bangla Wording Pass
+- **Start Time:** 2026-11-18 06:50 +06:00
+- **What Was Built & Tested:**
+  - Reviewed all user-facing strings added in Phase 1C across POS dialogs, customer detail statements, receipts, and registration.
+  - Eliminated mixed-language and parenthetical English phrases:
+    - `CustomerDetailPage`: replaced `"পূর্ববর্তী ব্যালেন্স (Opening):"` with `"পূর্ববর্তী বকেয়া:"`, `"সর্বশেষ ব্যালেন্স (Closing):"` with `"সর্বশেষ বকেয়া:"`, and localized payment method options to pure Bangla.
+    - `SignupPage`: cleaned industry options (`"পোশাক ও ফ্যাশন"`, `"মুদি ও সুপারশপ"`, etc.).
+    - `CustomerDialog`: replaced `"বকেয়া: "` with clean shopkeeper term `"বাকি: "`.
+    - `PaymentDialog`: replaced `"সমান মূল্যের বদল (Even Exchange)"` with `"সমান মূল্যের বদল"`, and `"ধারে / বাকিতে বিক্রি (Credit Sale)"` with `"বাকিতে বিক্রি"`.
+    - `ReceiptView`: cleaned exchange headings to `"পণ্য বদল চালান"` and `"ফেরতকৃত পণ্য:"`.
+    - `sales/returns/[id]`: replaced `"(Exchange)"` with `"এই ফেরতের সাথে পণ্য বদল সম্পন্ন হয়েছে"`.
+- **Verification & CI:**
+  - `apps/admin/test/i18n.spec.ts`: 4/4 passed.
+  - `npm run lint`: 0 warnings, 0 errors.
+  - Commit: `a241d8a`
+  - GitHub Actions CI Run: [44211851949](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44211851949) — **Status: completed, Conclusion: success (Green)**.
+
+### Final Overnight Report (Run 3)
+- **Start Time:** 2026-11-18 07:03 +06:00
+- **What Was Built & Tested:**
+  - Recorded complete `## Phase 1C, run 3` section in `docs/overnight-report.md` with all 7 required points:
+    1. Execution status & CI verification matrix with exact commits & API run IDs.
+    2. Deep root cause analysis of why the previous header layout test passed while the bug existed.
+    3. Full C1 to C4 audit table (all 29 items marked DONE with proof lines).
+    4. Development database isolation findings and verification scripts.
+    5. Blocked entries (0 blocked).
+    6. Future operator design decisions.
+    7. Unverified physical hardware notes.
+- **Verification & CI:**
+  - Commit: `c068978`
+  - GitHub Actions CI Run: [44213088473](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44213088473) — **Status: completed, Conclusion: success (Green)**.
+
+---
+
+## Phase 1D: Offline Selling at /pos
+
+**Date & Time:** 2026-11-18 10:10 +06:00  
+**Specification:** `docs/prompts/antigravity-pos-phase1d-offline-mode-prompt.md`  
+**Mode:** Unattended Autonomous Mode  
+
+### Step 0. Leftovers from Phase 1C
+- **Item 0.1:** Commit Phase 1D prompt file (`docs/prompts/antigravity-pos-phase1d-offline-mode-prompt.md`).
+

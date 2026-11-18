@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
 import { NoAccess } from "@/components/common/no-access";
+import { OfflineBackOfficePage } from "./offline-page";
 import { Loader2 } from "lucide-react";
 import { useTranslation } from "@/i18n/context";
 
@@ -17,6 +18,20 @@ export function AppShell({ children, requiredPermission }: AppShellProps) {
   const { isAuthenticated, isLoading, hasPermission } = useAuth();
   const { strings } = useTranslation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(
+    typeof window !== "undefined" ? navigator.onLine : true
+  );
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   if (isLoading) {
     return (
@@ -29,12 +44,29 @@ export function AppShell({ children, requiredPermission }: AppShellProps) {
     );
   }
 
-  if (!isAuthenticated) {
-    // If not authenticated, the AuthContext or page redirects to /login.
+  if (!isAuthenticated && isOnline) {
+    // If not authenticated and online, the AuthContext or page redirects to /login.
     // In the meantime, show loading.
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Offline Back Office View
+  if (!isOnline) {
+    return (
+      <div className="min-h-screen flex bg-background">
+        <div className="hidden md:block shrink-0">
+          <Sidebar />
+        </div>
+        <div className="flex-1 flex flex-col min-w-0">
+          <Header onOpenMobile={() => setMobileOpen(true)} />
+          <main className="flex-1 p-6">
+            <OfflineBackOfficePage />
+          </main>
+        </div>
       </div>
     );
   }

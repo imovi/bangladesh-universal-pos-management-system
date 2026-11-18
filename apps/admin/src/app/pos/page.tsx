@@ -46,6 +46,9 @@ import { HoldCartDialog } from "@/components/pos/hold-cart-dialog";
 import { ShiftSalesModal } from "@/components/pos/shift-sales-modal";
 import { ReturnModal, ReturnSelectedLine } from "@/components/pos/return-modal";
 import { FailedSyncModal } from "@/components/pos/failed-sync-modal";
+import { PinUnlockModal } from "@/components/pos/pin-unlock-modal";
+import { ServiceWorkerPrompt } from "@/components/pos/service-worker-prompt";
+import { saveOfflinePinVerifier } from "@/lib/pos/offline/pin-verifier";
 import {
   db,
   initPersistentStorage,
@@ -85,11 +88,12 @@ import {
   RotateCcw,
   ChevronDown,
   MoreHorizontal,
+  LogOut,
 } from "lucide-react";
 
 export default function PosPage() {
   const router = useRouter();
-  const { user, currentBranch, apiFetch, hasPermission, isLoading: isAuthLoading } = useAuth();
+  const { user, currentBranch, apiFetch, hasPermission, logout, isLoading: isAuthLoading } = useAuth();
   const { strings, locale, setLocale } = useTranslation();
   const { theme, setTheme } = useTheme();
 
@@ -99,6 +103,22 @@ export default function PosPage() {
   const [isFailedSyncModalOpen, setIsFailedSyncModalOpen] = useState(false);
   const [isTabLockedOut, setIsTabLockedOut] = useState(false);
   const [statusBanner, setStatusBanner] = useState<{ message: string; type: "info" | "success" | "warning" } | null>(null);
+  const [isPinUnlockOpen, setIsPinUnlockOpen] = useState(false);
+  const [signOutBlockedBanner, setSignOutBlockedBanner] = useState<string | null>(null);
+
+  // Initialize demo offline PIN verifier online, or trigger unlock modal if offline reload
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (navigator.onLine && user?.id) {
+      saveOfflinePinVerifier(user.id, "1234").catch(() => {});
+    }
+    if (!navigator.onLine) {
+      const isUnlocked = sessionStorage.getItem("pos_session_unlocked");
+      if (!isUnlocked) {
+        setIsPinUnlockOpen(true);
+      }
+    }
+  }, [user?.id]);
 
   // Tenant / POS Settings
   const [posConfig, setPosConfig] = useState({
@@ -1611,6 +1631,28 @@ export default function PosPage() {
                     <span>{strings.pos.backToAdmin}</span>
                   </Link>
                 )}
+
+                <div className="border-t border-border pt-1">
+                  <button
+                    type="button"
+                    data-testid="pos-signout-button"
+                    onClick={async () => {
+                      const hasUnsynced = outboxStats.pending > 0 || outboxStats.syncing > 0;
+                      if (!isOnline && hasUnsynced) {
+                        setSignOutBlockedBanner("অফলাইন বিক্রি বাকি থাকা অবস্থায় সাইন আউট করা যাবে না। সব বিক্রি পাঠানো পর্যন্ত অপেক্ষা করুন।");
+                        setIsCashierMenuOpen(false);
+                        setTimeout(() => setSignOutBlockedBanner(null), 6000);
+                        return;
+                      }
+                      setIsCashierMenuOpen(false);
+                      await logout();
+                    }}
+                    className="flex items-center justify-center gap-1.5 w-full py-1.5 rounded-lg border border-destructive/20 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    <span>{locale === "bn" ? "সাইন আউট" : "Sign Out"}</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1895,6 +1937,22 @@ export default function PosPage() {
           </div>
           <button onClick={() => setServerErrorBanner(null)} className="text-xs hover:underline">
             {strings.common.cancel}
+          </button>
+        </div>
+      )}
+
+      {/* Sign-Out Blocked Offline Banner */}
+      {signOutBlockedBanner && (
+        <div
+          data-testid="sign-out-blocked-banner"
+          className="bg-rose-500/15 border-b border-rose-500/30 text-rose-700 dark:text-rose-400 px-4 py-2 text-xs font-semibold flex items-center justify-between animate-in fade-in"
+        >
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{signOutBlockedBanner}</span>
+          </div>
+          <button onClick={() => setSignOutBlockedBanner(null)} className="text-xs hover:underline">
+            ✕
           </button>
         </div>
       )}
@@ -2855,6 +2913,25 @@ export default function PosPage() {
       <FailedSyncModal
         isOpen={isFailedSyncModalOpen}
         onClose={() => setIsFailedSyncModalOpen(false)}
+      />
+
+      {/* 14. Offline PIN Unlock Modal */}
+      <PinUnlockModal
+        isOpen={isPinUnlockOpen}
+        userName={user?.name || "ক্যাশিয়ার"}
+        userId={user?.id}
+        onUnlock={() => {
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem("pos_session_unlocked", "true");
+          }
+          setIsPinUnlockOpen(false);
+        }}
+      />
+
+      {/* 15. Service Worker Update Prompt */}
+      <ServiceWorkerPrompt
+        hasCartItems={cartItems.length > 0}
+        hasUnsyncedOutbox={outboxStats.pending > 0 || outboxStats.syncing > 0}
       />
     </div>
   );

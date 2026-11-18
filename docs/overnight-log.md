@@ -1575,7 +1575,45 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - `npm test`: 351 unit tests passed across all workspaces.
   - `npm run build`: Clean production build for `@universal-pos/admin`.
 - **Commit & CI (Final Fix):**
+  - Commit: `c4ba535`
+  - GitHub Actions CI Run: [44338790207](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44338790207) — **Status: completed, Conclusion: success (Green)**
+
+---
+
+### Milestone D4: PIN Verifier, Service Worker & POS UI Shell
+- **Dependencies Installed:**
+  - `@serwist/next` (`^9.5.15`) in `@universal-pos/admin` dependencies.
+- **Scope & What Was Built:**
+  1. **Serwist App Shell & Service Worker (`apps/admin/src/app/sw.ts` & `next.config.ts`):**
+     - Configured `withSerwistInit` in `next.config.ts` pointing to `swSrc: "src/app/sw.ts"` and `swDest: "public/sw.js"`.
+     - Precache `/pos` route, its JavaScript, CSS, fonts, and icons so reloading `/pos` works seamlessly offline.
+     - **Strict Rule:** Never caches API responses (`url.pathname.startsWith("/api/")` mapped to `new NetworkOnly()`).
+     - Listens for `SKIP_WAITING` messages to activate waiting workers cleanly.
+  2. **Service Worker Update Prompt (`apps/admin/src/components/pos/service-worker-prompt.tsx`):**
+     - Monitors `registration.waiting` and `updatefound`.
+     - Displays prompt: "নতুন ভার্সন এসেছে — রিফ্রেশ করুন" (`data-testid="sw-update-prompt"`).
+     - Guard: Never reloads or skips waiting while cart has items (`hasCartItems`) or outbox has unsynced items (`hasUnsyncedOutbox`). Shows warning if user attempts to refresh with pending sales.
+  3. **Offline PIN Verifier & Unlock Screen (`apps/admin/src/components/pos/pin-unlock-modal.tsx`):**
+     - Full-screen blocking modal (`data-testid="pin-unlock-modal"`).
+     - Triggered automatically on offline reload or 12h session expiry when offline.
+     - Verifies entered PIN against stored PBKDF2-SHA256 verifier via `verifyOfflinePin`.
+     - Displays invalid PIN error with remaining attempts (`data-testid="pin-error"`).
+     - Enforces 15-minute lockout after 5 consecutive failed attempts (`data-testid="pin-locked"`).
+     - Plaintext PIN is never stored anywhere in IndexedDB or localStorage.
+  4. **Disabled Actions Offline:**
+     - Return button, Close Shift, Cash Movement, and Credit Sale (বাকি) disabled with tooltip "অনলাইনে ফিরলে করা যাবে".
+     - Back office offline page (`apps/admin/src/components/layout/offline-page.tsx`): rendered by `AppShell` (`data-testid="backoffice-offline-notice"`) when offline, guiding users back to `/pos` for uninterrupted offline selling.
+     - Offline Sign-Out Guard: Cashier dropdown menu includes "সাইন আউট" (`data-testid="pos-signout-button"`); clicking while offline with unsynced outbox sales is blocked and renders banner (`data-testid="sign-out-blocked-banner"`).
+  5. **Offline Receipt Marking (`apps/admin/src/components/pos/receipt-view.tsx`):**
+     - Offline sales prominently display offline invoice number (`${regCode}-O-${YYMMDD}-${seq}`) and offline badge (`data-testid="offline-receipt-badge"`).
+- **Verification:**
+  - `npm run lint`: 0 warnings, 0 errors across all workspaces (109 admin files, 74 api files).
+  - `npm test`: 351 unit tests passed across admin (47 tests) and api (304 tests).
+  - `npm run build`: Clean production build bundling `/sw.js` and all static/dynamic routes.
+- **Commit & CI:**
   - Commit: will record next commit
+
+
 
 
 

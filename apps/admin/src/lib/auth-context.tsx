@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { env } from "@/env";
+import { db } from "@/lib/pos/offline/db";
 
 export interface BranchInfo {
   id: string;
@@ -137,6 +138,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (branchToSelect) {
           localStorage.setItem("pos_selected_branch_id", branchToSelect.id);
         }
+        try {
+          db.session.put({ key: "currentUser", value: profile });
+          if (branchToSelect) {
+            db.session.put({ key: "currentBranch", value: branchToSelect });
+          }
+        } catch {}
         return profile;
       }
       return null;
@@ -153,6 +160,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = await executeRefreshToken();
       if (token && isMounted) {
         await fetchUserProfile(token);
+      } else if (typeof window !== "undefined" && !navigator.onLine) {
+        // Offline session restoration from IndexedDB
+        try {
+          const cachedUser = await db.session.get("currentUser");
+          if (cachedUser && cachedUser.value && isMounted) {
+            setUser(cachedUser.value);
+            const cachedBranch = await db.session.get("currentBranch");
+            if (cachedBranch?.value) {
+              setCurrentBranchState(cachedBranch.value);
+            }
+          }
+        } catch {}
       }
       if (isMounted) {
         setIsLoading(false);

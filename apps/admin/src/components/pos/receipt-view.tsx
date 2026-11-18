@@ -170,7 +170,7 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
             <span className="font-bold inline-flex items-center gap-1">
               {receipt.invoiceNumber}
               {(receipt.isOffline || receipt.invoiceNumber.includes("-O-")) && (
-                <span className="text-[9px] bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.2 rounded font-sans uppercase font-bold print:border-black">
+                <span data-testid="offline-receipt-badge" className="text-[9px] bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.2 rounded font-sans uppercase font-bold print:border-black">
                   {strings.pos.offlineMark}
                 </span>
               )}

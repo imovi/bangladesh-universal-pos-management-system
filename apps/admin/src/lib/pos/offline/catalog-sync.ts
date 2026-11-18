@@ -52,11 +52,42 @@ export async function syncCatalog(
       };
     }
 
-    const data = (await res.json()) as PosCatalogResponse;
+    const resJson = await res.json();
+    const data = (resJson.data || resJson) as PosCatalogResponse;
 
     // Update clock offset
     if (data.serverTime) {
       await updateServerClockOffset(data.serverTime);
+    }
+
+    const products = data.products || [];
+    const variants = data.variants || [];
+
+    // Group variants by productId and normalize to PosProductVariant
+    const variantsByProductId = new Map<string, any[]>();
+    for (const v of variants) {
+      const normalizedVariant = {
+        ...v,
+        stockLevels: [
+          {
+            branchId: options.branchId,
+            qty: String(v.stockQty ?? 0),
+          },
+        ],
+        optionValues: (v.optionValues || []).map((ov: any) => ({
+          optionValue: {
+            value: ov.value,
+            option: {
+              name: ov.optionName || ov.name,
+            },
+          },
+        })),
+      };
+
+      if (!variantsByProductId.has(v.productId)) {
+        variantsByProductId.set(v.productId, []);
+      }
+      variantsByProductId.get(v.productId)!.push(normalizedVariant);
     }
 
     // Write to Dexie in a single transaction
@@ -66,24 +97,30 @@ export async function syncCatalog(
         await targetDb.stock.clear();
       }
 
-      for (const prod of data.products) {
-        // Collect barcodes from product variants
+      // 1. Update stock table
+      for (const v of variants) {
+        await targetDb.stock.put({
+          variantId: v.id,
+          stockQty: v.stockQty ?? 0,
+          updatedAt: v.updatedAt || new Date().toISOString(),
+        });
+      }
+
+      // 2. Update catalog products
+      for (const prod of products) {
+        const prodVariants = variantsByProductId.get(prod.id) || (prod.variants || []);
         const allBarcodes: string[] = [];
-        if (prod.variants) {
-          for (const v of prod.variants) {
-            if (Array.isArray(v.barcodes)) {
-              allBarcodes.push(...v.barcodes);
-            }
-            // Update stock
-            await targetDb.stock.put({
-              variantId: v.id,
-              stockQty: v.stockQty ?? 0,
-              updatedAt: new Date().toISOString(),
-            });
+        for (const v of prodVariants) {
+          if (Array.isArray(v.barcodes)) {
+            allBarcodes.push(...v.barcodes);
           }
         }
-        prod.barcodes = Array.from(new Set(allBarcodes));
-        await targetDb.catalog.put(prod);
+        const fullProd = {
+          ...prod,
+          variants: prodVariants,
+          barcodes: Array.from(new Set(allBarcodes)),
+        };
+        await targetDb.catalog.put(fullProd);
       }
 
       await targetDb.settings.put({

@@ -20,6 +20,11 @@ test.describe("Step 1: POS Header Layout, Text Node Overlap & Overflow Verificat
 
   // Helper to ensure an open shift exists on REG01 for tests
   async function ensureOpenShift(request: any, token: string) {
+    const meRes = await request.get("http://localhost:4000/api/v1/auth/me", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const me = (await meRes.json()).data;
+
     const branchRes = await request.get("http://localhost:4000/api/v1/branches", {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -29,7 +34,8 @@ test.describe("Step 1: POS Header Layout, Text Node Overlap & Overflow Verificat
     const regRes = await request.get(`http://localhost:4000/api/v1/registers?branchId=${branch.id}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    const reg = (await regRes.json()).data[0];
+    const registers = (await regRes.json()).data || [];
+    const reg = registers[0];
 
     // Check shift status
     const shiftRes = await request.get(`http://localhost:4000/api/v1/shifts?registerId=${reg.id}&status=open`, {
@@ -37,7 +43,23 @@ test.describe("Step 1: POS Header Layout, Text Node Overlap & Overflow Verificat
     });
     const shiftData = await shiftRes.json();
     const items = shiftData.data?.items || shiftData.data || [];
-    if (!items.length) {
+
+    // If open shift belongs to another cashier, close it first
+    for (const item of items) {
+      if (item.cashierUserId !== me.id) {
+        await request.post(`http://localhost:4000/api/v1/shifts/${item.id}/close`, {
+          headers: { Authorization: `Bearer ${token}` },
+          data: { closingCashMinor: Number(item.openingCashMinor || 50000) },
+        }).catch(() => {});
+      }
+    }
+
+    // Re-check shift for current user
+    const checkRes = await request.get(`http://localhost:4000/api/v1/shifts?registerId=${reg.id}&status=open`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const remaining = (await checkRes.json()).data?.items || [];
+    if (!remaining.length) {
       await request.post("http://localhost:4000/api/v1/shifts/open", {
         headers: { Authorization: `Bearer ${token}` },
         data: {
@@ -67,14 +89,23 @@ test.describe("Step 1: POS Header Layout, Text Node Overlap & Overflow Verificat
     });
     expect(loginRes.ok()).toBe(true);
     const token = (await loginRes.json()).data.accessToken;
-    await ensureOpenShift(request, token);
+    const { branchId, registerId } = await ensureOpenShift(request, token);
 
     // Sign in on UI
-    await page.goto("http://localhost:3000/login?from=/pos");
+    await page.goto("http://localhost:3000/login");
     await page.fill("#tenantSlug", "artisan-apparel");
     await page.fill("#email", "owner@artisan.com");
     await page.fill("#password", "Password123!");
     await page.click('button[type="submit"]');
+    await page.waitForURL("**/dashboard", { timeout: 15000 });
+
+    // Set branch and register in localStorage
+    await page.evaluate(({ bId, rId }) => {
+      localStorage.setItem("pos_selected_branch_id", bId);
+      localStorage.setItem(`pos_reg_${bId}`, rId);
+    }, { bId: branchId, rId: registerId });
+
+    await page.goto("http://localhost:3000/pos");
     await page.waitForURL("**/pos", { timeout: 15000 });
 
     const header = page.locator("header");
@@ -269,11 +300,19 @@ test.describe("Step 1: POS Header Layout, Text Node Overlap & Overflow Verificat
 
     try {
       // Re-login on UI to pick up new user name
-      await page.goto("http://localhost:3000/login?from=/pos");
+      await page.goto("http://localhost:3000/login");
       await page.fill("#tenantSlug", "artisan-apparel");
       await page.fill("#email", "owner@artisan.com");
       await page.fill("#password", "Password123!");
       await page.click('button[type="submit"]');
+      await page.waitForURL("**/dashboard", { timeout: 15000 });
+
+      await page.evaluate(({ bId, rId }) => {
+        localStorage.setItem("pos_selected_branch_id", bId);
+        localStorage.setItem(`pos_reg_${bId}`, rId);
+      }, { bId: branchId, rId: registerId });
+
+      await page.goto("http://localhost:3000/pos");
       await page.waitForURL("**/pos", { timeout: 15000 });
 
       const header = page.locator("header");
@@ -401,14 +440,23 @@ test.describe("Step 1: POS Header Layout, Text Node Overlap & Overflow Verificat
     });
     expect(loginRes.ok()).toBe(true);
     const token = (await loginRes.json()).data.accessToken;
-    await ensureOpenShift(request, token);
+    const { branchId, registerId } = await ensureOpenShift(request, token);
 
     // Sign in on UI
-    await page.goto("http://localhost:3000/login?from=/pos");
+    await page.goto("http://localhost:3000/login");
     await page.fill("#tenantSlug", "artisan-apparel");
     await page.fill("#email", "owner@artisan.com");
     await page.fill("#password", "Password123!");
     await page.click('button[type="submit"]');
+    await page.waitForURL("**/dashboard", { timeout: 15000 });
+
+    // Set branch and register in localStorage
+    await page.evaluate(({ bId, rId }) => {
+      localStorage.setItem("pos_selected_branch_id", bId);
+      localStorage.setItem(`pos_reg_${bId}`, rId);
+    }, { bId: branchId, rId: registerId });
+
+    await page.goto("http://localhost:3000/pos");
     await page.waitForURL("**/pos", { timeout: 15000 });
 
     const header = page.locator("header");

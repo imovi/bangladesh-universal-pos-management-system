@@ -32,6 +32,10 @@ export async function acquireRegisterTabLock(
             resolveAcquired(false);
             return;
           }
+          if (released) {
+            resolveAcquired(false);
+            return;
+          }
           acquired = true;
           resolveAcquired(true);
 

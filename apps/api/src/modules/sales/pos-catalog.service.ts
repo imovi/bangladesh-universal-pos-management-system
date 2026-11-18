@@ -23,7 +23,10 @@ export class PosCatalogService {
 
       if (isValidDate) {
         productWhere.updatedAt = { gte: sinceDate };
-        variantWhere.updatedAt = { gte: sinceDate };
+        variantWhere.OR = [
+          { updatedAt: { gte: sinceDate } },
+          { stockLevels: { some: { branchId, updatedAt: { gte: sinceDate } } } },
+        ];
         categoryWhere.updatedAt = { gte: sinceDate };
         taxWhere.updatedAt = { gte: sinceDate };
       }
@@ -53,7 +56,7 @@ export class PosCatalogService {
             barcodes: true,
             stockLevels: {
               where: { branchId },
-              select: { qty: true },
+              select: { qty: true, updatedAt: true },
             },
           },
         }),

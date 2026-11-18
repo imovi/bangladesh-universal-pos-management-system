@@ -37,6 +37,7 @@ async function defaultSender(
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    "Idempotency-Key": item.idempotencyKey,
     "x-idempotency-key": item.idempotencyKey,
   };
   if (token) {

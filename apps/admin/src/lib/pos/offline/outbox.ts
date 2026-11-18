@@ -16,7 +16,7 @@ export async function enqueueSale(
 ): Promise<EnqueueSaleResult> {
   const targetDb = database || db;
   const outboxId = crypto.randomUUID();
-  const idempotencyKey = crypto.randomUUID();
+  const idempotencyKey = salePayload.id || crypto.randomUUID();
   const invoiceNumber = salePayload.invoiceNumber;
 
   if (!invoiceNumber) {
@@ -66,6 +66,16 @@ export async function enqueueSale(
             const vIndex = product.variants.findIndex((v) => v.id === item.variantId);
             if (vIndex >= 0) {
               product.variants[vIndex].stockQty = newQty;
+              const vAny = product.variants[vIndex] as any;
+              if (vAny.stockLevels && Array.isArray(vAny.stockLevels)) {
+                for (const sl of vAny.stockLevels) {
+                  if (!sl.branchId || sl.branchId === salePayload.branchId) {
+                    sl.qty = String(newQty);
+                  }
+                }
+              } else {
+                vAny.stockLevels = [{ branchId: salePayload.branchId, qty: String(newQty) }];
+              }
               await targetDb.catalog.put(product);
             }
           }
@@ -83,8 +93,8 @@ export async function enqueueCustomer(
 ): Promise<{ outboxId: string; customerId: string }> {
   const targetDb = database || db;
   const outboxId = crypto.randomUUID();
-  const idempotencyKey = crypto.randomUUID();
   const customerId = customerPayload.id || crypto.randomUUID();
+  const idempotencyKey = customerId;
   const payloadWithId = { ...customerPayload, id: customerId };
 
   const outboxItem: OfflineOutboxItem = {

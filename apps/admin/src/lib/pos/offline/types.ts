@@ -96,6 +96,7 @@ export interface OfflineCounter {
 
 export interface PosCatalogResponse {
   products: OfflineCatalogProduct[];
+  variants?: any[];
   categories: { id: string; name: string }[];
   taxClasses: { id: string; name: string; ratePercent: number }[];
   catalogVersion: number;

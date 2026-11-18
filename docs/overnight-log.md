@@ -1547,6 +1547,18 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - `npm run lint`: 0 errors, 0 warnings across all workspaces.
   - `npm test`: 8 test files passed (47 tests) in admin, 50 test files passed (304 tests) in api. All 58 test files (351 tests) passed (100%).
   - `npm run build`: Clean compilation across `@universal-pos/shared`, `@universal-pos/admin`, and `@universal-pos/api`.
+- **Commit & CI (Initial Attempt):**
+  - Commit: `d88dec0`
+  - GitHub Actions CI Run: [44293147054](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44293147054) — **Status: completed, Conclusion: failure (Red)**
+  - Cause of failure in CI:
+    1. `POST /sales` outbox sender sent `"x-idempotency-key"` rather than `"Idempotency-Key"`, and `enqueueSale` generated a random UUID different from `salePayload.id`, violating the NestJS `IDEMPOTENCY_KEY_MISMATCH` check on the server.
+    2. `syncCatalog` in `catalog-sync.ts` assumed `variants` were nested inside `products`, whereas `GET /pos/catalog` returns a normalized flat `variants` array, causing products to render with undefined variants and 0 stock.
+    3. `pos-catalog.service.ts` omitted `stockLevels.updatedAt` in delta queries, so stock decrements weren't tracked when querying `?since=`.
+    4. `outbox.ts` decremented `stockQty` on variant without updating `stockLevels[0].qty` on the cached catalog product, causing stock on reload to read stale.
+    5. `pos-header-layout.spec.ts` lacked branch and register localStorage keys and did not close foreign open shifts on REG01 from demo seed data.
+  - Fix: Applied fixes across `outbox.ts`, `sync-worker.ts`, `catalog-sync.ts`, `pos-catalog.service.ts`, `pos/page.tsx`, `tab-lock.ts`, and `pos-header-layout.spec.ts`.
+  - Re-verification: `pos-flow.spec.ts` (5/5 passed), `pos-header-layout.spec.ts` (3/3 passed), `npm run lint` (0 errors), `npm test` (351 tests passed).
+
 
 
 

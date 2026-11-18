@@ -271,6 +271,7 @@ export default function PosPage() {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              "Idempotency-Key": item.idempotencyKey,
               "x-idempotency-key": item.idempotencyKey,
             },
             body: JSON.stringify(item.payload),
@@ -308,6 +309,7 @@ export default function PosPage() {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              "Idempotency-Key": item.idempotencyKey,
               "x-idempotency-key": item.idempotencyKey,
             },
             body: JSON.stringify(item.payload),
@@ -355,16 +357,22 @@ export default function PosPage() {
   // Tab lock per register
   useEffect(() => {
     if (!selectedRegister?.id) return;
+    let cancelled = false;
     let lockHandle: any = null;
 
     acquireRegisterTabLock(selectedRegister.id, () => {
-      setIsTabLockedOut(true);
+      if (!cancelled) setIsTabLockedOut(true);
     }).then((handle) => {
+      if (cancelled) {
+        handle.release();
+        return;
+      }
       lockHandle = handle;
       setIsTabLockedOut(!handle.hasLock);
     });
 
     return () => {
+      cancelled = true;
       if (lockHandle) {
         lockHandle.release();
       }
@@ -487,20 +495,26 @@ export default function PosPage() {
 
     // 2. If online, perform catalog delta sync
     if (typeof window !== "undefined" && navigator.onLine) {
+      let syncSucceeded = false;
       try {
-        await syncCatalog({
+        const result = await syncCatalog({
           branchId,
           customFetcher: async (url, init) => {
             const path = url.replace(/^https?:\/\/[^/]+(\/api\/v1)?/, "");
             return apiFetch(path, init);
           },
         });
-        const updated = await db.catalog.toArray();
-        if (updated.length > 0) {
-          setProducts(updated as any);
+        if (result.success) {
+          const updated = await db.catalog.toArray();
+          if (updated.length > 0) {
+            setProducts(updated as any);
+            syncSucceeded = true;
+          }
         }
-      } catch {
-        // Fallback to legacy endpoint if catalog sync fails
+      } catch {}
+
+      if (!syncSucceeded) {
+        // Fallback to legacy endpoint if catalog sync fails or yields empty
         try {
           const prodUrl = `/products?branchId=${branchId}&limit=100`;
           const prodRes = await apiFetch(prodUrl);
@@ -1124,6 +1138,7 @@ export default function PosPage() {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
+                "Idempotency-Key": item.idempotencyKey,
                 "x-idempotency-key": item.idempotencyKey,
               },
               body: JSON.stringify(item.payload),

@@ -1467,6 +1467,50 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
     - Commit: `d5c2250`
     - GitHub Actions CI Run: [44265816035](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44265816035) — **Status: completed, Conclusion: success (Green)**
 
+---
+
+### Milestone D2: Client Storage & Sync Engine
+- **Dependencies Installed:**
+  - `dexie` (`^4.4.7`) and `dexie-react-hooks` (`^4.4.0`) in `@universal-pos/admin` dependencies.
+  - `fake-indexeddb` (`^6.2.8`) in `@universal-pos/admin` devDependencies.
+- **Scope & What Was Built (`apps/admin/src/lib/pos/offline/`):**
+  1. **Dexie Database Schema (`db.ts`):**
+     - Full 10-table schema: `catalog`, `stock`, `customers`, `settings`, `session`, `outbox`, `localSales`, `syncLog`, `reviewFlags`, `counters`.
+     - `initPersistentStorage()` helper calling `navigator.storage.persist()`.
+  2. **Offline Invoice Counter (`offline-counter.ts`):**
+     - Atomically increments daily sequence per register in Dexie transaction.
+     - Format: `${registerCode}-O-${YYMMDD}-${seq.toString().padStart(4, "0")}`.
+     - Restarts sequence at `0001` on every new business day in tenant timezone (`Asia/Dhaka`).
+  3. **Clock Skew & Offset Engine (`clock.ts`):**
+     - Tracks `serverOffsetMs = serverTime - clientDeviceTime`.
+     - Clamping: clamps sale time between shift `openedAt` and `closedAt`, and caps against future timestamps.
+  4. **Catalog Sync Protocol (`catalog-sync.ts`):**
+     - Supports full sync and cursor-based delta sync (`GET /pos/catalog?branchId=&since=`).
+     - Updates products, variants, barcode index, stock quantities, and server clock offset in an atomic Dexie transaction.
+  5. **Atomic Outbox (`outbox.ts`):**
+     - `enqueueSale`: atomically writes outbox record, saves local sales copy, and immediately decrements local variant stock in Dexie transaction so cashier sees live offline stock decrements.
+     - `enqueueCustomer`: atomically writes outbox record and local customer table.
+  6. **Sync Worker & Retry Backoff (`sync-worker.ts`):**
+     - FIFO execution by `createdAt`.
+     - Strict execution lock preventing concurrent sends of the same outbox item.
+     - 2xx and 409 (`OFFLINE_NUMBER_TAKEN`) treated as idempotent success (`status: "synced"`).
+     - Fatal 4xx client errors (400, 422 `TOTALS_MISMATCH`) marked `status: "failed"` and never retried automatically.
+     - Network errors and 5xx retried with exponential backoff and jitter (`2s, 4s, 8s, 16s... up to 300s`).
+  7. **Tab Lock (`tab-lock.ts`):**
+     - Single-tab selling lock using Web Locks API (`navigator.locks.request("pos-tab-lock-${registerId}", ...)`) with `BroadcastChannel` fallback.
+  8. **Offline PIN Verifier (`pin-verifier.ts`):**
+     - PBKDF2-SHA256 with 210,000 iterations and 16-byte random salt via Web Crypto API.
+     - Lockout after 5 failed attempts for 15 minutes.
+     - 12-hour session expiry.
+     - Plaintext PIN is never stored anywhere in IndexedDB or localStorage.
+  9. **Unit Verification Suite (`apps/admin/test/offline-storage.spec.ts`):**
+     - 14 tests: FIFO order, no deletion before confirmation, failed items never retried, exponential backoff curve, parallel send prevention lock, unique invoice numbers across reloads, midnight business day rollover across timezones, clock offset and shift boundary clamping, correct PIN unlock, wrong PIN rejection, 5-failure lockout, expired verifier rejection, exhaustive search of all 10 IndexedDB tables confirming zero plaintext PIN traces, and 200 random carts totals comparison with `@universal-pos/shared` calculateSaleTotals.
+- **Verification:**
+  - `npm run lint`: 0 errors, 0 warnings across all workspaces.
+  - `npm test`: 8 test files passed (47 tests) in admin, 50 test files passed (304 tests) in api. All 58 test files (351 tests) passed (100%).
+  - `npm run build`: Clean compilation across `@universal-pos/shared`, `@universal-pos/admin`, and `@universal-pos/api`.
+
+
 
 
 

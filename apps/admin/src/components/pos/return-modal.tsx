@@ -118,9 +118,7 @@ export function ReturnModal({
         // Find sale by invoiceNumber or id
         const res = await apiFetch(`/sales?search=${encodeURIComponent(q)}&limit=1`);
         if (!res.ok) {
-          setSearchError(
-            locale === "bn" ? "ইনভয়েস অনুসন্ধান ব্যর্থ হয়েছে" : "Failed to search invoice",
-          );
+          setSearchError(strings.pos.searchInvoiceFailed);
           return;
         }
 
@@ -132,22 +130,14 @@ export function ReturnModal({
         );
 
         if (!found) {
-          setSearchError(
-            locale === "bn"
-              ? "এই নম্বরের কোন বিক্রয় রশিদ পাওয়া যায়নি"
-              : "No sale found with this invoice number",
-          );
+          setSearchError(strings.pos.invoiceNotFound);
           return;
         }
 
         // Fetch full sale detail
         const detailRes = await apiFetch(`/sales/${found.id}`);
         if (!detailRes.ok) {
-          setSearchError(
-            locale === "bn"
-              ? "বিক্রয় বিবরণ লোড করতে সমস্যা হয়েছে"
-              : "Failed to load sale details",
-          );
+          setSearchError(strings.pos.searchInvoiceFailed);
           return;
         }
 
@@ -155,11 +145,7 @@ export function ReturnModal({
         const saleData = detailJson.data;
 
         if (saleData.status === "voided") {
-          setSearchError(
-            locale === "bn"
-              ? "এই বিক্রয়টি বাতিলকৃত (Voided), পণ্য ফেরত সম্ভব নয়"
-              : "This sale is voided, returns are not allowed",
-          );
+          setSearchError(strings.pos.saleVoidedNoReturn);
           return;
         }
 
@@ -204,9 +190,7 @@ export function ReturnModal({
         setReturnLines(lines);
       } catch {
         setSearchError(
-          locale === "bn"
-            ? "সার্ভারের সাথে সংযোগে ত্রুটি হয়েছে"
-            : "Error connecting to server",
+          strings.common.networkError,
         );
       } finally {
         setSearching(false);
@@ -261,21 +245,13 @@ export function ReturnModal({
     if (!sale) return;
     const selected = returnLines.filter((l) => l.selectedQty > 0);
     if (selected.length === 0) {
-      setSubmitError(
-        locale === "bn"
-          ? "অন্তত একটি পণ্যের ফেরত পরিমাণ নির্বাচন করুন"
-          : "Please select quantity for at least one item",
-      );
+      setSubmitError(strings.pos.selectAtLeastOneReturnItem);
       return;
     }
 
     if (isOutsideWindow) {
       if (!overrideReason.trim() || overrideReason.trim().length < 3) {
-        setSubmitError(
-          locale === "bn"
-            ? "৭ দিনের সময়সীমা পার হওয়ায় অনুমোদনের কারণ আবশ্যক"
-            : "Override reason required for returns past return window",
-        );
+        setSubmitError(strings.pos.reasonRequiredPrompt);
         return;
       }
     }
@@ -283,9 +259,7 @@ export function ReturnModal({
     // Check drawer cash for cash refund
     if (drawerCashMinor > 0 && refundMethod === "cash" && estimatedRefundMinor > drawerCashMinor) {
       setSubmitError(
-        locale === "bn"
-          ? `ক্যাশ ড্রয়ারে পর্যাপ্ত নগদ টাকা নেই (ড্রয়ার ব্যালেন্স: ${formatMoney(drawerCashMinor)}, প্রয়োজন: ${formatMoney(estimatedRefundMinor)})`
-          : `Drawer cash insufficient (Drawer: ${formatMoney(drawerCashMinor)}, Required: ${formatMoney(estimatedRefundMinor)})`,
+        `${strings.pos.cashDrawerInsufficient} (${strings.pos.drawerCashLabel}: ${formatMoney(drawerCashMinor)}, ${strings.pos.itemTotal}: ${formatMoney(estimatedRefundMinor)})`,
       );
       return;
     }
@@ -322,7 +296,7 @@ export function ReturnModal({
         setSubmitError(
           errJson.error?.message ||
             errJson.message ||
-            (locale === "bn" ? "ফেরত সম্পন্ন হতে ব্যর্থ হয়েছে" : "Failed to process return"),
+            strings.pos.returnFailed,
         );
         return;
       }
@@ -340,9 +314,7 @@ export function ReturnModal({
       }
     } catch {
       setSubmitError(
-        locale === "bn"
-          ? "সার্ভারের সাথে সংযোগে ত্রুটি হয়েছে"
-          : "Network error processing return",
+        strings.common.networkError,
       );
     } finally {
       setSubmitting(false);
@@ -371,18 +343,14 @@ export function ReturnModal({
 
     if (selected.length === 0) {
       setSubmitError(
-        locale === "bn"
-          ? "বদল করার জন্য অন্তত একটি পণ্য নির্বাচন করুন"
-          : "Please select at least one item to exchange",
+        strings.pos.selectAtLeastOneReturnItem,
       );
       return;
     }
 
     if (isOutsideWindow && (!overrideReason.trim() || overrideReason.trim().length < 3)) {
       setSubmitError(
-        locale === "bn"
-          ? "৭ দিনের সময়সীমা পার হওয়ায় অনুমোদনের কারণ আবশ্যক"
-          : "Override reason required for exchange past return window",
+        strings.pos.reasonRequiredPrompt,
       );
       return;
     }
@@ -412,12 +380,8 @@ export function ReturnModal({
           <DialogTitle className="flex items-center gap-2 text-xl font-bold">
             <RotateCcw className="h-5 w-5 text-amber-600" />
             {completedReturn
-              ? locale === "bn"
-                ? "ফেরত রসিদ (Return Receipt)"
-                : "Return Receipt"
-              : locale === "bn"
-              ? "পণ্য ফেরত ও বদল (Returns & Exchanges)"
-              : "Returns & Exchanges"}
+              ? strings.pos.returnReceiptTitle
+              : strings.pos.salesReturnExchangeTitle}
           </DialogTitle>
         </DialogHeader>
 
@@ -439,11 +403,7 @@ export function ReturnModal({
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-neutral-400" />
                 <Input
                   data-testid="return-invoice-input"
-                  placeholder={
-                    locale === "bn"
-                      ? "মূল ইনভয়েস নম্বর লিখুন বা স্ক্যান করুন (যেমন: REG01-261116-0001)..."
-                      : "Scan or enter invoice number..."
-                  }
+                  placeholder={strings.pos.enterInvoiceToReturn}
                   value={invoiceQuery}
                   onChange={(e) => setInvoiceQuery(e.target.value)}
                   onKeyDown={(e) => {
@@ -463,10 +423,8 @@ export function ReturnModal({
               >
                 {searching ? (
                   <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : locale === "bn" ? (
-                  "খুঁজুন"
                 ) : (
-                  "Find Sale"
+                  strings.pos.searchButton
                 )}
               </Button>
             </div>
@@ -499,11 +457,11 @@ export function ReturnModal({
                     {isOutsideWindow && (
                       <Badge variant="outline" className="border-amber-400 text-amber-700 bg-amber-50">
                         <AlertTriangle className="h-3 w-3 mr-1" />
-                        {locale === "bn" ? "৭ দিন অতিক্রান্ত (অনুমোদন প্রযোজ্য)" : "Return Window Exceeded"}
+                        {strings.pos.returnWindowExceeded}
                       </Badge>
                     )}
                     <Badge variant="secondary" className="font-mono">
-                      {locale === "bn" ? "মূল বিক্রি:" : "Original Total:"}{" "}
+                      {strings.pos.originalTotal}{" "}
                       {formatMoney(sale.totalMinor)}
                     </Badge>
                   </div>
@@ -514,16 +472,10 @@ export function ReturnModal({
                   <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg space-y-1.5">
                     <label className="text-xs font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-1">
                       <AlertTriangle className="h-3.5 w-3.5" />
-                      {locale === "bn"
-                        ? "সময়সীমা অতিক্রান্ত ওভাররাইড কারণ (ম্যানেজার/মালিক অনুমোদন):"
-                        : "Override Reason (Manager/Owner override required):"}
+                      {strings.pos.reasonRequiredPrompt}
                     </label>
                     <Input
-                      placeholder={
-                        locale === "bn"
-                          ? "সময় পার হওয়ার পরেও ফেরত নেওয়ার কারণ লিখুন..."
-                          : "State reason for accepting late return..."
-                      }
+                      placeholder={strings.pos.reasonPlaceholder}
                       value={overrideReason}
                       onChange={(e) => setOverrideReason(e.target.value)}
                       className="bg-white dark:bg-neutral-900 text-xs"
@@ -542,15 +494,11 @@ export function ReturnModal({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                   <div>
                     <label className="text-xs font-medium text-neutral-600 dark:text-neutral-400 block mb-1">
-                      {locale === "bn" ? "ফেরতের কারণ:" : "Return Reason:"}
+                      {strings.pos.returnReasonLabel}
                     </label>
                     <Input
                       data-testid="return-reason-input"
-                      placeholder={
-                        locale === "bn"
-                          ? "যেমন: সাইজ সমস্যা, পণ্য পছন্দ হয়নি..."
-                          : "E.g. Size mismatch, defective..."
-                      }
+                      placeholder={strings.pos.reasonPlaceholder}
                       value={returnReason}
                       onChange={(e) => setReturnReason(e.target.value)}
                       className="text-xs"
@@ -559,9 +507,7 @@ export function ReturnModal({
 
                   <div>
                     <label className="text-xs font-medium text-neutral-600 dark:text-neutral-400 block mb-1">
-                      {locale === "bn"
-                        ? "রিফান্ড মাধ্যম (শুধু ফেরতের জন্য):"
-                        : "Refund Method (Return Only):"}
+                      {strings.pos.refundMethodLabel}
                     </label>
                     <Select value={refundMethod} onValueChange={setRefundMethod}>
                       <SelectTrigger className="text-xs" data-testid="refund-method-select">
@@ -570,7 +516,7 @@ export function ReturnModal({
                       <SelectContent>
                         <SelectItem value="cash">
                           {formatPaymentMethod("cash", strings)} (
-                          {locale === "bn" ? "ড্রয়ার ক্যাশ:" : "Drawer:"}{" "}
+                          {strings.pos.drawerCashLabel}{" "}
                           {formatMoney(drawerCashMinor)})
                         </SelectItem>
                         <SelectItem value="card">{formatPaymentMethod("card", strings)}</SelectItem>
@@ -586,20 +532,16 @@ export function ReturnModal({
                 <div className="p-4 bg-neutral-100 dark:bg-neutral-800 rounded-xl flex items-center justify-between">
                   <div>
                     <span className="text-xs text-neutral-500 block">
-                      {locale === "bn"
-                        ? "নির্বাচিত ফেরত আইটেম:"
-                        : "Selected Return Items:"}
+                      {strings.pos.totalSelectedUnits}:
                     </span>
                     <span className="text-sm font-semibold">
-                      {totalSelectedQty} {locale === "bn" ? "টি" : "units"}
+                      {totalSelectedQty} {strings.common.units}
                     </span>
                   </div>
 
                   <div className="text-right">
                     <span className="text-xs text-neutral-500 block">
-                      {locale === "bn"
-                        ? "মোট আনুমানিক রিফান্ড:"
-                        : "Estimated Refund Total:"}
+                      {strings.pos.estimatedRefund}:
                     </span>
                     <span className="text-2xl font-extrabold text-red-600 dark:text-red-400 font-mono">
                       -{formatMoney(estimatedRefundMinor)}
@@ -624,9 +566,7 @@ export function ReturnModal({
                     data-testid="proceed-exchange-button"
                   >
                     <ArrowRight className="h-4 w-4 mr-2" />
-                    {locale === "bn"
-                      ? "পণ্য বদল করুন (Switch to Exchange)"
-                      : "Proceed to Exchange"}
+                    {strings.pos.exchangeButton}
                   </Button>
 
                   <Button
@@ -642,7 +582,7 @@ export function ReturnModal({
                     ) : (
                       <RotateCcw className="h-4 w-4 mr-2" />
                     )}
-                    {locale === "bn" ? "শুধু টাকা ফেরত দিন" : "Confirm Refund Only"}
+                    {strings.pos.returnOnlyButton}
                   </Button>
                 </div>
               </div>

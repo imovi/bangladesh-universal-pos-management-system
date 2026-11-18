@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { formatMoney, formatDateTime } from "@/lib/utils";
 import { useTranslation } from "@/i18n/context";
+import { formatPaymentMethod } from "@/i18n/formatters";
 import { Button } from "@/components/ui/button";
 import { PrinterPaperSize, getPrinterPaperSize, setPrinterPaperSize } from "@/lib/pos/pos-storage";
 import { Printer, RotateCcw, CheckCircle2 } from "lucide-react";
@@ -68,7 +69,7 @@ interface ReceiptViewProps {
 }
 
 export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: ReceiptViewProps) {
-  const { strings, locale } = useTranslation();
+  const { strings } = useTranslation();
   const [paperSize, setPaperSize] = useState<PrinterPaperSize>(getPrinterPaperSize());
 
   const handleSizeChange = (size: PrinterPaperSize) => {
@@ -81,15 +82,7 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
   };
 
   const getMethodLabel = (method: string) => {
-    const map: Record<string, string> = {
-      cash: locale === "bn" ? "ক্যাশ" : "Cash",
-      bkash: locale === "bn" ? "বিকাশ" : "bKash",
-      nagad: locale === "bn" ? "নগদ" : "Nagad",
-      rocket: locale === "bn" ? "রকেট" : "Rocket",
-      card: locale === "bn" ? "কার্ড" : "Card",
-      bank_transfer: locale === "bn" ? "ব্যাংক ট্রান্সফার" : "Bank Transfer",
-    };
-    return map[method] || method.toUpperCase();
+    return formatPaymentMethod(method, strings);
   };
 
   const widthClass =
@@ -164,7 +157,7 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
           )}
           {receipt.isExchange && (
             <p className="font-bold text-xs uppercase bg-gray-200 py-0.5 rounded mt-1 font-mono">
-              {locale === "bn" ? "পণ্য বদল চালান" : "EXCHANGE RECEIPT"}
+              {strings.pos.exchangeReceipt}
             </p>
           )}
         </div>
@@ -172,28 +165,28 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
         {/* Metadata */}
         <div className="space-y-1 pb-2 mb-2 border-b border-dashed border-gray-400 text-[11px]">
           <div className="flex justify-between">
-            <span>{locale === "bn" ? "চালান নং:" : "Invoice:"}</span>
+            <span>{strings.pos.invoiceNum}:</span>
             <span className="font-bold">{receipt.invoiceNumber}</span>
           </div>
           <div className="flex justify-between">
-            <span>{locale === "bn" ? "তারিখ:" : "Date:"}</span>
+            <span>{strings.pos.date}:</span>
             <span>{formatDateTime(receipt.createdAt, timezone)}</span>
           </div>
           <div className="flex justify-between">
-            <span>{locale === "bn" ? "রেজিস্টার:" : "Register:"}</span>
+            <span>{strings.pos.registerName}:</span>
             <span>{receipt.registerName}</span>
           </div>
           <div className="flex justify-between">
-            <span>{locale === "bn" ? "ক্যাশিয়ার:" : "Cashier:"}</span>
+            <span>{strings.pos.cashierName}:</span>
             <span>{receipt.cashierName}</span>
           </div>
           <div className="flex justify-between">
-            <span>{locale === "bn" ? "ক্রেতা:" : "Customer:"}</span>
-            <span>{receipt.customerName || (locale === "bn" ? "সাধারণ ক্রেতা" : "Walk-in")}</span>
+            <span>{strings.pos.customerLabel}:</span>
+            <span>{receipt.customerName || strings.pos.walkInCustomer}</span>
           </div>
           {receipt.customerPhone && (
             <div className="flex justify-between">
-              <span>{locale === "bn" ? "ফোন:" : "Phone:"}</span>
+              <span>{strings.pos.phoneLabel}:</span>
               <span>{receipt.customerPhone}</span>
             </div>
           )}
@@ -203,10 +196,10 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
         {receipt.exchangeInfo && (
           <div className="pb-2 mb-2 border-b border-dashed border-gray-400 text-[11px] space-y-1 bg-gray-50 p-2 rounded">
             <div className="font-bold text-gray-800">
-              {locale === "bn" ? "ফেরতকৃত পণ্য:" : "Returned Items:"}
+              {strings.pos.returnedItems}:
             </div>
             <div className="text-[10px] text-gray-600">
-              {locale === "bn" ? "মূল চালান:" : "Orig Invoice:"} {receipt.exchangeInfo.originalInvoice}
+              {strings.pos.origInvoice}: {receipt.exchangeInfo.originalInvoice}
             </div>
             {receipt.exchangeInfo.returnedItems.map((ri, idx) => (
               <div key={idx} className="flex justify-between text-[10px]">
@@ -215,7 +208,7 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
               </div>
             ))}
             <div className="flex justify-between font-semibold pt-1 border-t border-gray-200">
-              <span>{locale === "bn" ? "মোট ফেরত জমা:" : "Total Return Credit:"}</span>
+              <span>{strings.pos.totalReturnCredit}:</span>
               <span className="font-mono text-red-600">-{formatMoney(receipt.exchangeInfo.totalRefundMinor)}</span>
             </div>
           </div>
@@ -226,10 +219,10 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
           <table className="w-full text-[11px]">
             <thead>
               <tr className="border-b border-gray-300 text-left">
-                <th className="pb-1">{locale === "bn" ? "বিবরণ" : "Item"}</th>
-                <th className="pb-1 text-center">{locale === "bn" ? "পরিমাণ" : "Qty"}</th>
-                <th className="pb-1 text-right">{locale === "bn" ? "দর" : "Price"}</th>
-                <th className="pb-1 text-right">{locale === "bn" ? "মোট" : "Total"}</th>
+                <th className="pb-1">{strings.pos.itemDesc}</th>
+                <th className="pb-1 text-center">{strings.pos.itemQty}</th>
+                <th className="pb-1 text-right">{strings.pos.itemRate}</th>
+                <th className="pb-1 text-right">{strings.pos.itemTotal}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -277,12 +270,12 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
           )}
           {receipt.exchangeInfo && (
             <div className="flex justify-between text-gray-700">
-              <span>{locale === "bn" ? "ফেরত বাবদ সমন্বয়:" : "Return Credit:"}</span>
+              <span>{strings.pos.returnCreditAdjustment}:</span>
               <span className="tabular-nums font-mono text-red-600">-{formatMoney(receipt.exchangeInfo.totalRefundMinor)}</span>
             </div>
           )}
           <div className="flex justify-between text-sm font-bold pt-1 border-t border-gray-300">
-            <span>{receipt.exchangeInfo ? (locale === "bn" ? "নিট সমন্বয়:" : "Net Difference:") : strings.pos.payable}:</span>
+            <span>{receipt.exchangeInfo ? strings.pos.netDifference : strings.pos.payable}:</span>
             <span className="tabular-nums whitespace-nowrap">
               {receipt.exchangeInfo
                 ? (receipt.exchangeInfo.differenceMinor > 0
@@ -306,7 +299,7 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
           ))}
           {receipt.payments.length > 0 && (
             <div className="flex justify-between font-semibold pt-1 border-t border-gray-200">
-              <span>{locale === "bn" ? "মোট পরিশোধ:" : "Total Paid:"}</span>
+              <span>{strings.pos.totalPaid}:</span>
               <span className="tabular-nums whitespace-nowrap">{formatMoney(receipt.paidMinor)}</span>
             </div>
           )}
@@ -318,13 +311,13 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
           )}
           {(receipt.dueMinor ?? 0) > 0 && (
             <div className="flex justify-between font-bold text-amber-800 pt-1">
-              <span>{locale === "bn" ? "এই ভাউচারে বাকি:" : "Due on Invoice:"}</span>
+              <span>{strings.pos.dueOnInvoice}:</span>
               <span className="tabular-nums whitespace-nowrap">{formatMoney(receipt.dueMinor!)}</span>
             </div>
           )}
           {receipt.customerTotalDueMinor !== undefined && receipt.customerTotalDueMinor > 0 && (
             <div className="flex justify-between font-bold text-red-600 pt-1 border-t border-dashed border-gray-300">
-              <span>{locale === "bn" ? "গ্রাহকের মোট বকেয়া:" : "Total Customer Due:"}</span>
+              <span>{strings.pos.totalCustomerDue}:</span>
               <span className="tabular-nums whitespace-nowrap">{formatMoney(receipt.customerTotalDueMinor)}</span>
             </div>
           )}
@@ -334,7 +327,7 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
         <div className="text-center pt-1 text-[10px] text-gray-600 space-y-1 font-sans">
           {receipt.receiptFooter && <p className="whitespace-pre-wrap">{receipt.receiptFooter}</p>}
           <p className="font-medium text-gray-800">
-            {locale === "bn" ? "ধন্যবাদ আবার আসবেন!" : "Thank you for shopping with us!"}
+            {strings.pos.thankYou}
           </p>
         </div>
       </div>

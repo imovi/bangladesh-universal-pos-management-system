@@ -69,7 +69,7 @@ export function ShiftSalesModal({
       setSelectedSaleForVoid(null);
       setVoidReason("");
     } else {
-      setVoidError(locale === "bn" ? "বিক্রি বাতিল করা যায়নি" : "Failed to void sale");
+      setVoidError(strings.pos.voidFailed);
     }
   };
 
@@ -87,10 +87,10 @@ export function ShiftSalesModal({
             <Receipt className="h-5 w-5 text-primary" />
             <div>
               <h2 id="shift-sales-title" className="text-base font-semibold tracking-tight">
-                {locale === "bn" ? "চলতি শিফটের বিক্রি তালিকা" : "Current Shift Sales"}
+                {strings.pos.currentShiftSales}
               </h2>
               <p className="text-xs text-muted-foreground font-mono">
-                {sales.length} {locale === "bn" ? "টি চালান" : "sales"}
+                {sales.length} {strings.pos.salesCount}
               </p>
             </div>
           </div>
@@ -107,7 +107,7 @@ export function ShiftSalesModal({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={locale === "bn" ? "চালান নম্বর দিয়ে খুঁজুন..." : "Search by invoice..."}
+              placeholder={strings.common.search}
               className="pl-9 h-9 text-xs font-mono"
             />
           </div>
@@ -117,7 +117,7 @@ export function ShiftSalesModal({
         <div className="p-4 overflow-y-auto flex-1">
           {filteredSales.length === 0 ? (
             <div className="text-center py-8 text-xs text-muted-foreground">
-              {locale === "bn" ? "কোনো বিক্রি পাওয়া যায়নি" : "No sales found in this shift"}
+              {strings.common.noData}
             </div>
           ) : (
             <div className="border border-border rounded-xl overflow-hidden divide-y divide-border">
@@ -211,9 +211,7 @@ export function ShiftSalesModal({
               </div>
 
               <p className="text-xs text-muted-foreground">
-                {locale === "bn"
-                  ? `চালান ${selectedSaleForVoid.invoiceNumber} বাতিল করার কারণ লিখুন:`
-                  : `Enter reason for voiding invoice ${selectedSaleForVoid.invoiceNumber}:`}
+                {strings.pos.voidPrompt} {selectedSaleForVoid.invoiceNumber}
               </p>
 
               <form onSubmit={handleConfirmVoid} className="space-y-4">
@@ -221,7 +219,7 @@ export function ShiftSalesModal({
                   type="text"
                   value={voidReason}
                   onChange={(e) => setVoidReason(e.target.value)}
-                  placeholder={locale === "bn" ? "বাতিলের কারণ (বাধ্যতামূলক)..." : "Mandatory void reason..."}
+                  placeholder={strings.pos.mandatoryVoidReason}
                   className="h-10 text-xs"
                   data-testid="void-reason-input"
                   autoFocus

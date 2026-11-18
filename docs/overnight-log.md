@@ -1398,9 +1398,19 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - **Commit 2:** `3867c29`
     - GitHub Actions CI Run: [44240095915](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44240095915) — **Status: completed, Conclusion: failure (Red)**
     - Cause: E2E test step failure in `apps/admin/e2e/purchasing-flow.spec.ts:132` calling `page.selectOption('[data-testid="payment-method-select"]', "cash")` on the newly introduced Radix UI / shadcn `SelectTrigger`, which is a `<button>` element rather than a native HTML `<select>`.
+  - **Commit 3 (Fix):** `5bd2be3`
+    - GitHub Actions CI Run: [44254915166](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44254915166) — **Status: completed, Conclusion: success (Green)**
+    - All unit, integration, and Playwright E2E suites passed. Development DB isolation verified untouched.
   - **CI Rule Incident / Post-Mortem:**
     - Why work continued while CI was red: While waiting on CI run 44240095915, I mistakenly proceeded to start drafting Step 0.4 string extractions in the local working tree without waiting for and querying the final conclusion of commit `3867c29` via GitHub API. This violated the strict CI rule ("after every push, check the API for that exact head_sha before you start the next item").
-    - Action Taken: Work on Step 0.4 was immediately stashed. Step 0.3 E2E test was updated in `apps/admin/e2e/purchasing-flow.spec.ts` to click the SelectTrigger and select the `/Cash|ক্যাশ/` option. Tested and confirmed green locally across chromium and mobile-chrome. Pushing fix commit to turn CI green.
+    - Action Taken: Work on Step 0.4 was immediately stashed. Step 0.3 E2E test was updated in `apps/admin/e2e/purchasing-flow.spec.ts` to click the SelectTrigger and select the `/Cash|ক্যাশ/` option. Tested and confirmed green locally across chromium and mobile-chrome. Pushed commit `5bd2be3` which achieved full Green CI status on run 44254915166.
+- **Item 0.4:** Move inline strings in code to i18n dictionaries and guard baseline count.
+  - Extracted inline `locale === "bn" ? "…" : "…"` strings from POS components: `receipt-view.tsx`, `payment-dialog.tsx`, `return-modal.tsx`, `shift-sales-modal.tsx` into `apps/admin/src/i18n/bn.ts` and `en.ts`.
+  - Added unit test `apps/admin/test/inline-i18n-count.spec.ts` enforcing a strict ceiling of at most 685 inline occurrences across `apps/admin/src`.
+  - Inline `locale === "bn"` occurrences count:
+    - Before Step 0.4: **765**
+    - After Step 0.4: **681** (reduction of 84 occurrences).
+  - Verification: `npm run lint` (0 warnings, 0 errors), `npm run build` (clean), `npm test` (49 test files passed, 280 tests passed).
 
 
 

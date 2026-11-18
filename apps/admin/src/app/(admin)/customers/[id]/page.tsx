@@ -16,6 +16,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   ArrowLeft,
   Edit2,
   CreditCard,
@@ -826,19 +833,19 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
               <Label htmlFor="payMethod" className="text-xs font-semibold">
                 {locale === "bn" ? "পরিশোধের মাধ্যম" : "Payment Method"} <span className="text-destructive">*</span>
               </Label>
-              <select
-                id="payMethod"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                className="w-full h-9 px-3 text-sm rounded-md border border-input bg-background text-foreground"
-              >
-                <option value="cash">{locale === "bn" ? "ক্যাশ" : "Cash"}</option>
-                <option value="bkash">{locale === "bn" ? "বিকাশ" : "bKash"}</option>
-                <option value="nagad">{locale === "bn" ? "নগদ" : "Nagad"}</option>
-                <option value="rocket">{locale === "bn" ? "রকেট" : "Rocket"}</option>
-                <option value="card">{locale === "bn" ? "কার্ড" : "Card"}</option>
-                <option value="bank_transfer">{locale === "bn" ? "ব্যাংক ট্রান্সফার" : "Bank Transfer"}</option>
-              </select>
+              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                <SelectTrigger id="payMethod" className="w-full h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">{locale === "bn" ? "ক্যাশ" : "Cash"}</SelectItem>
+                  <SelectItem value="bkash">{locale === "bn" ? "বিকাশ" : "bKash"}</SelectItem>
+                  <SelectItem value="nagad">{locale === "bn" ? "নগদ" : "Nagad"}</SelectItem>
+                  <SelectItem value="rocket">{locale === "bn" ? "রকেট" : "Rocket"}</SelectItem>
+                  <SelectItem value="card">{locale === "bn" ? "কার্ড" : "Card"}</SelectItem>
+                  <SelectItem value="bank_transfer">{locale === "bn" ? "ব্যাংক ট্রান্সফার" : "Bank Transfer"}</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-1.5">

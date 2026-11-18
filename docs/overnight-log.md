@@ -1388,5 +1388,10 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
 - **Item 0.2:** Hide database name in `/api/v1/health` for production mode.
   - Design Choice: Return `databaseName` only when `process.env.NODE_ENV !== "production"`. In production environments (`NODE_ENV === "production"`), `databaseName` is excluded completely from the response to prevent information disclosure.
   - Test: Added `apps/api/test/health.spec.ts` asserting that `databaseName` is omitted when `NODE_ENV === "production"` and returned when in development or test.
+  - Commit: `472498f`
+  - GitHub Actions CI Run: [44237562001](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44237562001) — **Status: completed, Conclusion: success (Green)**.
+- **Item 0.3:** Shared shadcn Select for payment method selection.
+  - Replaced native HTML `<select>` with shared shadcn `Select`, `SelectTrigger`, `SelectValue`, `SelectContent`, `SelectItem` in customer due collection modal (`apps/admin/src/app/(admin)/customers/[id]/page.tsx`) and supplier payment dialog (`apps/admin/src/app/(admin)/purchasing/suppliers/page.tsx`).
+
 
 

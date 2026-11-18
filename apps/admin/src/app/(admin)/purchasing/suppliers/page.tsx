@@ -13,6 +13,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Plus,
   Search,
   FileText,
@@ -759,21 +766,20 @@ export default function SuppliersPage() {
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">
+              <label htmlFor="payment-method" className="text-xs font-semibold text-muted-foreground block mb-1">
                 {strings.purchasing.paymentMethod} *
               </label>
-              <select
-                id="payment-method"
-                data-testid="payment-method-select"
-                value={paymentMethod}
-                onChange={(e: any) => setPaymentMethod(e.target.value)}
-                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-              >
-                <option value="cash">{strings.purchasing.payMethodCash}</option>
-                <option value="bank_transfer">{strings.purchasing.payMethodBank}</option>
-                <option value="cheque">{strings.purchasing.payMethodCheque}</option>
-                <option value="mobile_banking">{strings.purchasing.payMethodMfs}</option>
-              </select>
+              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                <SelectTrigger id="payment-method" data-testid="payment-method-select" className="w-full h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">{strings.purchasing.payMethodCash}</SelectItem>
+                  <SelectItem value="bank_transfer">{strings.purchasing.payMethodBank}</SelectItem>
+                  <SelectItem value="cheque">{strings.purchasing.payMethodCheque}</SelectItem>
+                  <SelectItem value="mobile_banking">{strings.purchasing.payMethodMfs}</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div>

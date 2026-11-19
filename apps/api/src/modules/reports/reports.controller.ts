@@ -3,7 +3,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard.js";
 import { PermissionsGuard } from "../../common/guards/permissions.guard.js";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator.js";
 import { PERMISSIONS } from "@universal-pos/shared";
-import { ReportsService, ReportDateFilter } from "./reports.service.js";
+import { ReportsService, type ReportDateFilter } from "./reports.service.js";
 
 @Controller("reports")
 @UseGuards(JwtAuthGuard, PermissionsGuard)

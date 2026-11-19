@@ -1715,21 +1715,16 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - **Fixes Applied & CI Iteration:**
     - Initial push `c6283c2` triggered CI Run `44580903756` (Conclusion: `WORKFLOW_RUN_CONCLUSION_FAILURE`). CI failed in step "Seed demo dataset" (`npm run seed:demo`) because `seed-demo.ts` was made to require `--yes` even for `universal_pos`.
     - Push `442dbd4` allowed `seed:demo` on `universal_pos` and triggered CI Run `44581892201` (Conclusion: `WORKFLOW_RUN_CONCLUSION_FAILURE`). CI reached E2E tests and failed on `offline-selling.spec.ts` (Scenario 2) due to: (1) `navigator.serviceWorker.ready` hanging indefinitely without a fallback timeout in headless environment, and (2) `pos-catalog.service.ts` computing offline sequence using UTC `now.toISOString()` instead of `Asia/Dhaka` `formatDateKey()`, resulting in 0 sequence across date boundaries.
-    - Fix applied: added 5000ms `Promise.race` timeout to `navigator.serviceWorker.ready` in Scenario 2, corrected `todayYymmdd` to `formatDateKey(now, "Asia/Dhaka")` in `pos-catalog.service.ts`, and committed matching `public/sw.js`.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    - Fix applied in commit `9bc0f2c`: added 5000ms `Promise.race` timeout to `navigator.serviceWorker.ready` in Scenario 2, corrected `todayYymmdd` to `formatDateKey(now, "Asia/Dhaka")` in `pos-catalog.service.ts`, and committed matching `public/sw.js`.
+    
+- **Fix 5: Restore `start:dev` Decorator Metadata and Document Manual Run:**
+  - **Investigation & Cause:** `tsx watch src/main.ts` in `apps/api/package.json` stripped TypeScript decorator metadata (`design:paramtypes`) during esbuild bundling, preventing NestJS dependency injection from resolving services (e.g. `AuthService`).
+  - **Fix Applied:**
+    - Created `apps/api/scripts/dev.mjs` orchestrating `tsc -p tsconfig.build.json --watch` (which preserves `emitDecoratorMetadata: true`) alongside `node --watch dist/main.js`.
+    - Updated `apps/api/package.json` `"start:dev": "node scripts/dev.mjs"`.
+    - Fixed type-only import in `apps/api/src/modules/reports/reports.controller.ts` (`import { ReportsService, type ReportDateFilter }`).
+    - Added Section 5 ("Running the Application by Hand on the Development Database") to `docs/offline-mode.md` detailing prerequisites, dev database seeding, dev server launch, and credentials.
+    - Verified dev login manually via curl to `http://localhost:4000/api/v1/auth/login` returning 200 OK with tokens and user info.
 
 
 

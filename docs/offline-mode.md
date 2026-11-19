@@ -116,3 +116,55 @@ Since an offline transaction has already physically occurred and the customer ha
 5. **Shift Closed on Server:** Accepted into shift; shift summary adjusted with audit trail; flagged as `SHIFT_CLOSED`.
 6. **Integrity / Math Failure (`TOTALS_MISMATCH`):** Rejected with 422. Held in client outbox marked as `failed` for review.
 7. **Duplicate Offline Number (`OFFLINE_NUMBER_TAKEN`):** Rejected with 409. Held in client outbox for operator intervention.
+
+---
+
+## 5. Running the Application by Hand on the Development Database
+
+To run and test the complete application locally using the development database (`universal_pos`):
+
+1. **Ensure PostgreSQL & Redis containers are running:**
+   ```bash
+   npm run docker:up
+   ```
+
+2. **Ensure development database is migrated and seeded:**
+   ```bash
+   # For a fresh reset of universal_pos (requires explicit --yes confirmation):
+   npm run db:reset:dev -- --yes
+
+   # Or seed demo data into universal_pos directly:
+   npm run seed:demo
+   ```
+
+3. **Start the API Server in development mode:**
+   ```bash
+   npm --workspace=@universal-pos/api run start:dev
+   ```
+   *Note:* `npm run start:dev` runs `node scripts/dev.mjs`, which runs the TypeScript compiler in watch mode (`tsc --watch`) with full `emitDecoratorMetadata` preserved, coupled with Node `--watch` on `dist/main.js`. This guarantees that NestJS dependency injection works properly on all routes (including authentication).
+   Alternatively, build and start directly:
+   ```bash
+   npm --workspace=@universal-pos/api run build && node apps/api/dist/main.js
+   ```
+   The API runs at `http://localhost:4000/api/v1`.
+
+4. **Start the Admin & POS Front-end:**
+   ```bash
+   npm --workspace=@universal-pos/admin run build
+   npm --workspace=@universal-pos/admin run start
+   # Or run next dev:
+   npm --workspace=@universal-pos/admin run dev
+   ```
+   The web application runs at `http://localhost:3000`.
+
+5. **Log in to the POS:**
+   - Navigate to `http://localhost:3000/login`.
+   - Tenant Slug: `artisan-apparel`
+   - Cashier Account:
+     - Email: `cashier@artisan.com`
+     - Password: `Password123!`
+     - Redirects automatically to `/pos` with default register and open shift controls.
+   - Owner Account:
+     - Email: `owner@artisan.com`
+     - Password: `Password123!`
+     - Accesses `/dashboard`, settings, inventory, and back-office management.

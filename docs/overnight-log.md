@@ -1675,7 +1675,9 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
 - **GitHub Actions CI Run:** [44555131167](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44555131167) — **Status: completed, Conclusion: failure (Red)**.
   - Failing test: `Scenario 8: Price changed on server while offline: sale accepted and flagged PRICE_CHANGED, visible on /sales/offline-review`.
   - Cause: In `apps/admin/src/app/pos/page.tsx`, `currentCatalogVersion` was checked with `typeof cv.value === "number"`, but `cv.value` is stored as string `"v-<timestamp>"`. As a result, `catalogVersion` was passed as `undefined` in the offline sale payload, triggering the server to flag the sale as `PRICE_UNKNOWN` instead of `PRICE_CHANGED`.
-  - Fix: Updated `page.tsx` to read `catalogVersion` as string (`String(cv.value)`), updated `catalog-sync.ts` and `types.ts` typing, and added `PRICE_UNKNOWN` to the badge switch in `offline-review/page.tsx`. Verified clean build and full test suite passing.
+  - Fix Commit: `9cf5fc0`
+  - GitHub Actions CI Run: [44559839987](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44559839987) — **Status: completed, Conclusion: success (Green)**.
+  - Verification: Clean Next.js build, 0 lint errors, 356 unit tests passed, all 135 E2E tests passing. CI verified 100% green.
 
 
 

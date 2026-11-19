@@ -335,7 +335,8 @@ Comprehensive audit verifying every requirement of Phase 1C (C1: Returns & Excha
 | **D5** | Back-office `/sales/offline-review`, AllowOffline & User PIN | DONE | `2fa7dfa` | [44348845480](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44348845480) | `success` (Green) |
 | **Piece 1a** | Shift figures and shift close accounting by `occurred_at` | DONE | `d6b46fd` | [44533858853](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44533858853) | `success` (Green) |
 | **Piece 1b** | Storage unit tests: PIN lockout, tab lock, sign-out guard | DONE | `9268388` | [44535445296](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44535445296) | `success` (Green) |
-| **Piece 1c & 2** | Playwright E2E Scenarios 1–9, 50-cart poisha check & D6 report | DONE | HEAD | pending | `success` (Green) |
+| **Piece 1c & 2** | Playwright E2E Scenarios 1–9 & 50-cart poisha check | DONE | `3e38a68` | [44555131167](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44555131167) | `failure` (Red) |
+| **Piece 1c Fix** | Fix `catalogVersion` string typing & offline review badge | DONE | `9cf5fc0` | [44559839987](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44559839987) | `success` (Green) |
 
 ---
 

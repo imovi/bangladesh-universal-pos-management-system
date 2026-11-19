@@ -32,21 +32,63 @@ test.describe("Step 2 (Item 1): POS Keyboard Shortcuts Flow (F2, F4, F6, F8, F9,
     registerId = registers.data[0].id;
 
     // 3. Ensure an open shift exists for owner on this register
+    const meRes = await request.get("http://localhost:4000/api/v1/auth/me", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const meId = (await meRes.json()).data.id;
+
     const shiftsRes = await request.get(
       `http://localhost:4000/api/v1/shifts?registerId=${registerId}&status=open`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
     const shiftsJson = await shiftsRes.json();
     const openShifts = Array.isArray(shiftsJson.data) ? shiftsJson.data : (shiftsJson.data?.items || []);
-    if (openShifts.length === 0) {
+    for (const s of openShifts) {
+      if (s.cashierUserId !== meId) {
+        await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
+          headers: { Authorization: `Bearer ${token}` },
+          data: { closingCashMinor: Number(s.openingCashMinor || 50000) },
+        }).catch(() => {});
+      }
+    }
+
+    const checkRes = await request.get(
+      `http://localhost:4000/api/v1/shifts?registerId=${registerId}&status=open`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const currentOpen = Array.isArray((await checkRes.json()).data) ? (await checkRes.json()).data : [];
+    if (currentOpen.length === 0) {
       await request.post("http://localhost:4000/api/v1/shifts", {
         headers: { Authorization: `Bearer ${token}` },
         data: {
+          branchId,
           registerId,
           openingCashMinor: 100000,
           notes: "E2E shortcuts test shift",
         },
       });
+    }
+  });
+
+  test.afterAll(async ({ request }) => {
+    try {
+      if (token) {
+        const shiftsRes = await request.get("http://localhost:4000/api/v1/shifts?status=open", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (shiftsRes.ok()) {
+          const shiftsData = await shiftsRes.json();
+          const openShifts = Array.isArray(shiftsData.data) ? shiftsData.data : (shiftsData.data?.items || []);
+          for (const s of openShifts) {
+            await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
+              headers: { Authorization: `Bearer ${token}` },
+              data: { closingCashMinor: Number(s.openingCashMinor || 50000) },
+            }).catch(() => {});
+          }
+        }
+      }
+    } catch {
+      // Ignore
     }
   });
 

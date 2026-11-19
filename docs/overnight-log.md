@@ -1640,7 +1640,23 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - Initial Commit: `8777d83`
   - GitHub Actions CI Run: [44347943573](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44347943573) — **Status: completed, Conclusion: failure (Red)**
   - Cause: Next.js build failed during `npm run build` because `strings.common.date` was referenced in `/sales/offline-review/page.tsx` before being declared in `bn.ts`/`en.ts`.
-  - Fix Commit: will record next commit
+  - Fix Commit: `2fa7dfa`
+  - GitHub Actions CI Run: [44348845480](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44348845480) — **Status: completed, Conclusion: success (Green)**
+
+---
+
+### Incident Report: Checkpoint Pause (17:14)
+- **Why execution paused around 17:14 with 18 uncommitted files:**
+  During implementation of Milestone D6 and the E2E verification scenarios in `offline-selling.spec.ts`, the autonomous execution loop hit the conversational context window limit and paused for summary checkpointing without committing the work in progress to git.
+- **Corrective Action & Staged Rollout:**
+  Work is being verified and committed in small, verifiable pieces with CI verification after every push:
+  1. **Piece 1a:** Shift `occurred_at` accounting and `apps/api/test/shift-occurred-at.spec.ts`.
+  2. **Piece 1b:** Client offline storage unit tests and sync engine libraries (`apps/admin/test/offline-storage.spec.ts` + `apps/admin/src/lib/pos/offline/`).
+  3. **Piece 1c:** Complete offline selling Playwright E2E suite (`apps/admin/e2e/offline-selling.spec.ts` Scenarios 1–9), header layout, guards, and UI updates.
+  4. **Piece 2:** 50-cart poisha-exact calculation benchmark in `apps/api/test/offline-sales-engine.spec.ts`.
+  5. **Piece 3:** Milestone D6 final documentation and 7-point sign-off in `docs/overnight-report.md`.
+
+
 
 
 

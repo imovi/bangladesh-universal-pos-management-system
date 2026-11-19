@@ -331,7 +331,7 @@ export class CustomersService {
         entries.push({
           id: s.id,
           type: "sale",
-          date: s.createdAt,
+          date: s.occurredAt || s.createdAt,
           reference: s.invoiceNumber,
           debitMinor: initialDue,
           creditMinor: 0n,

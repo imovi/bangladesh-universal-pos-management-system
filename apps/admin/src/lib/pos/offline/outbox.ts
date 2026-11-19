@@ -16,7 +16,8 @@ export async function enqueueSale(
 ): Promise<EnqueueSaleResult> {
   const targetDb = database || db;
   const outboxId = crypto.randomUUID();
-  const idempotencyKey = salePayload.id || crypto.randomUUID();
+  const saleId = salePayload.id || crypto.randomUUID();
+  const idempotencyKey = salePayload.id || saleId;
   const invoiceNumber = salePayload.invoiceNumber;
 
   if (!invoiceNumber) {
@@ -27,7 +28,7 @@ export async function enqueueSale(
     id: outboxId,
     idempotencyKey,
     type: "sale",
-    payload: salePayload,
+    payload: { ...salePayload, id: saleId },
     status: "pending",
     attemptCount: 0,
     nextAttemptAt: Date.now(),
@@ -41,10 +42,15 @@ export async function enqueueSale(
       // 1. Save outbox record
       await targetDb.outbox.put(outboxItem);
 
-      // 2. Save local sale copy
+      // 2. Save local sale copy (keyed by id to prevent duplicate rows)
       await targetDb.localSales.put({
+        id: saleId,
         invoiceNumber,
-        saleData: salePayload,
+        offlineInvoiceNumber: invoiceNumber,
+        serverInvoiceNumber: null,
+        shiftId: salePayload.shiftId,
+        saleData: { ...salePayload, id: saleId },
+        status: "unsynced",
         createdAt: Date.now(),
       });
 

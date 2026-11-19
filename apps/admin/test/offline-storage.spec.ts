@@ -206,6 +206,58 @@ describe("Milestone D2: Offline Storage & Client Sync Engine Unit Tests", () => 
 
       expect(maxConcurrent).toBe(1);
     });
+
+    it("localSales keeps exactly one row per sale id, holding both offline and server numbers upon sync", async () => {
+      const saleId = "sale-dedup-uuid";
+      const offlineNumber = "REG01-O-261118-0099";
+      const serverNumber = "REG01-261118-0155";
+
+      await enqueueSale(
+        {
+          id: saleId,
+          shiftId: "shift-1",
+          registerId: "reg-1",
+          invoiceNumber: offlineNumber,
+          isOffline: true,
+          expectedTotalMinor: 50000,
+          items: [{ variantId: "v-1", quantity: 1, unitPriceMinor: 50000, taxRateBp: 0 }],
+          payments: [{ paymentMethod: "cash", amountMinor: 50000 }],
+        } as any,
+        testDb
+      );
+
+      // Verify exactly 1 row in localSales before sync
+      let localRows = await testDb.localSales.toArray();
+      expect(localRows).toHaveLength(1);
+      expect(localRows[0].id).toBe(saleId);
+      expect(localRows[0].invoiceNumber).toBe(offlineNumber);
+      expect(localRows[0].offlineInvoiceNumber).toBe(offlineNumber);
+      expect(localRows[0].serverInvoiceNumber).toBeNull();
+      expect(localRows[0].status).toBe("unsynced");
+
+      // Sync succeeds and returns server invoice number
+      await runSync({
+        database: testDb,
+        customSender: async () => ({
+          status: 201,
+          body: {
+            data: {
+              id: saleId,
+              invoiceNumber: serverNumber,
+            },
+          },
+        }),
+      });
+
+      // Verify STILL exactly 1 row in localSales, updated with server invoice number
+      localRows = await testDb.localSales.toArray();
+      expect(localRows).toHaveLength(1);
+      expect(localRows[0].id).toBe(saleId);
+      expect(localRows[0].invoiceNumber).toBe(serverNumber);
+      expect(localRows[0].offlineInvoiceNumber).toBe(offlineNumber);
+      expect(localRows[0].serverInvoiceNumber).toBe(serverNumber);
+      expect(localRows[0].status).toBe("synced");
+    });
   });
 
   describe("Offline invoice counter", () => {

@@ -68,8 +68,13 @@ export interface OfflineOutboxItem {
 }
 
 export interface OfflineLocalSale {
+  id: string;
   invoiceNumber: string;
+  offlineInvoiceNumber?: string | null;
+  serverInvoiceNumber?: string | null;
+  shiftId?: string;
   saleData: CreateSalePayload;
+  status?: "unsynced" | "synced" | "failed";
   createdAt: number;
 }
 

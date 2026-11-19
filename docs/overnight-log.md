@@ -1742,6 +1742,21 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - **CI Iteration 1:** Commit `70e12c1`, CI Run `44593757883` (`WORKFLOW_RUN_CONCLUSION_FAILURE`).
     - *Failure Cause:* In `apps/admin/e2e/offline-selling.spec.ts` Scenario 8, the test picked `targetVariant = variants[0]` (`L-SKYBLUE`) and patched its price on the server, but clicked the first cell in the variant matrix UI. Because canonical size sorting now correctly orders sizes (`M` before `L`), the clicked cell was `M-SKYBLUE`, leaving the sold item's server price unchanged and generating no `PRICE_CHANGED` flag on sync.
     - *Resolution:* Patched all variants of the target product on the server during the offline window so that whichever cell is clicked, the price change is guaranteed to trigger `PRICE_CHANGED` on sync. Verified locally: all 9 scenarios in `offline-selling.spec.ts` pass cleanly (46.7s).
+  - **CI Iteration 2 (SUCCESS):** Commit `c65cd1d`, CI Run `44596743625` (`WORKFLOW_RUN_CONCLUSION_SUCCESS`).
+
+- **Fix 3: Shift Sales List Freshness, Deduplication, and Offline Receipt Reprint:**
+  - **Investigation & Cause Analysis:**
+    1. *Stale List on Sync:* Shift sales list only fetched on initial component mount and did not reload when the sync worker finished syncing outbox sales, leaving newly synced sales invisible until manual page reload.
+    2. *Duplicates in `localSales`:* `localSales` table in IndexedDB was keyed by `invoiceNumber` rather than sale `id`. When an offline sale was synced, a second entry was created under the server-assigned invoice number, leading to duplicate records. Additionally, `outbox.ts` and `sync-worker.ts` used mismatched keys (`saleId` vs `item.id`).
+    3. *Stale Closure in Online Listener:* In `apps/admin/src/app/pos/page.tsx`, `handleOnline` event listener was created in a `useEffect` that did not track `selectedRegister` changes, closing over `selectedRegister = null` and causing `checkRegisterShift()` to clear `activeShift` to null upon reconnect.
+  - **Fixes Applied:**
+    1. Schema & Deduplication: Updated `PosOfflineDatabase` schema in `apps/admin/src/lib/pos/offline/db.ts` to `localSales: "id, invoiceNumber, offlineInvoiceNumber, shiftId, createdAt"`. `enqueueSale` in `outbox.ts` stores sale with `id: saleId`, `status: "unsynced"`, and `offlineInvoiceNumber`. `runSync` in `sync-worker.ts` updates that exact row in-place keyed by `id`, storing `serverInvoiceNumber` and setting `status: "synced"`.
+    2. Freshness & Stale Closure Fix: Stored latest `checkRegisterShift` and `loadLocalShiftSales` in `useRef` hooks (`checkRegisterShiftRef`, `loadLocalShiftSalesRef`) so `handleOnline` triggers the current register/shift refresh. Also auto-refreshes shift sales list whenever `isShiftSalesOpen` is opened.
+    3. Unsynced Sales & Offline Reprint: Merged local unsynced sales with server sales in `combinedShiftSales`. Added "সিঙ্ক হয়নি" (`Unsynced`) badge to unsynced rows in `ShiftSalesModal` (`shift-sales-modal.tsx`), with reprint receipt button wired to display offline receipt without requiring network.
+  - **Tests & Verification:**
+    - Unit test added to `apps/admin/test/offline-storage.spec.ts`: `localSales keeps exactly one row per sale id, holding both offline and server numbers upon sync`.
+    - Playwright test added as Scenario 10 in `apps/admin/e2e/offline-selling.spec.ts`: completes offline sale, verifies immediate visibility in shift sales modal with "সিঙ্ক হয়নি", verifies offline receipt reprint, reconnects, syncs, and confirms list updates with single completed row and server invoice number.
+    - All 18 `offline-storage.spec.ts` unit tests passed. All 56 admin unit tests passed. Full Playwright offline suite (all 10 scenarios) passed in 52.5s.
 
 
 

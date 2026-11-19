@@ -140,10 +140,17 @@ export async function runSync(config: SyncWorkerConfig = {}): Promise<{
         const serverInv = result.body?.data?.invoiceNumber || result.body?.invoiceNumber;
         if (serverInv && item.type === "sale") {
           try {
+            const saleId = (item.payload as any)?.id || item.idempotencyKey || item.id;
+            const existing = await targetDb.localSales.get(saleId);
             await targetDb.localSales.put({
+              id: saleId,
               invoiceNumber: serverInv,
+              offlineInvoiceNumber: existing?.offlineInvoiceNumber || existing?.invoiceNumber || (item.payload as any)?.invoiceNumber,
+              serverInvoiceNumber: serverInv,
+              shiftId: (item.payload as any)?.shiftId,
               saleData: { ...(item.payload as any), invoiceNumber: serverInv },
-              createdAt: Date.now(),
+              status: "synced",
+              createdAt: existing?.createdAt || Date.now(),
             });
           } catch {}
         }

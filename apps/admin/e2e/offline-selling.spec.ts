@@ -773,4 +773,128 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
       return allFound;
     }, { timeout: 20000, intervals: [1000, 2000] }).toBe(true);
   });
+  test("Scenario 10: Shift sales list freshness, unsynced status, deduplication, and offline reprint", async ({
+    page,
+    context,
+    request,
+    isMobile,
+  }) => {
+    test.setTimeout(60000);
+    const { token } = await setupAuthAndPin(request);
+    const { branch, register } = await ensureRegisterAllowOffline(request, token);
+
+    // Ensure an open shift exists for REG01
+    const shiftsRes = await request.get(`http://localhost:4000/api/v1/shifts?registerId=${register.id}&status=open`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const shiftsData = await shiftsRes.json();
+    const openShifts = Array.isArray(shiftsData.data) ? shiftsData.data : (shiftsData.data?.items || []);
+    if (openShifts.length === 0) {
+      await request.post("http://localhost:4000/api/v1/shifts/open", {
+        headers: { Authorization: `Bearer ${token}` },
+        data: {
+          branchId: branch.id,
+          registerId: register.id,
+          openingCashMinor: 50000,
+          notes: "Scenario 10 Shift",
+        },
+      });
+    }
+
+    if (!isMobile) {
+      await page.setViewportSize({ width: 1440, height: 900 });
+    }
+    page.on("console", (msg) => console.log("BROWSER LOG:", msg.text()));
+    // 1. Login and go to /pos
+    await loginAndGoToPos(page);
+
+    // Ensure open shift on POS screen
+    const openShiftBtn = page.locator('[data-testid="open-shift-button"], button:has-text("শিফট শুরু করুন"), button:has-text("Start Shift")');
+    if (await openShiftBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await openShiftBtn.click();
+      const confirmOpenBtn = page.locator('[data-testid="confirm-open-shift-button"]');
+      await expect(confirmOpenBtn).toBeVisible({ timeout: 5000 });
+      await page.fill('[data-testid="opening-cash-input"]', "1000");
+      await confirmOpenBtn.click();
+      await expect(confirmOpenBtn).toBeHidden({ timeout: 10000 });
+    }
+
+    const shiftSalesBtn = page.locator('[data-testid="shift-sales-button"]');
+    await expect(shiftSalesBtn).toBeVisible({ timeout: 15000 });
+
+    const connPill = page.locator('[data-testid="connection-status-pill"]');
+    await expect(connPill).toBeVisible({ timeout: 10000 });
+    const firstProd = page.locator('[data-testid^="product-card-"]').first();
+    await expect(firstProd).toBeVisible({ timeout: 15000 });
+
+    // 2. Cut connection to go offline
+    await context.setOffline(true);
+    await expect(connPill).toContainText(/অফলাইন|Offline/, { timeout: 10000 });
+
+    // 3. Complete an offline sale
+    const prod = page.locator('[data-testid^="product-card-"]').first();
+    await prod.click();
+    const varCell = page.locator('[data-testid^="variant-cell-"]').first();
+    if (await varCell.isVisible({ timeout: 1500 }).catch(() => false)) {
+      await varCell.click();
+    }
+    await page.locator('[data-testid="pos-checkout-button"]').click();
+    await page.locator('[data-testid="confirm-payment-button"]').click();
+
+    const receipt = page.locator('[data-testid="receipt-container"]');
+    await expect(receipt).toBeVisible({ timeout: 10000 });
+    const receiptText = await receipt.innerText();
+    const match = receiptText.match(/REG01-O-\d{6}-\d{4}/);
+    expect(match).not.toBeNull();
+    const offlineInv = match[0];
+
+    // Close receipt
+    await page.locator('[data-testid="new-sale-button"]').click();
+
+    // 4. Immediately open shift sales list while offline
+    await shiftSalesBtn.click();
+    const shiftModal = page.locator('[data-testid="shift-sales-modal"]');
+    await expect(shiftModal).toBeVisible({ timeout: 5000 });
+
+    // 5. Assert the offline sale is visible, marked "সিঙ্ক হয়নি"
+    const saleRow = page.locator(`[data-testid="shift-sale-row-${offlineInv}"]`);
+    await expect(saleRow).toBeVisible({ timeout: 5000 });
+    const badge = page.locator(`[data-testid="shift-sale-badge-${offlineInv}"]`);
+    await expect(badge).toHaveText(/সিঙ্ক হয়নি|Unsynced/);
+
+    // 6. Test reprint receipt while offline
+    const reprintBtn = page.locator(`[data-testid="reprint-sale-btn-${offlineInv}"]`);
+    await reprintBtn.click();
+    await expect(receipt).toBeVisible({ timeout: 5000 });
+    const reprintedText = await receipt.innerText();
+    expect(reprintedText).toContain(offlineInv);
+
+    // Dismiss receipt by starting new sale
+    await page.locator('[data-testid="new-sale-button"]').click();
+    await expect(receipt).toBeHidden({ timeout: 5000 });
+
+    // 7. Reconnect network and trigger sync
+    await context.setOffline(false);
+    await expect(connPill).toContainText(/অনলাইন|Online/, { timeout: 10000 });
+    await page.evaluate(() => {
+      if (typeof (window as any).__triggerPosSync === "function") {
+        (window as any).__triggerPosSync();
+      } else {
+        window.dispatchEvent(new Event("online"));
+      }
+    });
+
+    // Wait for outbox sync to complete
+    await page.waitForTimeout(3000);
+
+    // 8. Re-open shift sales list after sync
+    await expect(shiftSalesBtn).toBeVisible({ timeout: 5000 });
+    await shiftSalesBtn.click();
+    await expect(shiftModal).toBeVisible({ timeout: 5000 });
+
+    // Assert that exactly ONE row exists for this sale, and it shows the completed status
+    const allRowsForSale = shiftModal.locator(`[data-testid="shift-sale-row-${offlineInv}"]`);
+    await expect(allRowsForSale).toHaveCount(1);
+    await expect(page.locator(`[data-testid="shift-sale-badge-${offlineInv}"]`)).toHaveText(/সম্পন্ন|Completed/);
+  });
 });

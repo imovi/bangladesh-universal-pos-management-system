@@ -34,7 +34,7 @@ export class PosOfflineDatabase extends Dexie {
       settings: "key",
       session: "key",
       outbox: "id, idempotencyKey, type, status, nextAttemptAt, createdAt",
-      localSales: "invoiceNumber, createdAt",
+      localSales: "id, invoiceNumber, offlineInvoiceNumber, shiftId, createdAt",
       syncLog: "++id, timestamp, event",
       reviewFlags: "id, saleId, flagType, resolved, createdAt",
       counters: "[registerId+date], registerId, date",

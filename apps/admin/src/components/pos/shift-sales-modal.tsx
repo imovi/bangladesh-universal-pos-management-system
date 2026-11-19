@@ -79,6 +79,7 @@ export function ShiftSalesModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="shift-sales-title"
+        data-testid="shift-sales-modal"
         className="bg-card text-card-foreground border border-border w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[88vh] overflow-hidden animate-in fade-in"
       >
         {/* Header */}
@@ -123,9 +124,11 @@ export function ShiftSalesModal({
             <div className="border border-border rounded-xl overflow-hidden divide-y divide-border">
               {filteredSales.map((s) => {
                 const isCompleted = s.status === "completed";
+                const isUnsynced = Boolean(s.isUnsynced);
                 return (
                   <div
                     key={s.id}
+                    data-testid={`shift-sale-row-${s.invoiceNumber}`}
                     className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-muted/30 transition-colors"
                   >
                     <div className="space-y-1 min-w-0">
@@ -133,18 +136,29 @@ export function ShiftSalesModal({
                         <span className="font-bold text-xs sm:text-sm font-mono text-primary">
                           {s.invoiceNumber}
                         </span>
-                        <Badge
-                          variant={isCompleted ? "default" : "destructive"}
-                          className="text-[10px] py-0 px-2 font-medium"
-                        >
-                          {isCompleted
-                            ? locale === "bn"
-                              ? "সম্পন্ন"
-                              : "Completed"
-                            : locale === "bn"
-                            ? "বাতিল"
-                            : "Voided"}
-                        </Badge>
+                        {isUnsynced ? (
+                          <Badge
+                            variant="outline"
+                            data-testid={`shift-sale-badge-${s.invoiceNumber}`}
+                            className="text-[10px] py-0 px-2 font-medium bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                          >
+                            {locale === "bn" ? "সিঙ্ক হয়নি" : "Unsynced"}
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant={isCompleted ? "default" : "destructive"}
+                            data-testid={`shift-sale-badge-${s.invoiceNumber}`}
+                            className="text-[10px] py-0 px-2 font-medium"
+                          >
+                            {isCompleted
+                              ? locale === "bn"
+                                ? "সম্পন্ন"
+                                : "Completed"
+                              : locale === "bn"
+                              ? "বাতিল"
+                              : "Voided"}
+                          </Badge>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-3 text-xs text-muted-foreground font-mono">
@@ -168,6 +182,7 @@ export function ShiftSalesModal({
                         <Button
                           size="sm"
                           variant="outline"
+                          data-testid={`reprint-sale-btn-${s.invoiceNumber}`}
                           onClick={() => onReprintReceipt(s)}
                           className="h-8 px-2.5 text-xs font-medium"
                           title={strings.pos.reprint}
@@ -176,7 +191,7 @@ export function ShiftSalesModal({
                           <span>{strings.pos.reprint}</span>
                         </Button>
 
-                        {canVoid && isCompleted && (
+                        {!isUnsynced && canVoid && isCompleted && (
                           <Button
                             size="sm"
                             variant="ghost"

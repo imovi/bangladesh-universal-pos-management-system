@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { v7 as uuidv7 } from "uuid";
@@ -137,6 +137,8 @@ export default function PosPage() {
   const [activeShift, setActiveShift] = useState<any | null>(null);
   const [shiftInUseOtherUser, setShiftInUseOtherUser] = useState<any | null>(null);
   const [_isLoadingRegister, setIsLoadingRegister] = useState(true);
+  const checkRegisterShiftRef = useRef<() => Promise<void>>(async () => {});
+  const loadLocalShiftSalesRef = useRef<() => Promise<void>>(async () => {});
 
   // Products & Categories
   const [products, setProducts] = useState<PosProduct[]>([]);
@@ -192,6 +194,7 @@ export default function PosPage() {
   const [isCustomerOpen, setIsCustomerOpen] = useState(false);
   const [isHoldCartOpen, setIsHoldCartOpen] = useState(false);
   const [isShiftSalesOpen, setIsShiftSalesOpen] = useState(false);
+  const [localShiftSales, setLocalShiftSales] = useState<any[]>([]);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isReturnOpen, setIsReturnOpen] = useState(false);
   const [initialReturnInvoice, setInitialReturnInvoice] = useState<string>("");
@@ -314,7 +317,13 @@ export default function PosPage() {
             };
           }
         },
-        onStatusChange: setOutboxStats,
+        onStatusChange: (stats) => {
+          setOutboxStats(stats);
+          if (stats.pending === 0 && stats.syncing === 0) {
+            checkRegisterShift();
+            loadLocalShiftSales();
+          }
+        },
       },
       5000
     );
@@ -363,6 +372,8 @@ export default function PosPage() {
         onStatusChange: (stats) => {
           setOutboxStats(stats);
           if (stats.pending === 0 && stats.syncing === 0) {
+            checkRegisterShiftRef.current?.();
+            loadLocalShiftSalesRef.current?.();
             setStatusBanner({
               message: strings.pos.allSalesSyncedToast,
               type: "success",
@@ -517,6 +528,70 @@ export default function PosPage() {
   useEffect(() => {
     checkRegisterShift();
   }, [checkRegisterShift]);
+
+  // Load unsynced sales from local IndexedDB for current shift
+  const loadLocalShiftSales = useCallback(async () => {
+    try {
+      if (!activeShift?.id) {
+        setLocalShiftSales([]);
+        return;
+      }
+      const allLocal = await db.localSales.toArray();
+      const serverIds = new Set((activeShift.sales || []).map((s: any) => s.id));
+      const serverInvoices = new Set((activeShift.sales || []).map((s: any) => s.invoiceNumber));
+
+      const unsyncedForShift = allLocal
+        .filter((ls) => {
+          if (ls.shiftId && ls.shiftId !== activeShift.id) return false;
+          if (serverIds.has(ls.id)) return false;
+          if (ls.serverInvoiceNumber && serverInvoices.has(ls.serverInvoiceNumber)) return false;
+          if (ls.offlineInvoiceNumber && serverInvoices.has(ls.offlineInvoiceNumber)) return false;
+          if (serverInvoices.has(ls.invoiceNumber)) return false;
+          return ls.status === "unsynced" || !ls.serverInvoiceNumber;
+        })
+        .map((ls) => {
+          const payload = ls.saleData;
+          return {
+            id: ls.id,
+            invoiceNumber: ls.offlineInvoiceNumber || ls.invoiceNumber,
+            totalMinor: payload.expectedTotalMinor,
+            createdAt: new Date(ls.createdAt).toISOString(),
+            status: "completed",
+            isUnsynced: true,
+            customer: payload.customerId
+              ? { name: strings.pos.walkInCustomer, id: payload.customerId }
+              : null,
+            payments: payload.payments,
+            items: payload.items,
+          };
+        });
+      setLocalShiftSales(unsyncedForShift);
+    } catch {
+      setLocalShiftSales([]);
+    }
+  }, [activeShift, strings.pos.walkInCustomer]);
+
+  // Refresh shift sales list when opened
+  useEffect(() => {
+    checkRegisterShiftRef.current = checkRegisterShift;
+    loadLocalShiftSalesRef.current = loadLocalShiftSales;
+  });
+
+  useEffect(() => {
+    if (isShiftSalesOpen) {
+      checkRegisterShift();
+      loadLocalShiftSales();
+    }
+  }, [isShiftSalesOpen, checkRegisterShift, loadLocalShiftSales]);
+
+  // Combined shift sales (unsynced local sales at top + server sales)
+  const combinedShiftSales = useMemo(() => {
+    const serverSales = (activeShift?.sales || []).map((s: any) => ({
+      ...s,
+      isUnsynced: false,
+    }));
+    return [...localShiftSales, ...serverSales];
+  }, [activeShift?.sales, localShiftSales]);
 
   // Load Products & Categories for Branch (Local IndexedDB as source of truth)
   const loadCatalog = useCallback(async () => {
@@ -1167,6 +1242,7 @@ export default function PosPage() {
       // 1. Unified local enqueue: atomically writes outbox, localSales, and decrements Dexie stock
       await enqueueSale(salePayload as any);
       getOutboxStats().then(setOutboxStats).catch(() => {});
+      loadLocalShiftSales();
 
       let serverInvoiceNumber: string | undefined = undefined;
 
@@ -1201,7 +1277,13 @@ export default function PosPage() {
                 error: !res.ok ? (body?.message || `HTTP ${res.status}`) : undefined,
               };
             },
-            onStatusChange: setOutboxStats,
+            onStatusChange: (stats) => {
+          setOutboxStats(stats);
+          if (stats.pending === 0 && stats.syncing === 0) {
+            checkRegisterShift();
+            loadLocalShiftSales();
+          }
+        },
           });
         } catch (err) {
           console.warn("[POS] Immediate outbox sync error:", err);
@@ -1213,10 +1295,16 @@ export default function PosPage() {
 
       if (serverInvoiceNumber) {
         try {
+          const existing = await db.localSales.get(saleId);
           await db.localSales.put({
+            id: saleId,
             invoiceNumber: serverInvoiceNumber,
+            offlineInvoiceNumber: existing?.offlineInvoiceNumber || assignedInvoiceNumber,
+            serverInvoiceNumber,
+            shiftId: activeShift?.id || salePayload.shiftId,
             saleData: { ...salePayload, invoiceNumber: serverInvoiceNumber, isOffline: false } as any,
-            createdAt: Date.now(),
+            status: "synced",
+            createdAt: existing?.createdAt || Date.now(),
           });
         } catch {}
       }
@@ -2609,7 +2697,7 @@ export default function PosPage() {
       <ShiftSalesModal
         isOpen={isShiftSalesOpen}
         onClose={() => setIsShiftSalesOpen(false)}
-        sales={activeShift?.sales || []}
+        sales={combinedShiftSales}
         canVoid={hasPermission("sale.void")}
         onReprintReceipt={(sale) => {
           setIsShiftSalesOpen(false);
@@ -2635,12 +2723,12 @@ export default function PosPage() {
               taxMinor: Number(it.taxMinor || 0),
               totalMinor: Number(it.totalMinor || it.unitPriceMinor * it.quantity),
             })),
-            grossMinor: Number(sale.subtotalMinor),
-            discountMinor: Number(sale.discountMinor),
-            taxMinor: Number(sale.taxMinor),
-            totalMinor: Number(sale.totalMinor),
-            paidMinor: Number(sale.paidMinor),
-            changeMinor: Number(sale.changeMinor),
+            grossMinor: Number(sale.subtotalMinor || sale.expectedTotalMinor || sale.totalMinor || 0),
+            discountMinor: Number(sale.discountMinor || 0),
+            taxMinor: Number(sale.taxMinor || 0),
+            totalMinor: Number(sale.totalMinor || sale.expectedTotalMinor || 0),
+            paidMinor: Number(sale.paidMinor || (sale.payments || []).reduce((s: number, p: any) => s + Number(p.amountMinor || 0), 0)),
+            changeMinor: Number(sale.changeMinor || 0),
             payments: sale.payments || [],
           });
         }}

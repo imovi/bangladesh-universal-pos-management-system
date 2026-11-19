@@ -30,18 +30,10 @@ async function clearExistingTenant() {
   const parsed = new URL(adminUrl);
   const dbName = parsed.pathname.replace(/^\//, "");
 
-  if (!dbName.endsWith("_e2e") && !dbName.endsWith("_test")) {
-    if (dbName === "universal_pos") {
-      if (!process.argv.includes("--yes")) {
-        throw new Error(
-          `[seed:demo] Refusing destructive tenant clear on development database '${dbName}' without '--yes' flag.`,
-        );
-      }
-    } else {
-      throw new Error(
-        `[seed:demo] Refusing destructive tenant clear on non-test database '${dbName}': database name must end in '_e2e' or '_test'.`,
-      );
-    }
+  if (!dbName.endsWith("_e2e") && !dbName.endsWith("_test") && dbName !== "universal_pos") {
+    throw new Error(
+      `[seed:demo] Refusing destructive tenant clear on non-development database '${dbName}': database name must be 'universal_pos' or end in '_e2e' or '_test'.`,
+    );
   }
 
   const adminClient = new PrismaClient({ datasources: { db: { url: adminUrl } } });

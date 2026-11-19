@@ -49,7 +49,7 @@ describe("Database Protection Guard", () => {
     expect(output).toContain("Run with '--yes' to confirm");
   });
 
-  it("refuses seed-demo on development database without --yes flag", () => {
+  it("refuses seed-demo on non-development and non-test databases", () => {
     let error: any;
     try {
       execSync("npx tsx scripts/seed-demo.ts", {
@@ -57,7 +57,7 @@ describe("Database Protection Guard", () => {
         stdio: "pipe",
         env: {
           ...process.env,
-          MIGRATION_DATABASE_URL: "postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public",
+          MIGRATION_DATABASE_URL: "postgresql://pos_admin:pos_secret@localhost:5432/production_pos?schema=public",
         },
       });
     } catch (err) {
@@ -66,6 +66,6 @@ describe("Database Protection Guard", () => {
 
     expect(error).toBeDefined();
     const output = (error.stderr || error.stdout || "").toString();
-    expect(output).toContain("without '--yes' flag");
+    expect(output).toContain("Refusing destructive tenant clear on non-development database 'production_pos'");
   });
 });

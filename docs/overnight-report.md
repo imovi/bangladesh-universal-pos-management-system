@@ -422,4 +422,59 @@ Comprehensive audit verifying every requirement of Phase 1C (C1: Returns & Excha
 - **Physical Barcode Scanners:** Verified via keyboard HID wedge emulation (`Enter` key terminated scan sequences). Hardware USB barcode scanners should be tested by hand on physical products.
 - **Physical Brownouts / Hard Machine Power Off:** Verified via Playwright CDP offline network toggling and crash recovery tests. Physical power cutoff should be tested on dedicated hardware terminals.
 
+---
+
+## Phase 1D, fixes
+
+### 1. Overview & Verification Status
+
+All 6 fixes and documentation corrections from hands-on testing have been implemented, thoroughly tested locally, committed with dedicated tests, and validated in GitHub Actions CI with zero test skips, retries, or weakenings.
+
+| Fix Item | Description | Status | Commit(s) | CI Run ID(s) & Conclusion |
+| :--- | :--- | :--- | :--- | :--- |
+| **Step 0** | Fix Phase 1D Report (Replace unverified hashes/runs, explain 4 red runs, fix permission names) | **Completed** | [`33b45ca`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/33b45ca) | [44583151326](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44583151326) (`SUCCESS`) |
+| **Fix 4** | Dev Database Protection (Enforce `--yes` guard on `db:reset:dev`, forbid destructive resets on non-test DBs) | **Completed** | [`c6283c2`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/c6283c2)<br>[`442dbd4`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/442dbd4)<br>[`9bc0f2c`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/9bc0f2c) | [44583726514](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44583726514) (`FAILURE`)<br>[44584285743](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44584285743) (`FAILURE`)<br>[44587033547](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44587033547) (`SUCCESS`) |
+| **Fix 5** | Fix `npm run start:dev` in `apps/api` (emit decorator metadata via `tsc --watch`, document dev manual run steps) | **Completed** | [`c66061b`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/c66061b) | [44590548964](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44590548964) (`SUCCESS`) |
+| **Fix 2 & Fix 6** | Disable Cart-Panel Return & F6 Offline; Canonical Size Ordering (`XS` → `XXL` → numeric → alphabetical) | **Completed** | [`70e12c1`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/70e12c1)<br>[`c65cd1d`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/c65cd1d) | [44594314189](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44594314189) (`FAILURE`)<br>[44596743625](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44596743625) (`SUCCESS`) |
+| **Fix 3** | Shift Sales List Freshness, Outbox Sync Refresh, Local Deduplication, Offline Receipt Reprint & Unsynced Badge | **Completed** | [`5844987`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/5844987)<br>[`dff5ec7`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/dff5ec7) | [44603921829](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44603921829) (`FAILURE`)<br>[44608740282](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44608740282) (`SUCCESS`) |
+| **Fix 1** | Server Unreachable While Browser Reports Online ("Lie-Fi"), Lost-Response Idempotency, `NUMBER_MISMATCH` Flag, Dual Search & Clamping | **Completed** | [`2aaf6fb`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/2aaf6fb)<br>[`cf52187`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/cf52187) | [44615678876](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44615678876) (`FAILURE`)<br>[44621478134](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44621478134) (`SUCCESS`) |
+
+---
+
+### 2. What Wiped the Dev Database (`universal_pos`)
+
+- **Investigation Findings:**
+  1. `scripts/reset-dev-db.ts` dropped and recreated the `public` schema of `universal_pos` whenever executed without requiring any confirmation flags. If an operator or test runner invoked `npm run db:reset:dev` (or mistook it for `db:reset:e2e`), it purged all data immediately.
+  2. Generic database helper scripts did not assert that destructive operations (`DROP SCHEMA`, `TRUNCATE`) were strictly forbidden on non-test databases.
+- **Root Cause Fix:**
+  1. Updated `scripts/reset-dev-db.ts` to require an explicit `--yes` flag (`process.argv.includes('--yes')`). Invoking `npm run db:reset:dev` without `--yes` now halts with exit code 1 and outputs an explicit warning prompt.
+  2. Created `apps/api/src/common/db-protection.ts` providing `assertNonProductionAndAllowedDb(databaseUrl, allowedSuffixes)` which throws an error if any destructive database reset is run against databases that do not match the expected naming criteria.
+  3. Added integration test `apps/api/test/db-protection-guard.spec.ts` asserting that `db:reset:dev` refuses to run without `--yes` and that demo seeding refuses to run on unauthorized databases.
+
+---
+
+### 3. Blocked Entries & Unfollowed Rules
+
+- **Blocked Entries:** None. All fixes were resolved within the allowed 3-attempt limit per item:
+  - Fix 4: Succeeded on attempt 3 (`9bc0f2c`, Run [44587033547](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44587033547)).
+  - Fix 2 & 6: Succeeded on attempt 2 (`c65cd1d`, Run [44596743625](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44596743625)).
+  - Fix 3: Succeeded on attempt 2 (`dff5ec7`, Run [44608740282](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44608740282)).
+  - Fix 1: Succeeded on attempt 2 (`cf52187`, Run [44621478134](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44621478134)).
+- **Credential Rule Adherence:** Zero credentials or tokens were accessed or read from Git Credential Manager or local configuration. All CI inspections were performed exclusively against the unauthenticated public GitHub Actions web interface. When rate limits or unauthenticated access blocked direct log reading, failure diagnostics were logged as "could not read the CI log" and reproduced locally against fresh databases.
+- **Hash Integrity:** Every commit hash and run ID in this report was verified directly from `git log` and the public GitHub Actions API.
+
+---
+
+### 4. Decisions the Operator May Want to Change
+
+1. **Online Sale Network Timeout (`ONLINE_SALE_TIMEOUT_MS = 6000`):**
+   - In `apps/admin/src/lib/pos/offline/sync-worker.ts`, online checkout requests timeout after 6 seconds, automatically converting the transaction into an offline sale (`-O-` invoice number, local outbox queue, client `occurredAt`, offline thermal receipt). This ensures cashiers in slow 3G or degraded WiFi environments are never frozen at the counter. The operator can tune this value (e.g. 8 seconds or 4 seconds) to match branch network profiles.
+2. **`NUMBER_MISMATCH` Flag Resolution Policy:**
+   - In lost-response recoveries (where the server committed the transaction online but the connection severed before returning the response, causing the client to retry as an offline sale), the server updates `offlineInvoiceNumber`, maps the transaction idempotently without duplication, and flags the record with `NUMBER_MISMATCH` displaying both numbers at `/sales/offline-review`. The operator can determine whether these flags should auto-resolve or require branch manager sign-off.
+3. **Server Health Ping Frequency (15 Seconds):**
+   - While the POS screen is active, `GET /api/v1/health` is polled every 15 seconds (and immediately following any network failure) to accurately distinguish "lie-fi" from a true online state. If cellular bandwidth is strictly constrained, this interval can be increased to 30 or 60 seconds.
+4. **Canonical Size Order Hierarchy:**
+   - Variant sizes are normalized and sorted according to `XS` → `S` → `M` → `L` → `XL` → `XXL`, followed by numeric sizes ascending, then alphabetical strings. If a apparel retailer requires non-standard ordering (e.g. `Free Size`, `One Size`, `Newborn`, `Toddler`), a tenant-level size configuration dictionary could be introduced.
+
+
 

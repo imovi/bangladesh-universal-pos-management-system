@@ -13,6 +13,7 @@ import { TenantContextService } from "../src/common/database/tenant-context.serv
 import { SystemDbService } from "../src/common/database/system-db.service.js";
 import { truncateTestDatabase } from "./test-db-helper.js";
 import { formatDateKey } from "@universal-pos/shared";
+import { computeCartTotals, CartItem, CartLineDiscount } from "../../admin/src/lib/pos/cart-calculations.js";
 
 describe("Milestone D1: Offline Sales Engine & API Integration Tests", () => {
   let app: INestApplication;
@@ -32,6 +33,7 @@ describe("Milestone D1: Offline Sales Engine & API Integration Tests", () => {
   let variantId: string;
   let variantPriceMinor: number;
   let secondVariantId: string;
+  let zeroTaxVariantId: string;
   let tenantBToken: string;
 
   async function setupAuthAndTenants() {
@@ -108,11 +110,23 @@ describe("Milestone D1: Offline Sales Engine & API Integration Tests", () => {
     secondVariantId = prodRes.body.data.variants[1].id;
     variantPriceMinor = 200000;
 
+    const zeroTaxRes = await request(app.getHttpServer()).post("/api/v1/tax-classes").set("Authorization", `Bearer ${ownerToken}`).send({
+      name: "Zero Tax Class", rateBp: 0, isDefault: false,
+    });
+    const zeroTaxClassId = zeroTaxRes.body.data.id;
+
+    const zeroProdRes = await request(app.getHttpServer()).post("/api/v1/products").set("Authorization", `Bearer ${ownerToken}`).send({
+      name: "Exempt Grocery", sku: "GROCERY-01", priceMinor: 150000, costMinor: 80000, taxClassId: zeroTaxClassId,
+      options: [{ name: "Weight", values: ["1kg"] }],
+    });
+    zeroTaxVariantId = zeroProdRes.body.data.variants[0].id;
+
     await request(app.getHttpServer()).post("/api/v1/inventory/opening-stock").set("Authorization", `Bearer ${ownerToken}`).send({
       branchId,
       items: [
         { variantId, quantity: 20, unitCostMinor: 120000 },
         { variantId: secondVariantId, quantity: 5, unitCostMinor: 120000 },
+        { variantId: zeroTaxVariantId, quantity: 20, unitCostMinor: 80000 },
       ],
     });
   }
@@ -904,5 +918,168 @@ describe("Milestone D1: Offline Sales Engine & API Integration Tests", () => {
 
       expect(res.status).toBe(400);
     });
+  });
+
+  describe("10. 50 Random Carts Poisha-Exact Totals Verification against DB", () => {
+    function createSeededRandom(seed: number) {
+      let state = seed;
+      return function () {
+        state = (state * 9301 + 49297) % 233280;
+        return state / 233280;
+      };
+    }
+
+    it("verifies 50 random carts against DB: client computeCartTotals equals stored sale totals to the poisha", async () => {
+      // Add generous stock for all 3 variants so 50 carts do not deplete stock
+      await request(app.getHttpServer()).post("/api/v1/inventory/opening-stock").set("Authorization", `Bearer ${ownerToken}`).send({
+        branchId,
+        items: [
+          { variantId, quantity: 10000, unitCostMinor: 120000 },
+          { variantId: secondVariantId, quantity: 10000, unitCostMinor: 120000 },
+          { variantId: zeroTaxVariantId, quantity: 10000, unitCostMinor: 80000 },
+        ],
+      });
+
+      // Create a dedicated register and open a fresh shift for this test run
+      const regRes = await request(app.getHttpServer()).post("/api/v1/registers").set("Authorization", `Bearer ${ownerToken}`).send({
+        branchId, name: "50-Cart Reg", code: "REG50C", allowOffline: true,
+      });
+      const shiftRes = await request(app.getHttpServer()).post("/api/v1/shifts/open").set("Authorization", `Bearer ${ownerToken}`).send({
+        registerId: regRes.body.data.id, branchId, openingCashMinor: 1000000,
+      });
+      const cartShiftId = shiftRes.body.data.id;
+
+      const rand = createSeededRandom(42);
+      const availableVariants = [
+        { variantId, priceMinor: 200000, taxRateBp: 500, name: "Panjabi L", sku: "PANJABI-01-L", productId: "prod-1" },
+        { variantId: secondVariantId, priceMinor: 200000, taxRateBp: 500, name: "Panjabi XL", sku: "PANJABI-01-XL", productId: "prod-1" },
+        { variantId: zeroTaxVariantId, priceMinor: 150000, taxRateBp: 0, name: "Grocery 1kg", sku: "GROCERY-01", productId: "prod-2" },
+      ];
+
+      const dateKey = formatDateKey(new Date(), "Asia/Dhaka");
+
+      for (let cartIdx = 0; cartIdx < 50; cartIdx++) {
+        // Half tax-inclusive (0-24), half tax-exclusive (25-49)
+        const pricesIncludeTax = cartIdx < 25;
+        if (cartIdx === 0) {
+          await app.get(SystemDbService).updateTenantSettings(tenantId, {
+            currency: "BDT", language: "bn", timezone: "Asia/Dhaka", prices_include_tax: true, allow_negative_stock: false,
+          });
+        } else if (cartIdx === 25) {
+          await app.get(SystemDbService).updateTenantSettings(tenantId, {
+            currency: "BDT", language: "bn", timezone: "Asia/Dhaka", prices_include_tax: false, allow_negative_stock: false,
+          });
+        }
+
+        // Half online (POST /sales), half offline sync (POST /pos/sync)
+        const isOfflineSync = cartIdx % 2 === 1;
+
+        // Choose 1 to 3 distinct variants to include in cart
+        const numItems = 1 + Math.floor(rand() * availableVariants.length);
+        const shuffled = [...availableVariants].sort(() => rand() - 0.5);
+        const selected = shuffled.slice(0, numItems);
+
+        const cartItems: CartItem[] = [];
+        for (const v of selected) {
+          const qty = 1 + Math.floor(rand() * 3);
+
+          let lineDiscount: CartItem["discount"] = undefined;
+          const discRoll = rand();
+          if (discRoll < 0.3) {
+            lineDiscount = { type: "fixed", amountMinor: 500 + Math.floor(rand() * 1500) };
+          } else if (discRoll < 0.6) {
+            lineDiscount = { type: "percent", percentBp: (2 + Math.floor(rand() * 8)) * 100 };
+          }
+
+          cartItems.push({
+            variantId: v.variantId,
+            productId: v.productId,
+            name: v.name,
+            sku: v.sku,
+            unitPriceMinor: v.priceMinor,
+            quantity: qty,
+            taxRateBp: v.taxRateBp,
+            discount: lineDiscount,
+          });
+        }
+
+        let billDiscount: CartLineDiscount | undefined = undefined;
+        const billRoll = rand();
+        if (billRoll < 0.25) {
+          billDiscount = { type: "fixed", amountMinor: 1000 + Math.floor(rand() * 2000) };
+        } else if (billRoll < 0.5) {
+          billDiscount = { type: "percent", percentBp: (1 + Math.floor(rand() * 5)) * 100 };
+        }
+
+        const clientTotals = computeCartTotals(cartItems, {
+          pricesIncludeTax,
+          billDiscount,
+        });
+
+        const saleId = uuidv7();
+        const offlineInv = `REG50C-O-${dateKey}-${String(1000 + cartIdx).padStart(4, "0")}`;
+
+        const salePayload = {
+          id: saleId,
+          shiftId: cartShiftId,
+          branchId,
+          isOffline: isOfflineSync,
+          invoiceNumber: isOfflineSync ? offlineInv : undefined,
+          items: cartItems.map((it) => ({
+            variantId: it.variantId,
+            quantity: it.quantity,
+            unitPriceMinor: it.unitPriceMinor,
+            taxRateBp: it.taxRateBp,
+            discount: it.discount,
+          })),
+          payments: [{ paymentMethod: "cash", amountMinor: clientTotals.totalMinor }],
+          expectedTotalMinor: clientTotals.totalMinor,
+          billDiscount,
+        };
+
+        if (isOfflineSync) {
+          const syncRes = await request(app.getHttpServer())
+            .post("/api/v1/pos/sync")
+            .set("Authorization", `Bearer ${ownerToken}`)
+            .send({
+              items: [{ type: "sale", id: saleId, payload: salePayload }],
+            });
+          expect([200, 201]).toContain(syncRes.status);
+          expect(syncRes.body.data.results[0].status).toBe("synced");
+        } else {
+          const saleRes = await request(app.getHttpServer())
+            .post("/api/v1/sales")
+            .set("Authorization", `Bearer ${ownerToken}`)
+            .set("Idempotency-Key", saleId)
+            .send(salePayload);
+          expect([200, 201]).toContain(saleRes.status);
+        }
+
+        // Verify stored sale directly in DB
+        await tenantContext.runWithTenant(tenantId, async (tx) => {
+          const stored = await tx.sale.findUnique({
+            where: { id: saleId },
+            include: { items: true },
+          });
+          expect(stored).toBeDefined();
+          expect(Number(stored!.subtotalMinor)).toBe(clientTotals.grossMinor);
+          expect(Number(stored!.discountMinor)).toBe(clientTotals.totalDiscountMinor);
+          expect(Number(stored!.taxMinor)).toBe(clientTotals.taxMinor);
+          expect(Number(stored!.totalMinor)).toBe(clientTotals.totalMinor);
+
+          for (let li = 0; li < cartItems.length; li++) {
+            const dbItem = stored!.items.find((it) => it.variantId === cartItems[li].variantId);
+            expect(dbItem).toBeDefined();
+            expect(Number(dbItem!.taxMinor)).toBe(clientTotals.lines[li].taxMinor);
+            expect(Number(dbItem!.totalMinor)).toBe(clientTotals.lines[li].totalMinor);
+          }
+        });
+      }
+
+      // Revert tenant settings
+      await app.get(SystemDbService).updateTenantSettings(tenantId, {
+        currency: "BDT", language: "bn", timezone: "Asia/Dhaka", prices_include_tax: true, allow_negative_stock: false,
+      });
+    }, 60000);
   });
 });

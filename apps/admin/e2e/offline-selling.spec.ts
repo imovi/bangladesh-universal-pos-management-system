@@ -48,7 +48,7 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
           });
           const reg = (await regRes.json()).data?.[0];
           if (reg && branch) {
-            await request.post("http://localhost:4000/api/v1/shifts", {
+            await request.post("http://localhost:4000/api/v1/shifts/open", {
               headers: { Authorization: `Bearer ${token}` },
               data: {
                 branchId: branch.id,

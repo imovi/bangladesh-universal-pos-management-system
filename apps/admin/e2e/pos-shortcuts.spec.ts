@@ -58,7 +58,7 @@ test.describe("Step 2 (Item 1): POS Keyboard Shortcuts Flow (F2, F4, F6, F8, F9,
     );
     const currentOpen = Array.isArray((await checkRes.json()).data) ? (await checkRes.json()).data : [];
     if (currentOpen.length === 0) {
-      await request.post("http://localhost:4000/api/v1/shifts", {
+      await request.post("http://localhost:4000/api/v1/shifts/open", {
         headers: { Authorization: `Bearer ${token}` },
         data: {
           branchId,

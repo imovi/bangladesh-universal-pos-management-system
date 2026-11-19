@@ -1,4 +1,5 @@
 import type { PosProduct, PosProductVariant } from "./types";
+import { sortSizes } from "@universal-pos/shared";
 
 /**
  * Returns the numerical stock for a variant at a specific branch.
@@ -102,10 +103,8 @@ export function buildVariantMatrix(product: PosProduct, branchId?: string): Vari
     });
   }
 
-  // Sort sizes by creation order (position), then insertion order
-  const sizes = Array.from(sizeMap.entries())
-    .sort((a, b) => a[1] - b[1])
-    .map((e) => e[0]);
+  // Sort sizes by standard order: XS, S, M, L, XL, XXL, numbers ascending, then alphabetical
+  const sizes = sortSizes(Array.from(sizeMap.keys()));
 
   // Sort colors by position, then insertion order
   const colors = Array.from(colorMap.entries())

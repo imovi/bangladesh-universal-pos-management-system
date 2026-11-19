@@ -704,10 +704,10 @@ export default function PosPage() {
         return;
       }
 
-      // F6: Returns & Exchanges
+      // F6: Returns & Exchanges (Only allowed when online and server reachable)
       if (e.key === "F6") {
         e.preventDefault();
-        if (activeShift && !activeReceipt) {
+        if (activeShift && !activeReceipt && isOnline) {
           setIsReturnOpen(true);
         }
         return;
@@ -730,7 +730,7 @@ export default function PosPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [cartItems.length, activeShift, activeReceipt]);
+  }, [cartItems.length, activeShift, activeReceipt, isOnline]);
 
   // Add Item to Cart
   const handleAddToCart = (variant: PosProductVariant, product: PosProduct, qty = 1) => {
@@ -2139,9 +2139,14 @@ export default function PosPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setIsReturnOpen(true)}
-              className="h-8 px-2 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 hover:bg-amber-500/10"
-              title={locale === "bn" ? "পণ্য ফেরত বা বদল (F6)" : "Return / Exchange (F6)"}
+              onClick={() => {
+                if (isOnline) setIsReturnOpen(true);
+              }}
+              disabled={!isOnline}
+              data-testid="pos-cart-return-button"
+              className="h-8 px-2 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 hover:bg-amber-500/10 disabled:opacity-50 disabled:pointer-events-none"
+              title={!isOnline ? strings.pos.availableWhenOnline : (locale === "bn" ? "পণ্য ফেরত বা বদল (F6)" : "Return / Exchange (F6)")}
+              aria-label={!isOnline ? strings.pos.availableWhenOnline : (locale === "bn" ? "পণ্য ফেরত বা বদল (F6)" : "Return / Exchange (F6)")}
             >
               <RotateCcw className="h-3.5 w-3.5 mr-1" />
               <span>{locale === "bn" ? "ফেরত (F6)" : "Return (F6)"}</span>

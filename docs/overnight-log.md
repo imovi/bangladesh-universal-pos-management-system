@@ -1725,6 +1725,20 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
     - Fixed type-only import in `apps/api/src/modules/reports/reports.controller.ts` (`import { ReportsService, type ReportDateFilter }`).
     - Added Section 5 ("Running the Application by Hand on the Development Database") to `docs/offline-mode.md` detailing prerequisites, dev database seeding, dev server launch, and credentials.
     - Verified dev login manually via curl to `http://localhost:4000/api/v1/auth/login` returning 200 OK with tokens and user info.
+  - **Commit & CI Result:** Commit `c66061b`, CI Run `44590548964` (`WORKFLOW_RUN_CONCLUSION_SUCCESS`).
+
+- **Fix 2 & Fix 6: Return Action/F6 Offline Lockout & Canonical Size Ordering:**
+  - **Fix 2 (F6 & Cart-Panel Return Button Offline Lockout):**
+    - Disabled cart-panel return button (`data-testid="pos-cart-return-button"`) when offline (`!isOnline`) with tooltip and aria-label `availableWhenOnline`.
+    - Guarded `handleKeyDown` in `apps/admin/src/app/pos/page.tsx` so pressing `F6` is ignored when `!isOnline`. Added `isOnline` to `useEffect` dependencies.
+    - Updated `ReturnModal` with `data-testid="return-dialog"`.
+    - Added assertions to `apps/admin/e2e/offline-selling.spec.ts` Scenario 3 confirming both header and cart-panel return buttons are disabled and pressing F6 does not open the return dialog.
+  - **Fix 6 (Canonical Size Ordering & Service Worker Verification):**
+    - Created `packages/shared/src/sizes.ts` defining canonical apparel size order: `STANDARD_ALPHA_SIZES` (XS, S, M, L, XL, XXL), then numbers ascending, then alphabetical descriptions.
+    - Exported `sortSizes` and `compareSizes` from `@universal-pos/shared`.
+    - Applied canonical sorting in `apps/admin/src/lib/pos/variant-matrix.ts` (`buildVariantMatrix`), `apps/admin/src/components/common/size-color-grid.tsx` (`displaySizes`), and `apps/admin/src/app/(admin)/catalog/products/new/page.tsx`.
+    - Added unit test suites `apps/admin/test/sizes.spec.ts` (4 tests) and `apps/admin/test/size-color-grid.spec.tsx` (5 tests).
+    - Service Worker registration verified working on Chromium/Chrome with Serwist bundling `/sw.js` and scope `/`.
 
 
 

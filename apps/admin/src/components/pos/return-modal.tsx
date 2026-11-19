@@ -375,7 +375,7 @@ export function ReturnModal({
         }
       }}
     >
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent data-testid="return-dialog" className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl font-bold">
             <RotateCcw className="h-5 w-5 text-amber-600" />

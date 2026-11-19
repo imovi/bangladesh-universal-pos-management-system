@@ -73,4 +73,13 @@ describe("SizeColorGrid Component", () => {
     expect(handleChange).toHaveBeenCalledWith("Black", "S", 50);
     expect(handleChange).toHaveBeenCalledWith("White", "L", 50);
   });
+
+  it("sorts size column headers in canonical standard order (XS, S, M, L, XL, XXL, numbers)", () => {
+    const unorderedSizes = ["L", "XL", "M", "XS", "32", "30"];
+    render(<SizeColorGrid sizes={unorderedSizes} colors={["Blue"]} matrix={{}} readOnly />);
+
+    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent?.trim());
+    // First header is the row label 'রং \ সাইজ (Colour \ Size)', followed by sizes
+    expect(headers.slice(1)).toEqual(["XS", "M", "L", "XL", "30", "32"]);
+  });
 });

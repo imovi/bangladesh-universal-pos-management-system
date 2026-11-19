@@ -6,3 +6,4 @@ export * from "./shifts.js";
 export * from "./phone.js";
 export * from "./timezone.js";
 export * from "./barcodes.js";
+export * from "./sizes.js";

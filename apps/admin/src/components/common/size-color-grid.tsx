@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { cn, formatMoney } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Copy } from "lucide-react";
+import { sortSizes } from "@universal-pos/shared";
 
 export interface GridCellData {
   value: number; // Quantity or PriceMinor
@@ -36,6 +37,7 @@ export function SizeColorGrid({
   className,
 }: SizeColorGridProps) {
   const [applyValue, setApplyValue] = useState<string>("");
+  const displaySizes = useMemo(() => sortSizes(sizes), [sizes]);
 
   const getCellKey = (color: string, size: string) => `${color}:${size}`;
 
@@ -43,7 +45,7 @@ export function SizeColorGrid({
     const num = Number(applyValue);
     if (isNaN(num) || !onChange) return;
     for (const c of colors) {
-      for (const s of sizes) {
+      for (const s of displaySizes) {
         const key = getCellKey(c, s);
         if (!matrix[key]?.disabled) {
           onChange(c, s, mode === "price" ? Math.round(num * 100) : num);
@@ -54,9 +56,9 @@ export function SizeColorGrid({
   };
 
   const handleApplyRow = (color: string) => {
-    const firstVal = matrix[getCellKey(color, sizes[0])]?.value ?? 0;
+    const firstVal = matrix[getCellKey(color, displaySizes[0])]?.value ?? 0;
     if (!onChange) return;
-    for (const s of sizes) {
+    for (const s of displaySizes) {
       const key = getCellKey(color, s);
       if (!matrix[key]?.disabled) {
         onChange(color, s, firstVal);
@@ -122,7 +124,7 @@ export function SizeColorGrid({
               <th className="p-3 w-36 border-r sticky left-0 bg-muted/50 z-10">
                 রং \ সাইজ (Colour \ Size)
               </th>
-              {sizes.map((s) => (
+              {displaySizes.map((s) => (
                 <th key={s} className="p-3 text-center min-w-[90px]">
                   <div className="flex flex-col items-center gap-1">
                     <span className="font-bold text-foreground text-sm">{s}</span>
@@ -148,7 +150,7 @@ export function SizeColorGrid({
                 <td className="p-3 font-semibold text-foreground border-r sticky left-0 bg-card z-10 text-xs">
                   <div className="flex items-center justify-between gap-1">
                     <span className="truncate">{c}</span>
-                    {!readOnly && sizes.length > 1 && (
+                    {!readOnly && displaySizes.length > 1 && (
                       <button
                         type="button"
                         onClick={() => handleApplyRow(c)}
@@ -161,7 +163,7 @@ export function SizeColorGrid({
                     )}
                   </div>
                 </td>
-                {sizes.map((s) => {
+                {displaySizes.map((s) => {
                   const key = getCellKey(c, s);
                   const cell = matrix[key] || { value: 0 };
                   const isOutOfStock = cell.value === 0;

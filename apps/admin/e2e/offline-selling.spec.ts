@@ -403,6 +403,14 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
     await expect(returnBtn).toBeDisabled();
     await expect(closeBtn).toBeDisabled();
     await expect(cashBtn).toBeDisabled();
+    const cartReturnBtn = page.locator('[data-testid="pos-cart-return-button"]');
+    await expect(cartReturnBtn).toBeDisabled();
+
+    // Pressing F6 while offline must not open return dialog
+    await page.keyboard.press("F6");
+    await page.waitForTimeout(300);
+    const returnDialog = page.locator('[data-testid="return-dialog"]');
+    await expect(returnDialog).not.toBeVisible();
 
     // Visit back office (/dashboard), then go offline to verify offline notice
     await context.setOffline(false);

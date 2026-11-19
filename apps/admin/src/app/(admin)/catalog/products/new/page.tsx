@@ -22,6 +22,7 @@ import {
 import { ArrowLeft, Plus, X, AlertCircle, Copy } from "lucide-react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { sortSizes } from "@universal-pos/shared";
 
 const NewProductFormSchema = z.object({
   name: z.string().trim().min(2, "Name must be at least 2 characters"),
@@ -170,7 +171,7 @@ export default function NewProductPage() {
   const handleAddSize = () => {
     const trimmed = newSizeInput.trim().toUpperCase();
     if (trimmed && !sizes.includes(trimmed)) {
-      setSizes([...sizes, trimmed]);
+      setSizes(sortSizes([...sizes, trimmed]));
       setNewSizeInput("");
     }
   };

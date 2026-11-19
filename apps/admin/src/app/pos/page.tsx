@@ -92,6 +92,8 @@ import {
   LogOut,
 } from "lucide-react";
 
+const ONLINE_SALE_TIMEOUT_MS = 6000;
+
 export default function PosPage() {
   const router = useRouter();
   const { user, currentBranch, apiFetch, hasPermission, logout, isLoading: isAuthLoading } = useAuth();
@@ -100,6 +102,46 @@ export default function PosPage() {
 
   // Network & Online state
   const [isOnline, setIsOnline] = useState(true);
+  const [isServerReachable, setIsServerReachable] = useState(true);
+  const isEffectivelyOnline = isOnline && isServerReachable;
+
+  const checkServerHealth = useCallback(async () => {
+    if (typeof window === "undefined") return;
+    if (!window.navigator.onLine) {
+      setIsServerReachable(false);
+      return;
+    }
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+      const res = await apiFetch("/health", {
+        signal: controller.signal,
+      }).catch(() => null);
+      clearTimeout(timer);
+      if (res && res.ok) {
+        setIsServerReachable(true);
+      } else {
+        setIsServerReachable(false);
+      }
+    } catch {
+      setIsServerReachable(false);
+    }
+  }, [apiFetch]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      (window as any).__checkServerHealth = checkServerHealth;
+    }
+    checkServerHealth();
+    const interval = setInterval(checkServerHealth, 15000);
+    return () => {
+      if (typeof window !== "undefined") {
+        delete (window as any).__checkServerHealth;
+      }
+      clearInterval(interval);
+    };
+  }, [checkServerHealth]);
+
   const [outboxStats, setOutboxStats] = useState({ pending: 0, syncing: 0, synced: 0, failed: 0 });
   const [isFailedSyncModalOpen, setIsFailedSyncModalOpen] = useState(false);
   const [isTabLockedOut, setIsTabLockedOut] = useState(false);
@@ -341,6 +383,7 @@ export default function PosPage() {
 
     const handleOnline = () => {
       setIsOnline(true);
+      checkServerHealth();
       runSync({
         forceImmediate: true,
         customSender: async (item) => {
@@ -390,6 +433,7 @@ export default function PosPage() {
 
     const handleOffline = () => {
       setIsOnline(false);
+      setIsServerReachable(false);
       setStatusBanner({
         message: strings.pos.offlineModeToast,
         type: "warning",
@@ -784,7 +828,7 @@ export default function PosPage() {
       // F6: Returns & Exchanges (Only allowed when online and server reachable)
       if (e.key === "F6") {
         e.preventDefault();
-        if (activeShift && !activeReceipt && isOnline) {
+        if (activeShift && !activeReceipt && isEffectivelyOnline) {
           setIsReturnOpen(true);
         }
         return;
@@ -807,7 +851,7 @@ export default function PosPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [cartItems.length, activeShift, activeReceipt, isOnline]);
+  }, [cartItems.length, activeShift, activeReceipt, isEffectivelyOnline]);
 
   // Add Item to Cart
   const handleAddToCart = (variant: PosProductVariant, product: PosProduct, qty = 1) => {
@@ -1188,7 +1232,7 @@ export default function PosPage() {
       timestampMs: clampedOccurredAt,
     });
     const assignedInvoiceNumber = counterResult.invoiceNumber;
-    const isActuallyOffline = !isOnline;
+    const isActuallyOffline = !isEffectivelyOnline;
 
     let currentCatalogVersion: string | undefined = undefined;
     try {
@@ -1241,75 +1285,80 @@ export default function PosPage() {
     };
 
     try {
-      // 1. Unified local enqueue: atomically writes outbox, localSales, and decrements Dexie stock
-      await enqueueSale(salePayload as any);
-      getOutboxStats().then(setOutboxStats).catch(() => {});
-      loadLocalShiftSales();
-
       let serverInvoiceNumber: string | undefined = undefined;
 
-      // 2. If online, trigger outbox sync immediately and await response to acquire server invoice number
-      if (isOnline) {
+      // 1. If effectively online, attempt direct send with ONLINE_SALE_TIMEOUT_MS (6 seconds)
+      if (isEffectivelyOnline) {
         try {
-          await runSync({
-            customSender: async (item) => {
-              const endpoint = item.type === "sale" ? "/sales" : "/customers";
-              const res = await apiFetch(endpoint, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "Idempotency-Key": item.idempotencyKey,
-                  "x-idempotency-key": item.idempotencyKey,
-                },
-                body: JSON.stringify(item.payload),
-              });
-              let body: any = null;
-              try {
-                body = await res.json();
-              } catch {}
-              if (res.ok && item.idempotencyKey === saleId) {
-                const sInv = body?.data?.invoiceNumber || body?.invoiceNumber;
-                if (sInv) {
-                  serverInvoiceNumber = sInv;
-                }
-              }
-              return {
-                status: res.status,
-                body,
-                error: !res.ok ? (body?.message || `HTTP ${res.status}`) : undefined,
-              };
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), ONLINE_SALE_TIMEOUT_MS);
+          const res = await apiFetch("/sales", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Idempotency-Key": saleId,
+              "x-idempotency-key": saleId,
             },
-            onStatusChange: (stats) => {
-          setOutboxStats(stats);
-          if (stats.pending === 0 && stats.syncing === 0) {
-            checkRegisterShift();
-            loadLocalShiftSales();
-          }
-        },
+            body: JSON.stringify(salePayload),
+            signal: controller.signal,
           });
+          clearTimeout(timer);
+          let body: any = null;
+          try {
+            body = await res.json();
+          } catch {}
+          if (res.ok) {
+            const sInv = body?.data?.invoiceNumber || body?.invoiceNumber;
+            if (sInv) {
+              serverInvoiceNumber = sInv;
+            }
+          } else {
+            checkServerHealth();
+          }
         } catch (err) {
-          console.warn("[POS] Immediate outbox sync error:", err);
+          console.warn("[POS] Online sale send timed out or network failed:", err);
+          checkServerHealth();
         }
       }
 
-      const displayInvoiceNumber = serverInvoiceNumber || assignedInvoiceNumber;
-      const isReceiptOffline = !serverInvoiceNumber && isActuallyOffline;
-
+      // 2. Rule: Whatever number is printed on the customer's receipt must be the number stored on the server.
+      // A sale gets a server number only if the server answered before the receipt was shown.
+      // Otherwise it is an offline sale, fixed before any retry:
+      // - isOffline: true;
+      // - the -O- number;
+      // - occurredAt.
       if (serverInvoiceNumber) {
-        try {
-          const existing = await db.localSales.get(saleId);
-          await db.localSales.put({
-            id: saleId,
-            invoiceNumber: serverInvoiceNumber,
-            offlineInvoiceNumber: existing?.offlineInvoiceNumber || assignedInvoiceNumber,
-            serverInvoiceNumber,
-            shiftId: activeShift?.id || salePayload.shiftId,
-            saleData: { ...salePayload, invoiceNumber: serverInvoiceNumber, isOffline: false } as any,
-            status: "synced",
-            createdAt: existing?.createdAt || Date.now(),
-          });
-        } catch {}
+        // Online sale succeeded immediately before receipt
+        await db.localSales.put({
+          id: saleId,
+          invoiceNumber: serverInvoiceNumber,
+          serverInvoiceNumber,
+          offlineInvoiceNumber: assignedInvoiceNumber,
+          shiftId: activeShift.id,
+          saleData: { ...salePayload, invoiceNumber: serverInvoiceNumber, isOffline: false } as any,
+          status: "synced",
+          createdAt: clampedOccurredAt,
+        });
+        // Decrement local Dexie stock to keep cache in sync
+        for (const it of salePayload.items) {
+          try {
+            const cur = await db.stock.get(it.variantId);
+            if (cur) {
+              await db.stock.put({ ...cur, stockQty: cur.stockQty - it.quantity, updatedAt: new Date().toISOString() });
+            }
+          } catch {}
+        }
+      } else {
+        // Offline sale (either device was offline OR server was unreachable / timed out)
+        salePayload.isOffline = true;
+        salePayload.invoiceNumber = assignedInvoiceNumber;
+        await enqueueSale(salePayload as any);
+        getOutboxStats().then(setOutboxStats).catch(() => {});
+        loadLocalShiftSales();
       }
+
+      const displayInvoiceNumber = serverInvoiceNumber || assignedInvoiceNumber;
+      const isReceiptOffline = !serverInvoiceNumber;
 
       // 3. Format receipt data
       const totalPaid = payments.reduce((sum, p) => sum + p.amountMinor, 0);
@@ -1749,7 +1798,7 @@ export default function PosPage() {
                       const stats = await getOutboxStats();
                       setOutboxStats(stats);
                       const unsyncedCount = stats.pending + stats.syncing;
-                      if (!isSignOutAllowed(isOnline, unsyncedCount)) {
+                      if (!isSignOutAllowed(isEffectivelyOnline, unsyncedCount)) {
                         setSignOutBlockedBanner("অফলাইন বিক্রি বাকি থাকা অবস্থায় সাইন আউট করা যাবে না। সব বিক্রি পাঠানো পর্যন্ত অপেক্ষা করুন।");
                         setIsCashierMenuOpen(false);
                         setTimeout(() => setSignOutBlockedBanner(null), 6000);
@@ -1782,22 +1831,22 @@ export default function PosPage() {
             className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold shrink-0 transition-colors select-none ${
               outboxStats.failed > 0
                 ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 cursor-pointer hover:bg-rose-500/20"
-                : isOnline && (outboxStats.pending > 0 || outboxStats.syncing > 0)
-                ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 animate-pulse"
-                : !isOnline
+                : !isEffectivelyOnline
                 ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                : (outboxStats.pending > 0 || outboxStats.syncing > 0)
+                ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 animate-pulse"
                 : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
             }`}
             title={outboxStats.failed > 0 ? strings.pos.viewFailedSalesTooltip : undefined}
           >
             {outboxStats.failed > 0 ? (
               <span>{strings.pos.syncFailedCount.replace("{count}", String(outboxStats.failed))}</span>
-            ) : isOnline && (outboxStats.pending > 0 || outboxStats.syncing > 0) ? (
+            ) : !isEffectivelyOnline ? (
+              <span>{strings.pos.offlinePill}</span>
+            ) : (outboxStats.pending > 0 || outboxStats.syncing > 0) ? (
               <span>
                 {strings.pos.syncingRemaining.replace("{count}", String(outboxStats.pending + outboxStats.syncing))}
               </span>
-            ) : !isOnline ? (
-              <span>{strings.pos.offlinePill}</span>
             ) : (
               <span>{strings.pos.onlinePill}</span>
             )}
@@ -1810,10 +1859,10 @@ export default function PosPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setIsCashMoveOpen(true)}
-                disabled={!isOnline}
+                disabled={!isEffectivelyOnline}
                 className="h-8 px-2 text-xs font-medium disabled:opacity-50"
                 data-testid="cash-movement-button"
-                title={!isOnline ? strings.pos.availableWhenOnline : strings.pos.cashManagement}
+                title={!isEffectivelyOnline ? strings.pos.availableWhenOnline : strings.pos.cashManagement}
                 aria-label={strings.pos.cashManagement}
               >
                 <ArrowRightLeft className="h-3.5 w-3.5 xl:mr-1" />
@@ -1837,10 +1886,10 @@ export default function PosPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setIsReturnOpen(true)}
-                disabled={!isOnline}
+                disabled={!isEffectivelyOnline}
                 className="h-8 px-2 text-xs font-medium text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 disabled:opacity-50"
                 data-testid="pos-return-button"
-                title={!isOnline ? strings.pos.availableWhenOnline : (locale === "bn" ? "পণ্য ফেরত / বদল (F6)" : "Returns & Exchanges (F6)")}
+                title={!isEffectivelyOnline ? strings.pos.availableWhenOnline : (locale === "bn" ? "পণ্য ফেরত / বদল (F6)" : "Returns & Exchanges (F6)")}
                 aria-label={locale === "bn" ? "পণ্য ফেরত / বদল (F6)" : "Returns & Exchanges (F6)"}
               >
                 <RotateCcw className="h-3.5 w-3.5 xl:mr-1" />
@@ -1851,10 +1900,10 @@ export default function PosPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setIsCloseShiftOpen(true)}
-                disabled={!isOnline}
+                disabled={!isEffectivelyOnline}
                 className="h-8 px-2 text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-500/10 disabled:opacity-50"
                 data-testid="close-shift-button"
-                title={!isOnline ? strings.pos.availableWhenOnline : strings.pos.closeShift}
+                title={!isEffectivelyOnline ? strings.pos.availableWhenOnline : strings.pos.closeShift}
                 aria-label={strings.pos.closeShift}
               >
                 <Lock className="h-3.5 w-3.5 xl:mr-1" />
@@ -2230,13 +2279,13 @@ export default function PosPage() {
               variant="ghost"
               size="sm"
               onClick={() => {
-                if (isOnline) setIsReturnOpen(true);
+                if (isEffectivelyOnline) setIsReturnOpen(true);
               }}
-              disabled={!isOnline}
+              disabled={!isEffectivelyOnline}
               data-testid="pos-cart-return-button"
               className="h-8 px-2 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 hover:bg-amber-500/10 disabled:opacity-50 disabled:pointer-events-none"
-              title={!isOnline ? strings.pos.availableWhenOnline : (locale === "bn" ? "পণ্য ফেরত বা বদল (F6)" : "Return / Exchange (F6)")}
-              aria-label={!isOnline ? strings.pos.availableWhenOnline : (locale === "bn" ? "পণ্য ফেরত বা বদল (F6)" : "Return / Exchange (F6)")}
+              title={!isEffectivelyOnline ? strings.pos.availableWhenOnline : (locale === "bn" ? "পণ্য ফেরত বা বদল (F6)" : "Return / Exchange (F6)")}
+              aria-label={!isEffectivelyOnline ? strings.pos.availableWhenOnline : (locale === "bn" ? "পণ্য ফেরত বা বদল (F6)" : "Return / Exchange (F6)")}
             >
               <RotateCcw className="h-3.5 w-3.5 mr-1" />
               <span>{locale === "bn" ? "ফেরত (F6)" : "Return (F6)"}</span>
@@ -2563,7 +2612,7 @@ export default function PosPage() {
       {/* 1. Payment Dialog (F4) */}
       <PaymentDialog
         isOpen={isPaymentOpen}
-        isOnline={isOnline}
+        isOnline={isEffectivelyOnline}
         onClose={() => setIsPaymentOpen(false)}
         totalPayableMinor={exchangeContext ? exchangeDifferenceMinor : cartTotals.expectedTotalMinor}
         isExchange={Boolean(exchangeContext)}

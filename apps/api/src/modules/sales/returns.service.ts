@@ -426,6 +426,7 @@ export class ReturnsService {
         where.OR = [
           { returnNumber: { contains: query.search, mode: "insensitive" } },
           { sale: { invoiceNumber: { contains: query.search, mode: "insensitive" } } },
+          { sale: { offlineInvoiceNumber: { contains: query.search, mode: "insensitive" } } },
         ];
       }
 

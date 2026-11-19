@@ -1,6 +1,8 @@
 import { db, PosOfflineDatabase } from "./db";
 import type { OfflineOutboxItem } from "./types";
 
+export const ONLINE_SALE_TIMEOUT_MS = 6000;
+
 export interface SyncWorkerConfig {
   baseUrl?: string;
   token?: string;

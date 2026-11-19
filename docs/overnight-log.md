@@ -1766,6 +1766,42 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
       2. In `apps/admin/src/app/pos/page.tsx`, moved shift/sales refresh callbacks into `onSyncCompleted` using `checkRegisterShiftRef.current?.()` and `loadLocalShiftSalesRef.current?.()`, eliminating stale function calls.
       3. In `checkRegisterShift`, replaced `setActiveShift(null)` on missing register with an early `return;`, preserving active shift state across re-renders.
     - *Local Verification:* `pos-header-layout.spec.ts` all 3 tests passed (35.2s); `offline-selling.spec.ts` all 10 tests passed (53.5s); 56 admin unit tests passed; 310 API unit tests passed; Next.js build clean.
+  - **CI Iteration 2 (SUCCESS):** Commit `dff5ec7`, CI Run `44608740282` (`WORKFLOW_RUN_CONCLUSION_SUCCESS`).
+
+- **Fix 1: Server Unreachable While Browser Reports Online ("Lie-Fi"):**
+  - **Objectives & Requirements:**
+    1. Short timeout (6 seconds in `ONLINE_SALE_TIMEOUT_MS`) for online send. If the send times out or encounters network error, the sale converts to offline mode (`isOffline: true`, `-O-` invoice number, client `occurredAt`, outbox storage).
+    2. Exact receipt number invariant: receipt printed matches the exact invoice number (whether online or offline `-O-`).
+    3. Lost Response & Idempotency: When a sale was committed online on the server but the response was dropped before reaching the client, the client converts to offline and sync retries with the offline payload and same sale ID. The server detects the retry, stores `offlineInvoiceNumber`, attaches a `NUMBER_MISMATCH` `SaleReviewFlag`, and returns 200 OK (no duplicate row, no 409 conflict).
+    4. Dual Search: `/sales?search=...` and `/sales/returns` search find the sale by either the server invoice number or the offline invoice number.
+    5. Connection State & Server Health: Connection status is not determined solely by `navigator.onLine`. Client polls `/health` with short timeout every 15s and immediately upon failed requests. Connection status pill reflects "অফলাইন" whenever server cannot be reached.
+    6. Action Blocking: Disabled return/exchange (both header button and cart panel button, as well as `F6` shortcut), customer credit sales, cash movements, and close shift whenever offline or server is unreachable (`!isEffectivelyOnline`).
+    7. Business Date Attribution & Clamping: Server records client `occurredAt` clamped to the shift window `[openedAt, closedAt]`.
+  - **Schema & Database Changes:**
+    - Added `offlineInvoiceNumber String? @map("offline_invoice_number")` to `Sale` model in `apps/api/prisma/schema.prisma`.
+    - Added unique index: `@@unique([tenantId, offlineInvoiceNumber])`.
+    - Created migration `20261120030000_add_offline_invoice_number_to_sale` granting column-level `UPDATE (offline_invoice_number)` on table `sales` to `pos_app` and `pos_runtime`.
+  - **API Backend Implementation:**
+    - `SalesService.checkIdempotency` & `handleSaleCreationConflict`: handles lost-response retry with differing invoice numbers gracefully without 409 conflict; updates `offlineInvoiceNumber` and creates `NUMBER_MISMATCH` flag with `{ serverInvoiceNumber, offlineInvoiceNumber }`.
+    - `SalesService.findAll` & `ReturnsService.findMany`: search by either `invoiceNumber` or `offlineInvoiceNumber` via Prisma `where.OR`.
+    - `SalesService.create`: client `occurredAt` preserved and clamped to shift window.
+  - **Admin Client Implementation:**
+    - Exported `ONLINE_SALE_TIMEOUT_MS = 6000` constant in `apps/admin/src/lib/pos/offline/sync-worker.ts`.
+    - Added `isServerReachable` state, polling `/health` every 15s and immediately on network failures.
+    - Defined `isEffectivelyOnline = isOnline && isServerReachable`.
+    - Guarded all server-required actions (`pos-return-button`, `pos-cart-return-button`, F6 handler, `close-shift-button`, `cash-movement-button`, credit payment option) with `!isEffectivelyOnline`.
+    - Converted online send timeout / catch to offline sale fallback in `handleCompleteSale`.
+    - Added `flagNumberMismatch` localization in `bn.ts` and `en.ts` and badge display on `/sales/offline-review`.
+  - **Tests & Verification:**
+    - API unit tests in `apps/api/test/offline-sales-engine.spec.ts`:
+      - Clamping `occurred_at` to shift opened_at and closed_at window (before, after, inside).
+      - Lost response retry idempotency, `NUMBER_MISMATCH` flag creation, and dual search.
+      - 27/27 tests passed in `offline-sales-engine.spec.ts`. All 312 API tests passed.
+    - Admin unit tests: 56/56 passed. Strict inline i18n ceiling preserved (685 occurrences).
+    - Playwright E2E tests in `apps/admin/e2e/offline-selling.spec.ts`:
+      - Scenario 11 ("Lie-Fi - server unreachable while browser online"): browser online, `api/v1` blocked, pill turns to "অফলাইন", return disabled, 2 offline sales created (cash and bKash with reference), receipt `-O-` verified, connection restored, synced, server API asserts exact single sale, invoice number match, `isOffline: true`, `occurredAt` preserved, bKash reference preserved.
+      - Scenario 12 ("Lost response - idempotency, NUMBER_MISMATCH flag and dual search"): server saves online sale, response aborted, client converts to offline `-O-` sale, outbox retries, server returns 200, `NUMBER_MISMATCH` flag created, dual search finds sale by both numbers.
+      - All 12 scenarios in `offline-selling.spec.ts` passed in 1.1 minutes.
 
 
 

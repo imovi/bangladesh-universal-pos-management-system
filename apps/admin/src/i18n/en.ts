@@ -729,6 +729,7 @@ export const en: TranslationKeys = {
     flagPriceChanged: "Price Changed (PRICE_CHANGED)",
     flagCatalogStale: "Stale Catalog (CATALOG_STALE)",
     flagCustomerNew: "New Customer (CUSTOMER_NEW)",
+    flagNumberMismatch: "Invoice Mismatch (NUMBER_MISMATCH)",
     tableInvoice: "Invoice / Time",
     tableFlagType: "Flag Type",
     tableCashierBranch: "Cashier / Branch",

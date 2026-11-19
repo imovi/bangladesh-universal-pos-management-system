@@ -1081,5 +1081,191 @@ describe("Milestone D1: Offline Sales Engine & API Integration Tests", () => {
         currency: "BDT", language: "bn", timezone: "Asia/Dhaka", prices_include_tax: true, allow_negative_stock: false,
       });
     }, 60000);
+
+    it("clamps offline sale occurred_at to shift opened_at and closed_at window", async () => {
+      // Create dedicated register and closed shift
+      const rCode = "RC" + Math.floor(Math.random() * 899 + 100);
+      const regRes = await request(app.getHttpServer())
+        .post("/api/v1/registers")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ branchId, name: `Clamp Counter ${rCode}`, code: rCode, allowOffline: true });
+      const testRegId = regRes.body.data.id;
+
+      const shiftRes = await request(app.getHttpServer())
+        .post("/api/v1/shifts/open")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ registerId: testRegId, branchId, openingCashMinor: 10000 });
+      const testShiftId = shiftRes.body.data.id;
+
+      // Update shift times directly in DB to have explicit window: [T0, T1]
+      const t0 = new Date(Date.now() - 3600000); // 1 hour ago
+      const t1 = new Date(Date.now() - 1800000); // 30 mins ago
+      await tenantContext.runWithTenant(tenantId, async (tx) => {
+        await tx.shift.update({
+          where: { id: testShiftId },
+          data: { openedAt: t0, closedAt: t1, status: "closed" },
+        });
+      });
+
+      const dateKey = formatDateKey(new Date(), "Asia/Dhaka");
+
+      // 1. Sale occurred before opened_at -> clamped to opened_at (t0)
+      const saleIdBefore = uuidv7();
+      const resBefore = await request(app.getHttpServer())
+        .post("/api/v1/sales")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .set("Idempotency-Key", saleIdBefore)
+        .send({
+          id: saleIdBefore,
+          shiftId: testShiftId,
+          branchId,
+          isOffline: true,
+          invoiceNumber: `${rCode}-O-${dateKey}-0091`,
+          occurredAt: new Date(t0.getTime() - 600000).toISOString(), // 10 mins before t0
+          items: [{ variantId, quantity: 1, unitPriceMinor: variantPriceMinor }],
+          payments: [{ paymentMethod: "cash", amountMinor: variantPriceMinor }],
+          expectedTotalMinor: variantPriceMinor,
+        });
+      expect([200, 201]).toContain(resBefore.status);
+
+      // 2. Sale occurred after closed_at -> clamped to closed_at (t1)
+      const saleIdAfter = uuidv7();
+      const resAfter = await request(app.getHttpServer())
+        .post("/api/v1/sales")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .set("Idempotency-Key", saleIdAfter)
+        .send({
+          id: saleIdAfter,
+          shiftId: testShiftId,
+          branchId,
+          isOffline: true,
+          invoiceNumber: `${rCode}-O-${dateKey}-0092`,
+          occurredAt: new Date(t1.getTime() + 600000).toISOString(), // 10 mins after t1
+          items: [{ variantId, quantity: 1, unitPriceMinor: variantPriceMinor }],
+          payments: [{ paymentMethod: "cash", amountMinor: variantPriceMinor }],
+          expectedTotalMinor: variantPriceMinor,
+        });
+      expect([200, 201]).toContain(resAfter.status);
+
+      // 3. Sale occurred inside window -> preserved
+      const saleIdInside = uuidv7();
+      const tInside = new Date(t0.getTime() + 900000); // 15 mins after t0
+      const resInside = await request(app.getHttpServer())
+        .post("/api/v1/sales")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .set("Idempotency-Key", saleIdInside)
+        .send({
+          id: saleIdInside,
+          shiftId: testShiftId,
+          branchId,
+          isOffline: true,
+          invoiceNumber: `${rCode}-O-${dateKey}-0093`,
+          occurredAt: tInside.toISOString(),
+          items: [{ variantId, quantity: 1, unitPriceMinor: variantPriceMinor }],
+          payments: [{ paymentMethod: "cash", amountMinor: variantPriceMinor }],
+          expectedTotalMinor: variantPriceMinor,
+        });
+      expect([200, 201]).toContain(resInside.status);
+
+      // Verify in DB
+      await tenantContext.runWithTenant(tenantId, async (tx) => {
+        const storedBefore = await tx.sale.findUnique({ where: { id: saleIdBefore } });
+        expect(storedBefore?.occurredAt.toISOString()).toBe(t0.toISOString());
+
+        const storedAfter = await tx.sale.findUnique({ where: { id: saleIdAfter } });
+        expect(storedAfter?.occurredAt.toISOString()).toBe(t1.toISOString());
+
+        const storedInside = await tx.sale.findUnique({ where: { id: saleIdInside } });
+        expect(storedInside?.occurredAt.toISOString()).toBe(tInside.toISOString());
+      });
+    });
+
+    it("handles lost response retry by linking offline_invoice_number, raising NUMBER_MISMATCH flag, and searching both numbers", async () => {
+      // Create dedicated register and active open shift
+      const rCode = "RM" + Math.floor(Math.random() * 899 + 100);
+      const regRes = await request(app.getHttpServer())
+        .post("/api/v1/registers")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ branchId, name: `Mismatch Counter ${rCode}`, code: rCode, allowOffline: true });
+      const testRegId = regRes.body.data.id;
+
+      const shiftRes = await request(app.getHttpServer())
+        .post("/api/v1/shifts/open")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ registerId: testRegId, branchId, openingCashMinor: 10000 });
+      const testShiftId = shiftRes.body.data.id;
+
+      const dateKey = formatDateKey(new Date(), "Asia/Dhaka");
+      const lostSaleId = uuidv7();
+
+      // First save sale as online sale
+      const onlineRes = await request(app.getHttpServer())
+        .post("/api/v1/sales")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .set("Idempotency-Key", lostSaleId)
+        .send({
+          id: lostSaleId,
+          shiftId: testShiftId,
+          branchId,
+          isOffline: false,
+          items: [{ variantId, quantity: 1, unitPriceMinor: variantPriceMinor }],
+          payments: [{ paymentMethod: "cash", amountMinor: variantPriceMinor }],
+          expectedTotalMinor: variantPriceMinor,
+        });
+      expect([200, 201]).toContain(onlineRes.status);
+      const serverInvoiceNumber = onlineRes.body.data.invoiceNumber;
+      expect(serverInvoiceNumber).toBeDefined();
+
+      // Retry with same sale ID, but offline payload with -O- number
+      const offlineInvoiceNumber = `${rCode}-O-${dateKey}-9999`;
+      const retryRes = await request(app.getHttpServer())
+        .post("/api/v1/sales")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .set("Idempotency-Key", lostSaleId)
+        .send({
+          id: lostSaleId,
+          shiftId: testShiftId,
+          branchId,
+          isOffline: true,
+          invoiceNumber: offlineInvoiceNumber,
+          occurredAt: new Date().toISOString(),
+          items: [{ variantId, quantity: 1, unitPriceMinor: variantPriceMinor }],
+          payments: [{ paymentMethod: "cash", amountMinor: variantPriceMinor }],
+          expectedTotalMinor: variantPriceMinor,
+        });
+
+      // Must not answer 409
+      expect([200, 201]).toContain(retryRes.status);
+      expect(retryRes.body.data.id).toBe(lostSaleId);
+
+      // Verify DB stored offlineInvoiceNumber and NUMBER_MISMATCH flag
+      await tenantContext.runWithTenant(tenantId, async (tx) => {
+        const stored = await tx.sale.findUnique({
+          where: { id: lostSaleId },
+          include: { reviewFlags: true },
+        });
+        expect(stored?.offlineInvoiceNumber).toBe(offlineInvoiceNumber);
+        const flag = stored?.reviewFlags.find((f) => f.flag === "NUMBER_MISMATCH");
+        expect(flag).toBeDefined();
+        expect(flag?.details).toEqual({
+          serverInvoiceNumber,
+          offlineInvoiceNumber,
+        });
+      });
+
+      // Verify /sales?search=... finds the sale with server invoice number
+      const searchServerRes = await request(app.getHttpServer())
+        .get(`/api/v1/sales?search=${serverInvoiceNumber}`)
+        .set("Authorization", `Bearer ${ownerToken}`);
+      expect(searchServerRes.status).toBe(200);
+      expect(searchServerRes.body.data.items.some((s: any) => s.id === lostSaleId)).toBe(true);
+
+      // Verify /sales?search=... finds the sale with offline invoice number
+      const searchOfflineRes = await request(app.getHttpServer())
+        .get(`/api/v1/sales?search=${offlineInvoiceNumber}`)
+        .set("Authorization", `Bearer ${ownerToken}`);
+      expect(searchOfflineRes.status).toBe(200);
+      expect(searchOfflineRes.body.data.items.some((s: any) => s.id === lostSaleId)).toBe(true);
+    });
   });
 });

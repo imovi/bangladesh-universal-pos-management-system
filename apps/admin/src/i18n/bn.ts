@@ -727,6 +727,7 @@ export const bn = {
     flagPriceChanged: "মূল্য পরিবর্তন",
     flagCatalogStale: "পুরাতন ক্যাটালগ",
     flagCustomerNew: "নতুন গ্রাহক",
+    flagNumberMismatch: "ইনভয়েস গরমিল",
     tableInvoice: "ইনভয়েস / সময়",
     tableFlagType: "ফ্ল্যাগ টাইপ",
     tableCashierBranch: "ক্যাশিয়ার / শাখা",

@@ -897,4 +897,227 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
     await expect(allRowsForSale).toHaveCount(1);
     await expect(page.locator(`[data-testid="shift-sale-badge-${offlineInv}"]`)).toHaveText(/সম্পন্ন|Completed/);
   });
+
+  // 11. Lie-Fi: Server unreachable while browser online
+  test("Scenario 11: Lie-Fi - server unreachable while browser online", async ({
+    page,
+    context,
+    request,
+  }) => {
+    test.setTimeout(90000);
+    const { token } = await setupAuthAndPin(request);
+    await ensureRegisterAllowOffline(request, token);
+    await loginAndGoToPos(page);
+
+    // Ensure open shift
+    const openShiftBtn = page.locator('[data-testid="open-shift-button"], button:has-text("শিফট শুরু করুন"), button:has-text("Start Shift")');
+    if (await openShiftBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await openShiftBtn.click();
+      const confirmOpenBtn = page.locator('[data-testid="confirm-open-shift-button"]');
+      await expect(confirmOpenBtn).toBeVisible({ timeout: 5000 });
+      await page.fill('[data-testid="opening-cash-input"]', "1000");
+      await confirmOpenBtn.click();
+      await expect(confirmOpenBtn).toBeHidden({ timeout: 10000 });
+    }
+
+    const connPill = page.locator('[data-testid="connection-status-pill"]');
+    await expect(connPill).toBeVisible({ timeout: 10000 });
+
+    // Keep browser online, but block all /api/v1/** calls on both context and page
+    await context.route("**/api/v1/**", (route) => route.abort());
+    await page.route("**/api/v1/**", (route) => route.abort());
+
+    // Trigger health check failure
+    await page.evaluate(async () => {
+      if (typeof (window as any).__checkServerHealth === "function") {
+        await (window as any).__checkServerHealth();
+      }
+    });
+
+    await expect(connPill).toContainText(/অফলাইন|Offline/, { timeout: 15000 });
+    await expect(page.locator('[data-testid="pos-return-button"]')).toBeDisabled();
+    await expect(page.locator('[data-testid="pos-cart-return-button"]')).toBeDisabled();
+
+    const sale1ClientTime = Date.now();
+    // Sale 1: Cash sale
+    const firstProd = page.locator('[data-testid^="product-card-"]').first();
+    await firstProd.click();
+    const varCell1 = page.locator('[data-testid^="variant-cell-"]').first();
+    if (await varCell1.isVisible({ timeout: 1500 }).catch(() => false)) {
+      await varCell1.click();
+    }
+    await page.locator('[data-testid="pos-checkout-button"]').click();
+    await page.locator('[data-testid="confirm-payment-button"]').click();
+
+    const receipt = page.locator('[data-testid="receipt-container"]');
+    await expect(receipt).toBeVisible({ timeout: 10000 });
+    const receipt1Text = await receipt.innerText();
+    const match1 = receipt1Text.match(/REG01-O-\d{6}-\d{4}/);
+    expect(match1).not.toBeNull();
+    const inv1 = match1![0];
+    await page.locator('[data-testid="new-sale-button"]').click();
+
+    // Sale 2: bKash sale with reference
+    const sale2ClientTime = Date.now();
+    await firstProd.click();
+    const varCell2 = page.locator('[data-testid^="variant-cell-"]').first();
+    if (await varCell2.isVisible({ timeout: 1500 }).catch(() => false)) {
+      await varCell2.click();
+    }
+    await page.locator('[data-testid="pos-checkout-button"]').click();
+    // Select bKash
+    await page.locator('[data-testid="payment-method-select-0"]').click();
+    await page.locator('role=option').filter({ hasText: /বিকাশ|bKash/ }).click();
+    const refInput = page.locator('[data-testid="payment-ref-input-0"]');
+    await expect(refInput).toBeVisible({ timeout: 3000 });
+    await refInput.fill("TRX-BKASH-7777");
+    await page.locator('[data-testid="confirm-payment-button"]').click();
+
+    await expect(receipt).toBeVisible({ timeout: 10000 });
+    const receipt2Text = await receipt.innerText();
+    const match2 = receipt2Text.match(/REG01-O-\d{6}-\d{4}/);
+    expect(match2).not.toBeNull();
+    const inv2 = match2![0];
+    await page.locator('[data-testid="new-sale-button"]').click();
+
+    // Remove route and restore connectivity
+    await context.unroute("**/api/v1/**");
+    await page.unroute("**/api/v1/**");
+    await page.evaluate(() => {
+      if (typeof (window as any).__triggerPosSync === "function") {
+        (window as any).__triggerPosSync();
+      }
+    });
+
+    await page.waitForTimeout(4000);
+
+    // Query API for both sales
+    const salesRes = await request.get("http://localhost:4000/api/v1/sales?limit=50", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(salesRes.ok()).toBeTruthy();
+    const allSales = (await salesRes.json()).data.items;
+
+    // Assert sale 1
+    const matching1 = allSales.filter((s: any) => s.invoiceNumber === inv1);
+    expect(matching1.length).toBe(1);
+    const sale1 = matching1[0];
+    expect(sale1.invoiceNumber).toBe(inv1);
+    expect(sale1.isOffline).toBe(true);
+    const s1Occurred = new Date(sale1.occurredAt).getTime();
+    expect(Math.abs(s1Occurred - sale1ClientTime)).toBeLessThan(60000);
+
+    // Assert sale 2
+    const matching2 = allSales.filter((s: any) => s.invoiceNumber === inv2);
+    expect(matching2.length).toBe(1);
+    const sale2 = matching2[0];
+    expect(sale2.invoiceNumber).toBe(inv2);
+    expect(sale2.isOffline).toBe(true);
+    const s2Occurred = new Date(sale2.occurredAt).getTime();
+    expect(Math.abs(s2Occurred - sale2ClientTime)).toBeLessThan(60000);
+    const bkashPayment = sale2.payments?.find((p: any) => p.paymentMethod === "bkash");
+    expect(bkashPayment).toBeDefined();
+    expect(bkashPayment?.reference).toBe("TRX-BKASH-7777");
+  });
+
+  // 12. Lost response: server saved online sale, response lost, client retries offline
+  test("Scenario 12: Lost response - idempotency, NUMBER_MISMATCH flag and dual search", async ({
+    page,
+    context,
+    request,
+  }) => {
+    test.setTimeout(90000);
+    const { token } = await setupAuthAndPin(request);
+    await ensureRegisterAllowOffline(request, token);
+    await loginAndGoToPos(page);
+
+    // Ensure open shift
+    const openShiftBtn = page.locator('[data-testid="open-shift-button"], button:has-text("শিফট শুরু করুন"), button:has-text("Start Shift")');
+    if (await openShiftBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await openShiftBtn.click();
+      const confirmOpenBtn = page.locator('[data-testid="confirm-open-shift-button"]');
+      await expect(confirmOpenBtn).toBeVisible({ timeout: 5000 });
+      await page.fill('[data-testid="opening-cash-input"]', "1000");
+      await confirmOpenBtn.click();
+      await expect(confirmOpenBtn).toBeHidden({ timeout: 10000 });
+    }
+
+    let intercepted = false;
+    let serverInvoiceNumber = "";
+    const handler = async (route: any) => {
+      if (route.request().method() === "POST" && !intercepted) {
+        intercepted = true;
+        const res = await route.fetch();
+        const json = await res.json().catch(() => null);
+        if (json?.data?.invoiceNumber) {
+          serverInvoiceNumber = json.data.invoiceNumber;
+        }
+        await route.abort();
+      } else {
+        await route.continue();
+      }
+    };
+    await context.route("**/api/v1/sales", handler);
+    await page.route("**/api/v1/sales", handler);
+
+    const firstProd = page.locator('[data-testid^="product-card-"]').first();
+    await firstProd.click();
+    const varCell = page.locator('[data-testid^="variant-cell-"]').first();
+    if (await varCell.isVisible({ timeout: 1500 }).catch(() => false)) {
+      await varCell.click();
+    }
+    await page.locator('[data-testid="pos-checkout-button"]').click();
+    await page.locator('[data-testid="confirm-payment-button"]').click();
+
+    // After route.abort(), client converts to offline sale
+    const receipt = page.locator('[data-testid="receipt-container"]');
+    await expect(receipt).toBeVisible({ timeout: 15000 });
+    const receiptText = await receipt.innerText();
+    const match = receiptText.match(/REG01-O-\d{6}-\d{4}/);
+    expect(match).not.toBeNull();
+    const offlineInv = match![0];
+    await page.locator('[data-testid="new-sale-button"]').click();
+
+    // Remove route abortion
+    await context.unroute("**/api/v1/sales");
+    await page.unroute("**/api/v1/sales");
+
+    // Trigger sync
+    await page.evaluate(() => {
+      if (typeof (window as any).__triggerPosSync === "function") {
+        (window as any).__triggerPosSync();
+      }
+    });
+    await page.waitForTimeout(4000);
+
+    // Verify on server via API:
+    // 1. Search by offline invoice number
+    const searchOfflineRes = await request.get(`http://localhost:4000/api/v1/sales?search=${offlineInv}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(searchOfflineRes.ok()).toBeTruthy();
+    const foundByOffline = (await searchOfflineRes.json()).data.items;
+    expect(foundByOffline.length).toBe(1);
+    const saleId = foundByOffline[0].id;
+
+    // 2. Search by server invoice number
+    if (serverInvoiceNumber) {
+      const searchServerRes = await request.get(`http://localhost:4000/api/v1/sales?search=${serverInvoiceNumber}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(searchServerRes.ok()).toBeTruthy();
+      const foundByServer = (await searchServerRes.json()).data.items;
+      expect(foundByServer.some((s: any) => s.id === saleId)).toBe(true);
+    }
+
+    // 3. NUMBER_MISMATCH flag exists in review flags
+    const flagsRes = await request.get("http://localhost:4000/api/v1/sales/offline-review", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(flagsRes.ok()).toBeTruthy();
+    const flags = (await flagsRes.json()).data?.items || (await flagsRes.json()).data?.data || (await flagsRes.json()).data || [];
+    const mismatchFlag = flags.find((f: any) => f.flag === "NUMBER_MISMATCH" && f.saleId === saleId);
+    expect(mismatchFlag).toBeDefined();
+    expect(mismatchFlag.details?.offlineInvoiceNumber).toBe(offlineInv);
+  });
 });

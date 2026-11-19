@@ -177,6 +177,12 @@ export default function OfflineReviewPage() {
             CUSTOMER_CREDIT_EXCEEDED
           </Badge>
         );
+      case "NUMBER_MISMATCH":
+        return (
+          <Badge variant="outline" className="bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20 font-mono text-[11px]">
+            {t.flagNumberMismatch}
+          </Badge>
+        );
       default:
         return (
           <Badge variant="outline" className="font-mono text-[11px]">

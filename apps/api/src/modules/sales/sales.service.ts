@@ -197,6 +197,36 @@ export class SalesService {
   ) {
     const existing = await tx.sale.findUnique({ where: { id }, include: { items: true, payments: true } });
     if (!existing || existing.tenantId !== tenantId) return null;
+
+    // Handle lost response retry where original sale was saved online, but client converted to offline
+    if (dto.isOffline && dto.invoiceNumber && existing.invoiceNumber !== dto.invoiceNumber) {
+      if (!existing.offlineInvoiceNumber) {
+        await tx.sale.update({
+          where: { id: existing.id },
+          data: { offlineInvoiceNumber: dto.invoiceNumber },
+        });
+      }
+      const existingFlag = await tx.saleReviewFlag.findFirst({
+        where: { saleId: existing.id, flag: "NUMBER_MISMATCH" },
+      });
+      if (!existingFlag) {
+        await tx.saleReviewFlag.create({
+          data: {
+            id: uuidv7(),
+            tenantId,
+            saleId: existing.id,
+            flag: "NUMBER_MISMATCH",
+            details: {
+              serverInvoiceNumber: existing.invoiceNumber,
+              offlineInvoiceNumber: dto.invoiceNumber,
+            },
+            status: "open",
+          },
+        });
+      }
+      return { ...existing, offlineInvoiceNumber: dto.invoiceNumber, isDuplicate: true };
+    }
+
     if (matchesSalePayload(existing, payloadHash, dto)) return { ...existing, isDuplicate: true };
     throw new ConflictException({
       code: "IDEMPOTENCY_CONFLICT", message: `Sale ${dto.id} already exists with different payload`,
@@ -324,6 +354,9 @@ export class SalesService {
   private async handleSaleCreationConflict(tenantId: string, dto: CreateSaleDto, payloadHash: string): Promise<any> {
     const existing = await this.findById(tenantId, dto.id).catch(() => null);
     if (existing) {
+      if (dto.isOffline && dto.invoiceNumber && existing.invoiceNumber !== dto.invoiceNumber) {
+        return { ...existing, offlineInvoiceNumber: dto.invoiceNumber, isDuplicate: true };
+      }
       if (matchesSalePayload(existing, payloadHash, dto)) return { ...existing, isDuplicate: true };
       throw new ConflictException({
         code: "IDEMPOTENCY_CONFLICT", message: `Sale ${dto.id} already exists with different payload`,
@@ -626,7 +659,10 @@ export class SalesService {
         where.payments = { some: { paymentMethod: query.paymentMethod } };
       }
       if (query.search) {
-        where.invoiceNumber = { contains: query.search, mode: "insensitive" };
+        where.OR = [
+          { invoiceNumber: { contains: query.search, mode: "insensitive" } },
+          { offlineInvoiceNumber: { contains: query.search, mode: "insensitive" } },
+        ];
       }
       if (query.startDate || query.endDate) {
         where.occurredAt = {};

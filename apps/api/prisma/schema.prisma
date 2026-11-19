@@ -753,6 +753,7 @@ model Sale {
   occurredAt       DateTime  @default(now()) @map("occurred_at")
   syncedAt         DateTime? @map("synced_at")
   isOffline        Boolean   @default(false) @map("is_offline")
+  offlineInvoiceNumber String? @map("offline_invoice_number")
   catalogVersion   String?   @map("catalog_version")
   createdAt        DateTime  @default(now()) @map("created_at")
 
@@ -770,6 +771,7 @@ model Sale {
   reviewFlags SaleReviewFlag[]
 
   @@unique([tenantId, invoiceNumber])
+  @@unique([tenantId, offlineInvoiceNumber])
   @@index([tenantId])
   @@index([shiftId])
   @@index([branchId])

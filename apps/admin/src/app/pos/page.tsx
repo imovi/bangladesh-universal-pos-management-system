@@ -319,9 +319,11 @@ export default function PosPage() {
         },
         onStatusChange: (stats) => {
           setOutboxStats(stats);
-          if (stats.pending === 0 && stats.syncing === 0) {
-            checkRegisterShift();
-            loadLocalShiftSales();
+        },
+        onSyncCompleted: (result) => {
+          if (result.synced > 0) {
+            checkRegisterShiftRef.current?.();
+            loadLocalShiftSalesRef.current?.();
           }
         },
       },
@@ -371,7 +373,9 @@ export default function PosPage() {
         },
         onStatusChange: (stats) => {
           setOutboxStats(stats);
-          if (stats.pending === 0 && stats.syncing === 0) {
+        },
+        onSyncCompleted: (result) => {
+          if (result.synced > 0) {
             checkRegisterShiftRef.current?.();
             loadLocalShiftSalesRef.current?.();
             setStatusBanner({
@@ -491,8 +495,6 @@ export default function PosPage() {
   // Check Shift for selected register
   const checkRegisterShift = useCallback(async () => {
     if (!selectedRegister?.id || !user) {
-      setActiveShift(null);
-      setShiftInUseOtherUser(null);
       return;
     }
     try {

@@ -7,6 +7,7 @@ export interface SyncWorkerConfig {
   database?: PosOfflineDatabase;
   customSender?: (item: OfflineOutboxItem) => Promise<{ status: number; body?: any; error?: string }>;
   onStatusChange?: (stats: { pending: number; syncing: number; synced: number; failed: number }) => void;
+  onSyncCompleted?: (result: { processed: number; synced: number; failed: number; retried: number }) => void;
   forceImmediate?: boolean;
 }
 
@@ -183,6 +184,10 @@ export async function runSync(config: SyncWorkerConfig = {}): Promise<{
     if (config.onStatusChange) {
       const stats = await getOutboxStats(targetDb);
       config.onStatusChange(stats);
+    }
+
+    if (config.onSyncCompleted && synced > 0) {
+      config.onSyncCompleted({ processed, synced, failed, retried });
     }
   } finally {
     isSyncRunning = false;

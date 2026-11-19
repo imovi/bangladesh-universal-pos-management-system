@@ -1757,6 +1757,16 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
     - Unit test added to `apps/admin/test/offline-storage.spec.ts`: `localSales keeps exactly one row per sale id, holding both offline and server numbers upon sync`.
     - Playwright test added as Scenario 10 in `apps/admin/e2e/offline-selling.spec.ts`: completes offline sale, verifies immediate visibility in shift sales modal with "সিঙ্ক হয়নি", verifies offline receipt reprint, reconnects, syncs, and confirms list updates with single completed row and server invoice number.
     - All 18 `offline-storage.spec.ts` unit tests passed. All 56 admin unit tests passed. Full Playwright offline suite (all 10 scenarios) passed in 52.5s.
+  - **CI Iteration 1:** Commit `5844987`, CI Run `44603921829` — **Status: completed, Conclusion: failure (Red)**
+    - *Log Retrieval:* Unauthenticated public API was rate-limited; logged "could not read the CI log" and reproduced failure locally by running the full 136-test Playwright suite against `universal_pos_e2e`.
+    - *Failing Spec:* `apps/admin/e2e/pos-header-layout.spec.ts:427:3` (`header connection pill states (online, offline, syncing, failed) across all 8 widths: no overlap`).
+    - *Root Cause:* In `apps/admin/src/app/pos/page.tsx`, `startSyncWorker` was initiated in a `useEffect` with dependency `[apiFetch]`. In its `onStatusChange` callback, it invoked `checkRegisterShift()`. Because that `useEffect` closed over the initial render state where `selectedRegister` was null, each sync interval tick executed `if (!selectedRegister?.id || !user) { setActiveShift(null); }`. This set `activeShift` to `null` 5 seconds after mount, causing `{activeShift ? (...) : null}` header actions (`pos-return-button`, `close-shift-button`, `cash-movement-button`) to unmount from the DOM.
+    - *Fix Applied:*
+      1. Added `onSyncCompleted?: (result: { processed: number; synced: number; failed: number; retried: number }) => void;` to `SyncWorkerConfig` and `runSync` in `apps/admin/src/lib/pos/offline/sync-worker.ts`, firing strictly when `synced > 0`.
+      2. In `apps/admin/src/app/pos/page.tsx`, moved shift/sales refresh callbacks into `onSyncCompleted` using `checkRegisterShiftRef.current?.()` and `loadLocalShiftSalesRef.current?.()`, eliminating stale function calls.
+      3. In `checkRegisterShift`, replaced `setActiveShift(null)` on missing register with an early `return;`, preserving active shift state across re-renders.
+    - *Local Verification:* `pos-header-layout.spec.ts` all 3 tests passed (35.2s); `offline-selling.spec.ts` all 10 tests passed (53.5s); 56 admin unit tests passed; 310 API unit tests passed; Next.js build clean.
+
 
 
 

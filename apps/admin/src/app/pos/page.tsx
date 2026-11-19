@@ -1343,8 +1343,33 @@ export default function PosPage() {
         for (const it of salePayload.items) {
           try {
             const cur = await db.stock.get(it.variantId);
-            if (cur) {
-              await db.stock.put({ ...cur, stockQty: cur.stockQty - it.quantity, updatedAt: new Date().toISOString() });
+            const newQty = (cur?.stockQty ?? 0) - it.quantity;
+            await db.stock.put({
+              variantId: it.variantId,
+              stockQty: newQty,
+              updatedAt: new Date().toISOString(),
+            });
+
+            const prodId = (it as any).productId;
+            if (prodId) {
+              const product = await db.catalog.get(prodId);
+              if (product && product.variants) {
+                const vIndex = product.variants.findIndex((v) => v.id === it.variantId);
+                if (vIndex >= 0) {
+                  product.variants[vIndex].stockQty = newQty;
+                  const vAny = product.variants[vIndex] as any;
+                  if (vAny.stockLevels && Array.isArray(vAny.stockLevels)) {
+                    for (const sl of vAny.stockLevels) {
+                      if (!sl.branchId || sl.branchId === currentBranch.id) {
+                        sl.qty = String(newQty);
+                      }
+                    }
+                  } else {
+                    vAny.stockLevels = [{ branchId: currentBranch.id, qty: String(newQty) }];
+                  }
+                  await db.catalog.put(product);
+                }
+              }
             }
           } catch {}
         }

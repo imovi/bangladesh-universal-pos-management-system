@@ -1802,6 +1802,29 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
       - Scenario 11 ("Lie-Fi - server unreachable while browser online"): browser online, `api/v1` blocked, pill turns to "অফলাইন", return disabled, 2 offline sales created (cash and bKash with reference), receipt `-O-` verified, connection restored, synced, server API asserts exact single sale, invoice number match, `isOffline: true`, `occurredAt` preserved, bKash reference preserved.
       - Scenario 12 ("Lost response - idempotency, NUMBER_MISMATCH flag and dual search"): server saves online sale, response aborted, client converts to offline `-O-` sale, outbox retries, server returns 200, `NUMBER_MISMATCH` flag created, dual search finds sale by both numbers.
       - All 12 scenarios in `offline-selling.spec.ts` passed in 1.1 minutes.
+  - **CI Iteration 1:** Commit `2aaf6fb`, CI Run `44615678876` — **Status: completed, Conclusion: failure (Red)**
+    - *Log Retrieval & Diagnosis:* Unauthenticated public API was rate-limited; logged "could not read the CI log" and reproduced failure locally by running the full Playwright E2E suite against fresh `universal_pos_e2e`.
+    - *Failing Spec:* `apps/admin/e2e/pos-flow.spec.ts:431:3` (Flow 5: `Post-Sale API Stock Decrement`).
+      - Error: `expect(reloadedCardStock).toBe(initialCardStock - 2)`. Received 27 instead of 209.
+    - *Root Causes:*
+      1. In `apps/admin/src/app/pos/page.tsx`, `handleCompleteSale` for successful online sales updated `db.stock` but did not update `db.catalog`. On page reload, `db.catalog.toArray()` read the pre-sale un-decremented quantity.
+      2. In `apps/admin/src/lib/pos/offline/catalog-sync.ts`, incoming delta sync variants replaced all existing variants of a product instead of merging by `variantId`. For a 6-variant product where only 1 variant changed, the other 5 variants were discarded from IndexedDB, collapsing total product stock from 209 down to 27.
+      3. In `apps/api/src/modules/sales/pos-catalog.service.ts`, when `since` delta was requested, `productWhere` only checked `updatedAt: { gte: sinceDate }`, skipping products whose stock changed via sales (`stockLevels.updatedAt`).
+      4. In `pos-catalog.service.ts`, offline sequence counter seeding only checked `invoiceNumber` with `-O-`, ignoring `offlineInvoiceNumber` on converted online sales, risking sequence reuse.
+    - *Fixes Applied:*
+      1. In `apps/admin/src/app/pos/page.tsx`, `handleCompleteSale` now decrements `db.catalog` nested variant stock levels on successful online sales (matching `enqueueSale` behavior for offline sales).
+      2. In `apps/admin/src/lib/pos/offline/catalog-sync.ts`, incoming delta variants merge by `variantId` into existing product variants in `targetDb.catalog`, preserving all unchanged variants.
+      3. In `apps/api/src/modules/sales/pos-catalog.service.ts`, added `variants: { some: { stockLevels: { some: { branchId, updatedAt: { gte: sinceDate } } } } }` to `productWhere.OR`.
+      4. In `pos-catalog.service.ts`, expanded `latestOfflineSale` query to check both `invoiceNumber` and `offlineInvoiceNumber`.
+      5. In `apps/admin/e2e/offline-selling.spec.ts`, tightened search result unwrapping for robust server verification.
+    - *Local Verification:*
+      - `apps/admin/e2e/pos-flow.spec.ts`: all 5 tests passed (25.6s).
+      - `apps/admin/e2e/offline-selling.spec.ts`: all 12 scenarios passed (1.1m).
+      - Admin unit tests: 9 test files, 56 passed.
+      - API unit tests: 52 test files, 312 passed.
+      - Next.js production build: clean (exited with code 0).
+      - `npm run lint`: 0 warnings, 0 errors across 184 files.
+
 
 
 

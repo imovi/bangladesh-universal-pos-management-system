@@ -23,7 +23,10 @@ export class PosCatalogService {
       const taxWhere: Prisma.TaxClassWhereInput = { tenantId };
 
       if (isValidDate) {
-        productWhere.updatedAt = { gte: sinceDate };
+        productWhere.OR = [
+          { updatedAt: { gte: sinceDate } },
+          { variants: { some: { stockLevels: { some: { branchId, updatedAt: { gte: sinceDate } } } } } },
+        ];
         variantWhere.OR = [
           { updatedAt: { gte: sinceDate } },
           { stockLevels: { some: { branchId, updatedAt: { gte: sinceDate } } } },
@@ -98,15 +101,18 @@ export class PosCatalogService {
         where: {
           tenantId,
           branchId,
-          isOffline: true,
-          invoiceNumber: { contains: `-O-${todayYymmdd}-` },
+          OR: [
+            { isOffline: true, invoiceNumber: { contains: `-O-${todayYymmdd}-` } },
+            { offlineInvoiceNumber: { contains: `-O-${todayYymmdd}-` } },
+          ],
         },
         orderBy: { invoiceNumber: "desc" },
-        select: { invoiceNumber: true },
+        select: { invoiceNumber: true, offlineInvoiceNumber: true },
       });
       let lastOfflineSeq = 0;
-      if (latestOfflineSale?.invoiceNumber) {
-        const match = latestOfflineSale.invoiceNumber.match(/-O-\d{6}-(\d{4})$/);
+      const invToParse = latestOfflineSale?.offlineInvoiceNumber || latestOfflineSale?.invoiceNumber;
+      if (invToParse) {
+        const match = invToParse.match(/-O-\d{6}-(\d{4})$/);
         if (match) lastOfflineSeq = parseInt(match[1], 10);
       }
 

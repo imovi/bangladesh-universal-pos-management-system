@@ -106,9 +106,22 @@ export async function syncCatalog(
         });
       }
 
-      // 2. Update catalog products
+      // 2. Update catalog products (merging incoming variants with existing variants so other variants are preserved)
+      const updatedProductIds = new Set<string>();
       for (const prod of products) {
-        const prodVariants = variantsByProductId.get(prod.id) || (prod.variants || []);
+        updatedProductIds.add(prod.id);
+        const existing = await targetDb.catalog.get(prod.id);
+        const incomingVariants = variantsByProductId.get(prod.id) || (prod.variants || []);
+
+        let prodVariants = incomingVariants;
+        if (existing && existing.variants && existing.variants.length > 0) {
+          const map = new Map(existing.variants.map((v) => [v.id, v]));
+          for (const iv of incomingVariants) {
+            map.set(iv.id, { ...map.get(iv.id), ...iv });
+          }
+          prodVariants = Array.from(map.values());
+        }
+
         const allBarcodes: string[] = [];
         for (const v of prodVariants) {
           if (Array.isArray(v.barcodes)) {
@@ -116,11 +129,27 @@ export async function syncCatalog(
           }
         }
         const fullProd = {
+          ...existing,
           ...prod,
           variants: prodVariants,
           barcodes: Array.from(new Set(allBarcodes)),
         };
         await targetDb.catalog.put(fullProd);
+      }
+
+      // Also merge any standalone variant updates for products not in full product list
+      for (const [prodId, vList] of variantsByProductId.entries()) {
+        if (!updatedProductIds.has(prodId)) {
+          const existingProd = await targetDb.catalog.get(prodId);
+          if (existingProd && existingProd.variants) {
+            const map = new Map(existingProd.variants.map((v) => [v.id, v]));
+            for (const newV of vList) {
+              map.set(newV.id, { ...map.get(newV.id), ...newV });
+            }
+            const mergedVariants = Array.from(map.values());
+            await targetDb.catalog.put({ ...existingProd, variants: mergedVariants });
+          }
+        }
       }
 
       await targetDb.settings.put({

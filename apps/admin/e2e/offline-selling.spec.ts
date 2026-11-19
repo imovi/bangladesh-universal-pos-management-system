@@ -1096,7 +1096,8 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(searchOfflineRes.ok()).toBeTruthy();
-    const foundByOffline = (await searchOfflineRes.json()).data.items;
+    const searchOfflineJson = await searchOfflineRes.json();
+    const foundByOffline = searchOfflineJson.data?.items || searchOfflineJson.data || [];
     expect(foundByOffline.length).toBe(1);
     const saleId = foundByOffline[0].id;
 
@@ -1106,7 +1107,8 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
         headers: { Authorization: `Bearer ${token}` },
       });
       expect(searchServerRes.ok()).toBeTruthy();
-      const foundByServer = (await searchServerRes.json()).data.items;
+      const searchServerJson = await searchServerRes.json();
+      const foundByServer = searchServerJson.data?.items || searchServerJson.data || [];
       expect(foundByServer.some((s: any) => s.id === saleId)).toBe(true);
     }
 

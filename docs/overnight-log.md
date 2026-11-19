@@ -1739,6 +1739,9 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
     - Applied canonical sorting in `apps/admin/src/lib/pos/variant-matrix.ts` (`buildVariantMatrix`), `apps/admin/src/components/common/size-color-grid.tsx` (`displaySizes`), and `apps/admin/src/app/(admin)/catalog/products/new/page.tsx`.
     - Added unit test suites `apps/admin/test/sizes.spec.ts` (4 tests) and `apps/admin/test/size-color-grid.spec.tsx` (5 tests).
     - Service Worker registration verified working on Chromium/Chrome with Serwist bundling `/sw.js` and scope `/`.
+  - **CI Iteration 1:** Commit `70e12c1`, CI Run `44593757883` (`WORKFLOW_RUN_CONCLUSION_FAILURE`).
+    - *Failure Cause:* In `apps/admin/e2e/offline-selling.spec.ts` Scenario 8, the test picked `targetVariant = variants[0]` (`L-SKYBLUE`) and patched its price on the server, but clicked the first cell in the variant matrix UI. Because canonical size sorting now correctly orders sizes (`M` before `L`), the clicked cell was `M-SKYBLUE`, leaving the sold item's server price unchanged and generating no `PRICE_CHANGED` flag on sync.
+    - *Resolution:* Patched all variants of the target product on the server during the offline window so that whichever cell is clicked, the price change is guaranteed to trigger `PRICE_CHANGED` on sync. Verified locally: all 9 scenarios in `offline-selling.spec.ts` pass cleanly (46.7s).
 
 
 

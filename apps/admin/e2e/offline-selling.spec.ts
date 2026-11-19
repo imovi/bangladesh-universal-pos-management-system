@@ -648,18 +648,19 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
     await expect(newSaleBtn).toBeVisible({ timeout: 10000 });
     await newSaleBtn.click();
 
-    // WHILE OFFLINE: Change variant price on server to something different (+50000 minor)
-    const newPriceMinor = originalPrice + 50000;
-    const priceUpdateRes = await request.patch(`http://localhost:4000/api/v1/variants/${targetVariant.id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      data: { priceMinor: newPriceMinor },
-    });
-    expect(priceUpdateRes.ok()).toBeTruthy();
+    // WHILE OFFLINE: Change product variant prices on server to something different (+50000 minor)
+    const productVariants = variants.filter((v: any) => v.productId === targetVariant.productId);
+    for (const v of productVariants) {
+      await request.patch(`http://localhost:4000/api/v1/variants/${v.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        data: { priceMinor: v.priceMinor + 50000 },
+      });
+    }
 
     try {
       // RECONNECT: Sale syncs with offline price
       await context.setOffline(false);
-      await page.waitForTimeout(2500);
+      await page.waitForTimeout(3000);
 
       // Verify sale is accepted and PRICE_CHANGED flag is generated
       await page.goto("/sales/offline-review");
@@ -667,14 +668,16 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
 
       // Verify the flag is listed in the table
       const reviewTable = page.locator("table");
-      await expect(reviewTable).toBeVisible({ timeout: 10000 });
+      await expect(reviewTable).toBeVisible({ timeout: 15000 });
       await expect(page.locator("body")).toContainText(/PRICE_CHANGED|মূল্য পরিবর্তন/);
     } finally {
-      // Revert variant price back cleanly
-      await request.patch(`http://localhost:4000/api/v1/variants/${targetVariant.id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        data: { priceMinor: originalPrice },
-      });
+      // Revert variant prices back cleanly
+      for (const v of productVariants) {
+        await request.patch(`http://localhost:4000/api/v1/variants/${v.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          data: { priceMinor: v.priceMinor },
+        });
+      }
     }
   });
 

@@ -61,6 +61,7 @@ import {
   stopSyncWorker,
   getOutboxStats,
   acquireRegisterTabLock,
+  isSignOutAllowed,
   syncCatalog,
 } from "@/lib/pos/offline";
 import {
@@ -287,24 +288,31 @@ export default function PosPage() {
       {
         customSender: async (item) => {
           const endpoint = item.type === "sale" ? "/sales" : "/customers";
-          const res = await apiFetch(endpoint, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Idempotency-Key": item.idempotencyKey,
-              "x-idempotency-key": item.idempotencyKey,
-            },
-            body: JSON.stringify(item.payload),
-          });
-          let body: any = null;
           try {
-            body = await res.json();
-          } catch {}
-          return {
-            status: res.status,
-            body,
-            error: !res.ok ? (body?.message || `HTTP ${res.status}`) : undefined,
-          };
+            const res = await apiFetch(endpoint, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Idempotency-Key": item.idempotencyKey,
+                "x-idempotency-key": item.idempotencyKey,
+              },
+              body: JSON.stringify(item.payload),
+            });
+            let body: any = null;
+            try {
+              body = await res.json();
+            } catch {}
+            return {
+              status: res.status,
+              body,
+              error: !res.ok ? (body?.message || `HTTP ${res.status}`) : undefined,
+            };
+          } catch (err: any) {
+            return {
+              status: 0,
+              error: err?.message || "Network request failed",
+            };
+          }
         },
         onStatusChange: setOutboxStats,
       },
@@ -323,26 +331,34 @@ export default function PosPage() {
     const handleOnline = () => {
       setIsOnline(true);
       runSync({
+        forceImmediate: true,
         customSender: async (item) => {
           const endpoint = item.type === "sale" ? "/sales" : "/customers";
-          const res = await apiFetch(endpoint, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Idempotency-Key": item.idempotencyKey,
-              "x-idempotency-key": item.idempotencyKey,
-            },
-            body: JSON.stringify(item.payload),
-          });
-          let body: any = null;
           try {
-            body = await res.json();
-          } catch {}
-          return {
-            status: res.status,
-            body,
-            error: !res.ok ? (body?.message || `HTTP ${res.status}`) : undefined,
-          };
+            const res = await apiFetch(endpoint, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Idempotency-Key": item.idempotencyKey,
+                "x-idempotency-key": item.idempotencyKey,
+              },
+              body: JSON.stringify(item.payload),
+            });
+            let body: any = null;
+            try {
+              body = await res.json();
+            } catch {}
+            return {
+              status: res.status,
+              body,
+              error: !res.ok ? (body?.message || `HTTP ${res.status}`) : undefined,
+            };
+          } catch (err: any) {
+            return {
+              status: 0,
+              error: err?.message || "Network request failed",
+            };
+          }
         },
         onStatusChange: (stats) => {
           setOutboxStats(stats);
@@ -366,9 +382,11 @@ export default function PosPage() {
       setTimeout(() => setStatusBanner(null), 4000);
     };
 
+    (window as any).__triggerPosSync = handleOnline;
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
     return () => {
+      delete (window as any).__triggerPosSync;
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
@@ -1148,6 +1166,7 @@ export default function PosPage() {
     try {
       // 1. Unified local enqueue: atomically writes outbox, localSales, and decrements Dexie stock
       await enqueueSale(salePayload as any);
+      getOutboxStats().then(setOutboxStats).catch(() => {});
 
       let serverInvoiceNumber: string | undefined = undefined;
 
@@ -1637,8 +1656,10 @@ export default function PosPage() {
                     type="button"
                     data-testid="pos-signout-button"
                     onClick={async () => {
-                      const hasUnsynced = outboxStats.pending > 0 || outboxStats.syncing > 0;
-                      if (!isOnline && hasUnsynced) {
+                      const stats = await getOutboxStats();
+                      setOutboxStats(stats);
+                      const unsyncedCount = stats.pending + stats.syncing;
+                      if (!isSignOutAllowed(isOnline, unsyncedCount)) {
                         setSignOutBlockedBanner("অফলাইন বিক্রি বাকি থাকা অবস্থায় সাইন আউট করা যাবে না। সব বিক্রি পাঠানো পর্যন্ত অপেক্ষা করুন।");
                         setIsCashierMenuOpen(false);
                         setTimeout(() => setSignOutBlockedBanner(null), 6000);
@@ -1902,7 +1923,7 @@ export default function PosPage() {
 
       {/* Tab lockout banner */}
       {isTabLockedOut && (
-        <div className="bg-rose-600 text-white px-4 py-2 text-xs font-semibold flex items-center justify-center gap-2">
+        <div data-testid="tab-lockout-banner" className="bg-rose-600 text-white px-4 py-2 text-xs font-semibold flex items-center justify-center gap-2">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           <span>{strings.pos.concurrentTabBlocked}</span>
         </div>

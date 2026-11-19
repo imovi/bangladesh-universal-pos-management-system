@@ -146,6 +146,7 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
       {/* Printable Receipt Paper Container */}
       <div
         id="pos-receipt-print"
+        data-testid="receipt-container"
         className={`${widthClass} bg-white text-black p-4 font-mono text-[12px] leading-tight shadow-md border border-gray-200 print:shadow-none print:border-none print:m-0 print:p-2`}
       >
         {/* Header */}

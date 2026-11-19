@@ -101,7 +101,7 @@ export async function runSync(config: SyncWorkerConfig = {}): Promise<{
     // Fetch items ordered by createdAt ascending
     const candidates = await targetDb.outbox
       .orderBy("createdAt")
-      .filter((item) => item.status === "pending" && (config.forceImmediate ? true : item.nextAttemptAt <= now))
+      .filter((item) => (item.status === "pending" || item.status === "syncing") && (config.forceImmediate ? true : item.nextAttemptAt <= now))
       .toArray();
 
     for (const item of candidates) {
@@ -114,7 +114,15 @@ export async function runSync(config: SyncWorkerConfig = {}): Promise<{
         ? config.customSender(item)
         : defaultSender(item, baseUrl, config.token);
 
-      const result = await sender;
+      let result: { status: number; body?: any; error?: string };
+      try {
+        result = await sender;
+      } catch (err: any) {
+        result = {
+          status: 0,
+          error: err?.message || "Network request failed",
+        };
+      }
 
       // 1. Success (2xx) or Idempotent conflict replay (409)
       const isSuccess = result.status >= 200 && result.status < 300;

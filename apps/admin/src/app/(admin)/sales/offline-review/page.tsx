@@ -99,9 +99,15 @@ export default function OfflineReviewPage() {
         throw new Error(`HTTP ${res.status}`);
       }
       const json = await res.json();
-      const list = json.data || [];
+      const list = Array.isArray(json.data)
+        ? json.data
+        : Array.isArray(json.data?.items)
+        ? json.data.items
+        : Array.isArray(json.data?.data)
+        ? json.data.data
+        : [];
       setFlags(list);
-      setTotalCount(json.meta?.total ?? list.length);
+      setTotalCount(json.meta?.total ?? json.data?.meta?.total ?? list.length);
 
       // Also get count of open flags
       const countRes = await apiFetch("/sales/offline-review/count");

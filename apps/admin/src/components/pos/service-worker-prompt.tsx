@@ -22,10 +22,9 @@ export function ServiceWorkerPrompt({
       return;
     }
 
-    // Only register service worker in production builds
-    if (process.env.NODE_ENV === "production") {
-      navigator.serviceWorker
-        .register("/sw.js", { scope: "/" })
+    // Register service worker in production builds or at /pos
+    navigator.serviceWorker
+      .register("/sw.js", { scope: "/" })
         .then((registration) => {
           // Check if a worker is already waiting
           if (registration.waiting) {
@@ -56,7 +55,6 @@ export function ServiceWorkerPrompt({
           window.location.reload();
         }
       });
-    }
   }, []);
 
   const handleApplyUpdate = () => {

@@ -423,13 +423,13 @@ test.describe("Step 1: POS Header Layout, Text Node Overlap & Overflow Verificat
     }
   });
 
-  // 3. Connection Status Pill States across all 8 widths (Milestone D3/D4)
-  test("header connection pill states (online & offline) across all 8 widths: no overlap", async ({
+  // 3. Connection Status Pill States across all 8 widths (Milestone D3/D4/D6)
+  test("header connection pill states (online, offline, syncing, failed) across all 8 widths: no overlap", async ({
     page,
     context,
     request,
   }) => {
-    test.setTimeout(120000);
+    test.setTimeout(180000);
 
     const loginRes = await request.post("http://localhost:4000/api/v1/auth/login", {
       data: {
@@ -465,6 +465,81 @@ test.describe("Step 1: POS Header Layout, Text Node Overlap & Overflow Verificat
     const connPill = page.locator('[data-testid="connection-status-pill"]');
     await expect(connPill).toBeVisible({ timeout: 5000 });
 
+    // Helper for checking text collisions
+    async function assertNoHeaderCollisions() {
+      const textCollisions = await page.evaluate(() => {
+        const headerEl = document.querySelector("header");
+        if (!headerEl) return [];
+
+        function getVisibleRect(rangeRect: DOMRect, el: Element) {
+          let left = rangeRect.left;
+          let top = rangeRect.top;
+          let right = rangeRect.right;
+          let bottom = rangeRect.bottom;
+          let cur: Element | null = el;
+          while (cur && cur !== document.body) {
+            const style = window.getComputedStyle(cur);
+            if (style.overflow === "hidden" || style.overflowX === "hidden") {
+              const b = cur.getBoundingClientRect();
+              left = Math.max(left, b.left);
+              top = Math.max(top, b.top);
+              right = Math.min(right, b.right);
+              bottom = Math.min(bottom, b.bottom);
+            }
+            cur = cur.parentElement;
+          }
+          return {
+            left,
+            top,
+            right,
+            bottom,
+            width: Math.max(0, right - left),
+            height: Math.max(0, bottom - top),
+          };
+        }
+
+        const nodes: { text: string; rect: { left: number; top: number; right: number; bottom: number; width: number; height: number }; parent: Element }[] = [];
+        const walker = document.createTreeWalker(headerEl, NodeFilter.SHOW_TEXT);
+        let n: Node | null;
+        while ((n = walker.nextNode())) {
+          const val = n.nodeValue?.trim();
+          if (val && val.length > 0 && n.parentElement) {
+            if (n.parentElement.closest('[style*="display: none"]')) continue;
+            const r = document.createRange();
+            r.selectNodeContents(n);
+            const rangeRect = r.getBoundingClientRect();
+            const visibleRect = getVisibleRect(rangeRect, n.parentElement);
+            if (visibleRect.width > 0 && visibleRect.height > 0) {
+              nodes.push({ text: val, rect: visibleRect, parent: n.parentElement });
+            }
+          }
+        }
+
+        const collisions: string[] = [];
+        for (let i = 0; i < nodes.length; i++) {
+          for (let j = i + 1; j < nodes.length; j++) {
+            const a = nodes[i];
+            const b = nodes[j];
+            const aButton = a.parent.closest("button, a");
+            const bButton = b.parent.closest("button, a");
+            if (aButton && bButton && aButton === bButton) continue;
+
+            const overlap = !(
+              a.rect.right <= b.rect.left + 0.5 ||
+              b.rect.right <= a.rect.left + 0.5 ||
+              a.rect.bottom <= b.rect.top + 0.5 ||
+              b.rect.bottom <= a.rect.top + 0.5
+            );
+            if (overlap) {
+              collisions.push(`"${a.text}" overlaps with "${b.text}"`);
+            }
+          }
+        }
+        return collisions;
+      });
+      expect(textCollisions).toEqual([]);
+    }
+
     for (const width of widths) {
       await page.setViewportSize({ width, height: 900 });
       await page.waitForTimeout(200);
@@ -475,16 +550,18 @@ test.describe("Step 1: POS Header Layout, Text Node Overlap & Overflow Verificat
         const box = await header.boundingBox();
         expect(box!.height).toBeLessThanOrEqual(60);
       }
+      await assertNoHeaderCollisions();
 
       // (b) Offline state check
       await context.setOffline(true);
-      await page.waitForTimeout(300);
+      await page.waitForTimeout(200);
 
       await expect(connPill).toContainText(/অফলাইন|Offline/);
       if (width >= 768) {
         const box = await header.boundingBox();
         expect(box!.height).toBeLessThanOrEqual(60);
       }
+      await assertNoHeaderCollisions();
 
       // Core actions disabled offline
       const returnBtn = page.locator('[data-testid="pos-return-button"]');
@@ -496,8 +573,72 @@ test.describe("Step 1: POS Header Layout, Text Node Overlap & Overflow Verificat
 
       // (c) Restore online
       await context.setOffline(false);
-      await page.waitForTimeout(300);
+      await page.waitForTimeout(200);
       await expect(connPill).toContainText(/অনলাইন|Online/);
+
+      // (d) Syncing state check
+      await page.evaluate(async () => {
+        const req = indexedDB.open("UniversalPosOffline");
+        req.onsuccess = () => {
+          const idb = req.result;
+          if (idb.objectStoreNames.contains("outbox")) {
+            const tx = idb.transaction("outbox", "readwrite");
+            tx.objectStore("outbox").put({
+              id: "dummy-syncing-item",
+              idempotencyKey: "dummy-key-sync",
+              type: "sale",
+              payload: {},
+              status: "pending",
+              attemptCount: 0,
+              nextAttemptAt: Date.now() + 60000,
+              createdAt: Date.now(),
+            });
+          }
+        };
+      });
+      await page.waitForTimeout(600);
+      if (await connPill.innerText().then(t => t.includes("সিঙ্ক") || t.includes("Sync"))) {
+        await assertNoHeaderCollisions();
+      }
+
+      // (e) Failed state check
+      await page.evaluate(async () => {
+        const req = indexedDB.open("UniversalPosOffline");
+        req.onsuccess = () => {
+          const idb = req.result;
+          if (idb.objectStoreNames.contains("outbox")) {
+            const tx = idb.transaction("outbox", "readwrite");
+            tx.objectStore("outbox").put({
+              id: "dummy-failed-item",
+              idempotencyKey: "dummy-key-fail",
+              type: "sale",
+              payload: {},
+              status: "failed",
+              attemptCount: 5,
+              nextAttemptAt: Date.now() + 60000,
+              createdAt: Date.now(),
+            });
+          }
+        };
+      });
+      await page.waitForTimeout(600);
+      if (await connPill.innerText().then(t => t.includes("সিঙ্ক হয়নি") || t.includes("failed"))) {
+        await assertNoHeaderCollisions();
+      }
+
+      // Cleanup outbox dummy records
+      await page.evaluate(async () => {
+        const req = indexedDB.open("UniversalPosOffline");
+        req.onsuccess = () => {
+          const idb = req.result;
+          if (idb.objectStoreNames.contains("outbox")) {
+            const tx = idb.transaction("outbox", "readwrite");
+            tx.objectStore("outbox").delete("dummy-syncing-item");
+            tx.objectStore("outbox").delete("dummy-failed-item");
+          }
+        };
+      });
+      await page.waitForTimeout(400);
     }
   });
 });

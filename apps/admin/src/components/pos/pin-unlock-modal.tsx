@@ -128,7 +128,7 @@ export function PinUnlockModal({
           <Button
             type="submit"
             disabled={isLocked || isVerifying || pin.length < 4}
-            data-testid="pin-submit-button"
+            data-testid="pin-unlock-button"
             className="w-full h-11 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 shadow-md shadow-primary/20"
           >
             <ShieldCheck className="w-4 h-4" />

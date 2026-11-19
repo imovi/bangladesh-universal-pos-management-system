@@ -713,6 +713,7 @@ export class SalesService {
       ]);
 
       return {
+        items: flags,
         data: flags,
         meta: {
           total,

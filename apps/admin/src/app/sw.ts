@@ -1,6 +1,6 @@
 import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
-import { NetworkOnly, Serwist } from "serwist";
+import { NetworkFirst, NetworkOnly, Serwist } from "serwist";
 
 // Declare Serwist worker global scope
 declare global {
@@ -13,14 +13,22 @@ declare const self: any;
 
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
-  skipWaiting: false,
+  skipWaiting: true,
   clientsClaim: true,
-  navigationPreload: true,
+  navigationPreload: false,
   runtimeCaching: [
     // STRICT RULE: Never cache API responses
     {
       matcher: ({ url }) => url.pathname.startsWith("/api/"),
       handler: new NetworkOnly(),
+    },
+    // Navigation caching for /pos route to serve offline shell
+    {
+      matcher: ({ request, url }) => url.pathname.startsWith("/pos") || request.mode === "navigate",
+      handler: new NetworkFirst({
+        cacheName: "pos-page-shell",
+        networkTimeoutSeconds: 3,
+      }),
     },
     ...defaultCache,
   ],

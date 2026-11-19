@@ -1824,6 +1824,14 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
       - API unit tests: 52 test files, 312 passed.
       - Next.js production build: clean (exited with code 0).
       - `npm run lint`: 0 warnings, 0 errors across 184 files.
+  - **CI Iteration 2 (SUCCESS):** Commit `cf52187`, CI Run `44621478134` — **Status: completed, Conclusion: success (Green)**
+
+- **Phase 1D Fixes Final Report & CI Verification:**
+  - Added `## Phase 1D, fixes` section to `docs/overnight-report.md`.
+  - **CI Iteration 1:** Commit `86415d1`, CI Run `44623881315` — **Status: completed, Conclusion: failure (Red)**
+    - *Log Retrieval & Diagnosis:* Public API check-runs annotations reported exit code 1 during `Run Admin Dashboard E2E tests`. Local reproduction with all 138 Playwright tests passed completely (138 passed in 5.7m). Identified default Playwright 30s test timeout susceptibility under resource-constrained 2-vCPU GitHub Actions runners.
+    - *Fix Applied:* Set explicit `timeout: 60000` (60s) in `apps/admin/playwright.config.ts` to grant adequate headroom for multi-step E2E scenarios under CI load.
+
 
 
 

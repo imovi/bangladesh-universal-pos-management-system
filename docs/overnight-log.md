@@ -1714,8 +1714,8 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
     3. *Missing Confirmation in `scripts/reset-dev-db.ts`:* Did not require an explicit `--yes` confirmation argument.
   - **Fixes Applied & CI Iteration:**
     - Initial push `c6283c2` triggered CI Run `44580903756` (Conclusion: `WORKFLOW_RUN_CONCLUSION_FAILURE`). CI failed in step "Seed demo dataset" (`npm run seed:demo`) because `seed-demo.ts` was made to require `--yes` even for `universal_pos`.
-    - Corrected `scripts/seed-demo.ts`: `seed-demo.ts` allows its designated dev target `universal_pos` and test databases (`_e2e`, `_test`), while strictly blocking arbitrary non-dev databases (e.g. `production_pos`). `db:reset:dev` remains the only destructive script allowed to drop/recreate `universal_pos`, strictly gated behind `--yes`.
-    - Updated `apps/api/test/db-protection-guard.spec.ts` to assert that `seed-demo.ts` rejects non-development databases.
+    - Push `442dbd4` allowed `seed:demo` on `universal_pos` and triggered CI Run `44581892201` (Conclusion: `WORKFLOW_RUN_CONCLUSION_FAILURE`). CI reached E2E tests and failed on `offline-selling.spec.ts` (Scenario 2) due to: (1) `navigator.serviceWorker.ready` hanging indefinitely without a fallback timeout in headless environment, and (2) `pos-catalog.service.ts` computing offline sequence using UTC `now.toISOString()` instead of `Asia/Dhaka` `formatDateKey()`, resulting in 0 sequence across date boundaries.
+    - Fix applied: added 5000ms `Promise.race` timeout to `navigator.serviceWorker.ready` in Scenario 2, corrected `todayYymmdd` to `formatDateKey(now, "Asia/Dhaka")` in `pos-catalog.service.ts`, and committed matching `public/sw.js`.
 
 
 

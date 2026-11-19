@@ -322,7 +322,10 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
     // Wait until service worker is activated and controlling the page
     await page.evaluate(async () => {
       if ("serviceWorker" in navigator) {
-        await navigator.serviceWorker.ready;
+        await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise((resolve) => setTimeout(resolve, 5000)),
+        ]);
         if (!navigator.serviceWorker.controller) {
           await new Promise<void>((resolve) => {
             navigator.serviceWorker.addEventListener("controllerchange", () => resolve());

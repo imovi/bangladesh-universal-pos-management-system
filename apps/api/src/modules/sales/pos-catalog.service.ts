@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { formatDateKey } from "@universal-pos/shared";
 import { TenantContextService } from "../../common/database/tenant-context.service.js";
 
 @Injectable()
@@ -91,8 +92,8 @@ export class PosCatalogService {
       const catalogVersion = maxUpdated > 0 ? `v-${maxUpdated}` : `v-${Date.now()}`;
       const now = new Date();
 
-      // Highest offline sequence today for sales in this branch
-      const todayYymmdd = now.toISOString().slice(2, 10).replace(/-/g, "");
+      // Highest offline sequence today for sales in this branch (in Bangladesh business timezone)
+      const todayYymmdd = formatDateKey(now, "Asia/Dhaka");
       const latestOfflineSale = await tx.sale.findFirst({
         where: {
           tenantId,

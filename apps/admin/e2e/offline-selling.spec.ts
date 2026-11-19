@@ -437,14 +437,14 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
     context,
   }) => {
     test.setTimeout(60000);
-    // Tab 1 opens /pos
-    await page.goto("/pos");
-    await page.waitForLoadState("domcontentloaded");
+    // Tab 1 logs in and opens /pos to acquire register tab lock
+    await loginAndGoToPos(page);
     await page.waitForTimeout(1000);
 
     // Tab 2 opens /pos on same browser context (same register REG01)
     const page2 = await context.newPage();
-    await loginAndGoToPos(page2);
+    await page2.goto("/pos");
+    await page2.waitForLoadState("domcontentloaded");
     await page2.waitForTimeout(1500);
 
     // Tab 2 lockout banner or disabled checkout
@@ -488,7 +488,7 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
 
     // Outbox now has pending unsynced sale
     // Open cashier menu
-    const cashierMenuBtn = page.locator('header button:has-text("Tariqul Islam")').first();
+    const cashierMenuBtn = page.locator('[data-testid="cashier-name-block"]').first();
     await cashierMenuBtn.click();
 
     // Click Sign Out

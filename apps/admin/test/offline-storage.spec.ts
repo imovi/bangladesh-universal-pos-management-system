@@ -12,6 +12,8 @@ import {
   saveOfflinePinVerifier,
   updateServerClockOffset,
   verifyOfflinePin,
+  acquireRegisterTabLock,
+  isSignOutAllowed,
 } from "../src/lib/pos/offline";
 import { computeCartTotals } from "../src/lib/pos/cart-calculations";
 import { calculateSaleTotals } from "@universal-pos/shared";
@@ -386,6 +388,49 @@ describe("Milestone D2: Offline Storage & Client Sync Engine Unit Tests", () => 
         const json = JSON.stringify(allRecords);
         expect(json.includes(secretPin)).toBe(false);
       }
+    });
+
+    it("verifies PIN expiry after 12 hours (43200000 ms)", async () => {
+      const userId = "cashier-12h";
+      const twelveHoursMs = 12 * 60 * 60 * 1000;
+      // Saved with 12 hour validity
+      await saveOfflinePinVerifier(userId, "4321", testDb, twelveHoursMs);
+
+      // Immediately valid
+      const validNow = await verifyOfflinePin(userId, "4321", testDb);
+      expect(validNow.success).toBe(true);
+
+      // Simulate expired verifier
+      await saveOfflinePinVerifier(userId, "4321", testDb, -1);
+      const expired = await verifyOfflinePin(userId, "4321", testDb);
+      expect(expired.success).toBe(false);
+      expect(expired.error).toBe("EXPIRED");
+    });
+  });
+
+  describe("Tab Lock & Offline Sign-Out Guard", () => {
+    it("isSignOutAllowed blocks logout only when offline with unsynced outbox sales", () => {
+      // 1. Online: sign-out is always allowed regardless of outbox count
+      expect(isSignOutAllowed(true, 0)).toBe(true);
+      expect(isSignOutAllowed(true, 1)).toBe(true);
+      expect(isSignOutAllowed(true, 15)).toBe(true);
+
+      // 2. Offline with 0 unsynced: allowed
+      expect(isSignOutAllowed(false, 0)).toBe(true);
+
+      // 3. Offline with unsynced items: strictly blocked
+      expect(isSignOutAllowed(false, 1)).toBe(false);
+      expect(isSignOutAllowed(false, 5)).toBe(false);
+    });
+
+    it("acquireRegisterTabLock manages lock handles and allows clean release", async () => {
+      const registerId = "reg-test-1";
+      const handle = await acquireRegisterTabLock(registerId);
+      expect(handle.hasLock).toBe(true);
+      expect(typeof handle.release).toBe("function");
+
+      // Release cleanly
+      handle.release();
     });
   });
 

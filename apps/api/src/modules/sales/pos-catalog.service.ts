@@ -91,10 +91,29 @@ export class PosCatalogService {
       const catalogVersion = maxUpdated > 0 ? `v-${maxUpdated}` : `v-${Date.now()}`;
       const now = new Date();
 
+      // Highest offline sequence today for sales in this branch
+      const todayYymmdd = now.toISOString().slice(2, 10).replace(/-/g, "");
+      const latestOfflineSale = await tx.sale.findFirst({
+        where: {
+          tenantId,
+          branchId,
+          isOffline: true,
+          invoiceNumber: { contains: `-O-${todayYymmdd}-` },
+        },
+        orderBy: { invoiceNumber: "desc" },
+        select: { invoiceNumber: true },
+      });
+      let lastOfflineSeq = 0;
+      if (latestOfflineSale?.invoiceNumber) {
+        const match = latestOfflineSale.invoiceNumber.match(/-O-\d{6}-(\d{4})$/);
+        if (match) lastOfflineSeq = parseInt(match[1], 10);
+      }
+
       return {
         catalogVersion,
         serverTime: now.toISOString(),
         cursor: now.toISOString(),
+        lastOfflineSeq,
         categories,
         taxClasses,
         products: products.map((p) => ({

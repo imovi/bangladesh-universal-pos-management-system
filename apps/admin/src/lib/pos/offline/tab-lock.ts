@@ -103,3 +103,15 @@ export async function acquireRegisterTabLock(
     release: () => {},
   };
 }
+
+/**
+ * Pure guard determining whether POS sign-out is permitted.
+ * Sign-out is blocked while offline if any unsynced outbox sales remain.
+ */
+export function isSignOutAllowed(isOnline: boolean, unsyncedOutboxCount: number): boolean {
+  if (!isOnline && unsyncedOutboxCount > 0) {
+    return false;
+  }
+  return true;
+}
+

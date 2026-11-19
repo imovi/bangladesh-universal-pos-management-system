@@ -7,6 +7,7 @@ export interface SyncWorkerConfig {
   database?: PosOfflineDatabase;
   customSender?: (item: OfflineOutboxItem) => Promise<{ status: number; body?: any; error?: string }>;
   onStatusChange?: (stats: { pending: number; syncing: number; synced: number; failed: number }) => void;
+  forceImmediate?: boolean;
 }
 
 let isSyncRunning = false;
@@ -100,7 +101,7 @@ export async function runSync(config: SyncWorkerConfig = {}): Promise<{
     // Fetch items ordered by createdAt ascending
     const candidates = await targetDb.outbox
       .orderBy("createdAt")
-      .filter((item) => item.status === "pending" && item.nextAttemptAt <= now)
+      .filter((item) => item.status === "pending" && (config.forceImmediate ? true : item.nextAttemptAt <= now))
       .toArray();
 
     for (const item of candidates) {
@@ -143,6 +144,7 @@ export async function runSync(config: SyncWorkerConfig = {}): Promise<{
       } else if (result.status >= 400 && result.status < 500 && result.status !== 408 && result.status !== 429) {
         // 2. Fatal client error (e.g. 400, 422 TOTALS_MISMATCH, etc.)
         // Never retry automatically to prevent poisoning the queue!
+        console.error('[SYNC FAILED]', result.status, result.error, JSON.stringify(result.body));
         await targetDb.outbox.update(item.id, {
           status: "failed",
           lastError: result.error || `Client Error ${result.status}`,

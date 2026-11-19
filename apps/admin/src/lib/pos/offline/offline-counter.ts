@@ -40,9 +40,12 @@ export async function getNextOfflineInvoiceNumber(params: {
 
   const { yymmdd, fullDate } = formatBusinessDate(now, timeZone);
 
-  return await targetDb.transaction("rw", targetDb.counters, async () => {
+  return await targetDb.transaction("rw", [targetDb.counters, targetDb.settings], async () => {
     const existing = await targetDb.counters.get([params.registerId, fullDate]);
-    const nextSeq = existing ? existing.lastSeq + 1 : 1;
+    const serverSeed = await targetDb.settings.get("lastServerOfflineSeq");
+    const minStart = typeof serverSeed?.value === "number" ? serverSeed.value : 0;
+    const currentSeq = existing ? existing.lastSeq : minStart;
+    const nextSeq = currentSeq + 1;
 
     await targetDb.counters.put({
       registerId: params.registerId,

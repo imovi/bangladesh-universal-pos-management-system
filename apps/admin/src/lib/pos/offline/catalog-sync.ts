@@ -139,6 +139,13 @@ export async function syncCatalog(
         key: "catalogLastSyncedAt",
         value: Date.now(),
       });
+
+      if (typeof data.lastOfflineSeq === "number" && data.lastOfflineSeq > 0) {
+        await targetDb.settings.put({
+          key: "lastServerOfflineSeq",
+          value: data.lastOfflineSeq,
+        });
+      }
     });
 
     return {

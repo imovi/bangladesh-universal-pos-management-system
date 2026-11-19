@@ -159,6 +159,7 @@ export default function OfflineReviewPage() {
   const getFlagBadge = (flagType: string) => {
     switch (flagType) {
       case "PRICE_CHANGED":
+      case "PRICE_UNKNOWN":
         return (
           <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20 font-mono text-[11px]">
             {t.flagPriceChanged}

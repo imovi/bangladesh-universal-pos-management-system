@@ -1113,11 +1113,11 @@ export default function PosPage() {
     const assignedInvoiceNumber = counterResult.invoiceNumber;
     const isActuallyOffline = !isOnline;
 
-    let currentCatalogVersion: number | undefined = undefined;
+    let currentCatalogVersion: string | undefined = undefined;
     try {
       const cv = await db.settings.get("catalogVersion");
-      if (cv && typeof cv.value === "number") {
-        currentCatalogVersion = cv.value;
+      if (cv && cv.value !== undefined && cv.value !== null) {
+        currentCatalogVersion = String(cv.value);
       }
     } catch {}
 

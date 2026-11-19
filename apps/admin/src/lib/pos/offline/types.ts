@@ -99,7 +99,7 @@ export interface PosCatalogResponse {
   variants?: any[];
   categories: { id: string; name: string }[];
   taxClasses: { id: string; name: string; ratePercent: number }[];
-  catalogVersion: number;
+  catalogVersion: string;
   serverTime: string;
   cursor?: string | null;
   lastOfflineSeq?: number;

@@ -13,7 +13,7 @@ export interface SyncCatalogOptions {
 
 export async function syncCatalog(
   options: SyncCatalogOptions
-): Promise<{ success: boolean; version: number; count: number; error?: string }> {
+): Promise<{ success: boolean; version: string | number; count: number; error?: string }> {
   const targetDb = options.database || db;
   const baseUrl = options.baseUrl || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
 

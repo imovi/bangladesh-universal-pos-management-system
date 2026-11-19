@@ -1,7 +1,10 @@
 import { PrismaClient } from "@prisma/client";
 
 async function main() {
-  const url = process.argv[2] || "postgresql://pos_runtime:pos_runtime_secret@localhost:5432/universal_pos?schema=public";
+  const url =
+    process.argv[2] ||
+    process.env.MIGRATION_DATABASE_URL ||
+    "postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public";
   const p = new PrismaClient({ datasources: { db: { url } } });
   const counts = {
     products: await p.product.count(),

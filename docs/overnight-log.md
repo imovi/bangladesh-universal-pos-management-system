@@ -1706,7 +1706,18 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - Fix 4: Guard dev database (`universal_pos`) against destruction; enforce that destructive scripts refuse unless target ends in `_e2e` or `_test` (except `db:reset:dev --yes`).
   - Fix 5: `npm run start:dev` in `apps/api` fix for NestJS decorator metadata (SWC plugin / nest start).
   - Fix 6: Standard size sorting order in variant matrix (XS, S, M, L, XL, XXL, numbers ascending, alphabetical) and verify Service Worker registration in Chrome.
-- **Commit 1:** Save prompt `docs/prompts/antigravity-pos-phase1d-fixes-prompt.md`.
+- **Commit 1:** Save prompt `docs/prompts/antigravity-pos-phase1d-fixes-prompt.md` (hash: `e2d350a`, CI Run: `44577494065`, Conclusion: `WORKFLOW_RUN_CONCLUSION_SUCCESS`).
+- **Fix 4: Development Database Protection Guard:**
+  - **Investigation & Root Cause Analysis:**
+    1. *RLS Masking Vector:* `scripts/db-counts.ts` defaulted to connecting as `pos_runtime` without setting `app.tenant_id`. Due to PostgreSQL Row-Level Security (RLS) on tenant tables, `pos_runtime` returns 0 for all rows if tenant context is missing. When queried as `pos_admin`, all 10 products, 53 variants, 10 sales, and demo records are intact.
+    2. *Destructive Tenant Clear in `scripts/seed-demo.ts`:* `clearExistingTenant()` executed `DELETE FROM tenants WHERE slug = 'artisan-apparel'` unconditionally on `MIGRATION_DATABASE_URL` (defaulting to `universal_pos`). When `seed:demo` failed during app context boot (e.g. if `apps/api/dist` was stale or missing), the deletion had already committed via cascade, leaving `universal_pos` empty.
+    3. *Missing Confirmation in `scripts/reset-dev-db.ts`:* Did not require an explicit `--yes` confirmation argument.
+  - **Fixes Applied:**
+    1. In `scripts/reset-dev-db.ts`: strictly require `--yes` CLI argument; fail immediately if absent.
+    2. In `scripts/seed-demo.ts`: enforce that destructive tenant deletion only executes against databases ending in `_e2e` or `_test`, or against `universal_pos` if `--yes` is explicitly passed.
+    3. In `scripts/db-counts.ts`: default to `MIGRATION_DATABASE_URL` (`pos_admin`) so table counts accurately reflect actual database records without RLS suppression.
+    4. Added `apps/api/test/db-protection-guard.spec.ts` unit test suite covering `assertTestDatabase`, `reset-dev-db --yes` requirement, and `seed-demo --yes` requirement.
+
 
 
 

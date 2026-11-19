@@ -2,6 +2,12 @@ import { PrismaClient } from "@prisma/client";
 import { execSync } from "child_process";
 
 async function main() {
+  if (!process.argv.includes("--yes")) {
+    throw new Error(
+      "Refusing to reset database without '--yes' flag: db:reset:dev is destructive. Run with '--yes' to confirm.",
+    );
+  }
+
   if (process.env.NODE_ENV === "production") {
     throw new Error("Refusing to reset database in production environment (NODE_ENV=production)");
   }
@@ -49,7 +55,7 @@ async function main() {
   await postMigrateClient.$disconnect();
 
   console.log(`[db:reset:dev] Seeding clean demo dataset...`);
-  execSync("npx tsx scripts/seed-demo.ts", {
+  execSync("npx tsx scripts/seed-demo.ts --yes", {
     stdio: "inherit",
     env: {
       ...process.env,

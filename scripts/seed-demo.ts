@@ -27,6 +27,23 @@ import {
 
 async function clearExistingTenant() {
   const adminUrl = process.env.MIGRATION_DATABASE_URL || "postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public";
+  const parsed = new URL(adminUrl);
+  const dbName = parsed.pathname.replace(/^\//, "");
+
+  if (!dbName.endsWith("_e2e") && !dbName.endsWith("_test")) {
+    if (dbName === "universal_pos") {
+      if (!process.argv.includes("--yes")) {
+        throw new Error(
+          `[seed:demo] Refusing destructive tenant clear on development database '${dbName}' without '--yes' flag.`,
+        );
+      }
+    } else {
+      throw new Error(
+        `[seed:demo] Refusing destructive tenant clear on non-test database '${dbName}': database name must end in '_e2e' or '_test'.`,
+      );
+    }
+  }
+
   const adminClient = new PrismaClient({ datasources: { db: { url: adminUrl } } });
   await adminClient.$executeRaw`DELETE FROM tenants WHERE slug = 'artisan-apparel';`;
   await adminClient.$disconnect();

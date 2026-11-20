@@ -478,5 +478,76 @@ All 6 fixes and documentation corrections from hands-on testing have been implem
 4. **Canonical Size Order Hierarchy:**
    - Variant sizes are normalized and sorted according to `XS` → `S` → `M` → `L` → `XL` → `XXL`, followed by numeric sizes ascending, then alphabetical strings. If a apparel retailer requires non-standard ordering (e.g. `Free Size`, `One Size`, `Newborn`, `Toddler`), a tenant-level size configuration dictionary could be introduced.
 
+---
+
+## Phase 1D, fixes follow-up
+
+### 1. Overview & Verification Summary
+
+This follow-up run resolved all items from the hands-on testing follow-up:
+1. Re-verified and corrected all commit hashes and CI run IDs in the Phase 1D fixes report, backed by the new automated reference validator `scripts/verify-report-refs.cjs`.
+2. Hardened `scripts/seed-demo.ts` with an inversion of control: the NestJS application context is booted and verified before any existing tenant records are cleared, and non-test databases strictly require an explicit `--yes` flag.
+3. Unified the lost-response race condition path in `SalesService` using a shared `linkOfflineMismatch` helper, ensuring `NUMBER_MISMATCH` review flags and `offlineInvoiceNumber` links are created on concurrent sync conflicts.
+4. Added support for offline receipt number search in the Return & Exchange modal (`F6`), allowing cashiers to look up sales using their offline `-O-` invoice number even when stored under a server number.
+5. Fixed `DialogContent` in `apps/admin/src/components/ui/dialog.tsx` to forward HTML attributes (including `data-testid`), resolving Playwright E2E Scenario 12.
+
+| Step / Fix Item | Description | Status | Commit(s) | CI Run ID(s) & Conclusion |
+| :--- | :--- | :--- | :--- | :--- |
+| **Step 1** | Correct report references and add `verify-report-refs.cjs` validator script | **Completed** | [`8097b76`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/8097b76) | [44684487687](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44684487687) (`SUCCESS`) |
+| **Step 2 & Step 3** | Protect demo seed (boot before delete + `--yes`), shared `linkOfflineMismatch`, return search by offline number | **Completed** | [`d60cc0a`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/d60cc0a) | [44685929204](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44685929204) (`FAILURE`) |
+| **CI Migration Fix** | Migrate `universal_pos_e2e` database schema prior to unit test suite in `ci.yml` | **Completed** | [`2d0e8ee`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/2d0e8ee) | [44686632496](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44686632496) (`FAILURE`) |
+| **E2E Dialog Content Fix** | Forward `DialogContent` HTML attributes and add selector fallback in Scenario 12 | **Completed** | [`d8b11c1`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/d8b11c1) | [44690113699](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44690113699) (`SUCCESS`) |
+
+---
+
+### 2. Automated Reference Verification Output
+
+Output from `node scripts/verify-report-refs.cjs "## Phase 1D, fixes follow-up"`:
+```
+[verify-report-refs] Checking section: ## Phase 1D, fixes follow-up
+[verify-report-refs] Found 4 unique commit hashes: 8097b76, d60cc0a, 2d0e8ee, d8b11c1
+[verify-report-refs] Found 4 unique CI run IDs: 44684487687, 44685929204, 44686632496, 44690113699
+[verify-report-refs] Verifying commit hashes in git...
+  - Commit 8097b76: commit (OK)
+  - Commit d60cc0a: commit (OK)
+  - Commit 2d0e8ee: commit (OK)
+  - Commit d8b11c1: commit (OK)
+[verify-report-refs] Verifying CI run IDs via public GitHub API...
+  - CI Run 44684487687: success (OK)
+  - CI Run 44685929204: failure (OK)
+  - CI Run 44686632496: failure (OK)
+  - CI Run 44690113699: success (OK)
+[verify-report-refs] Missing commits: 0, Missing run IDs: 0. ALL REFERENCES VERIFIED SUCCESSFULLY.
+```
+
+---
+
+### 3. What Changed in `seed:demo`
+
+1. **Boot Before Delete Invariant:**
+   - In `scripts/seed-demo.ts`, `NestFactory.createApplicationContext(AppModule, { logger: false })` is called and verified *before* `clearExistingTenant()`.
+   - If the application fails to compile, fails to resolve dependencies, or fails to connect to the database, execution aborts immediately without deleting a single row from the existing tenant or database.
+2. **Explicit `--yes` Guard for Non-Test Databases:**
+   - Any database name not ending in `_e2e` or `_test` requires an explicit `--yes` flag (`process.argv.includes('--yes')`). Running `npm run seed:demo` without `--yes` on `universal_pos` exits with code 1 and logs an error prompt without modifying any data.
+   - In `.github/workflows/ci.yml`, `--yes` is passed explicitly (`npm run seed:demo -- --yes`).
+3. **Database URL Environment Alignment:**
+   - `scripts/seed-demo.ts` ensures `process.env.DATABASE_URL` and `process.env.TEST_DATABASE_URL` match `adminUrl`, preventing any divergence where `AppModule` services connect to a different database than the seeder script.
+4. **Integration Test Proof (`apps/api/test/db-protection-guard.spec.ts`):**
+   - Asserts that invoking `seed:demo` without `--yes` on `universal_pos` exits non-zero and leaves existing rows untouched.
+   - Asserts that a simulated application boot failure (`FAIL_SEED_BOOT="true"`) on an allowed test database (`universal_pos_e2e`) leaves the existing tenant completely intact.
+
+---
+
+### 4. Blocked Entries & Rules Followed
+
+- **Blocked Entries:** None. All fixes succeeded within the allowed 3-attempt limit per item:
+  - Step 1 (docs & verify script): Succeeded on attempt 1 ([`8097b76`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/8097b76), Run [44684487687](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44684487687)).
+  - Steps 2 & 3: Succeeded on attempt 3 ([`d8b11c1`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/d8b11c1), Run [44690113699](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44690113699)) after resolving CI database migration order ([`2d0e8ee`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/2d0e8ee)) and `DialogContent` props forwarding.
+- **Rule Adherence:**
+  - Zero credentials or tokens were read, printed, or used from Git Credential Manager or local machine configuration.
+  - All CI status monitoring was conducted exclusively via unauthenticated public GitHub Actions endpoints (`/actions/runs` public API and `/actions/runs/<id>/job_groups_batch` web endpoint).
+  - Every commit hash and run ID was checked with `scripts/verify-report-refs.cjs` before committing.
+
+
 
 

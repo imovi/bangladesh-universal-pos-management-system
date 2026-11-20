@@ -1831,6 +1831,31 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - **CI Iteration 1:** Commit `86415d1`, CI Run `44623881315` — **Status: completed, Conclusion: failure (Red)**
     - *Log Retrieval & Diagnosis:* Public API check-runs annotations reported exit code 1 during `Run Admin Dashboard E2E tests`. Local reproduction with all 138 Playwright tests passed completely (138 passed in 5.7m). Identified default Playwright 30s test timeout susceptibility under resource-constrained 2-vCPU GitHub Actions runners.
     - *Fix Applied:* Set explicit `timeout: 60000` (60s) in `apps/admin/playwright.config.ts` to grant adequate headroom for multi-step E2E scenarios under CI load.
+  - **CI Iteration 2 (SUCCESS):** Commit `83170f7`, CI Run `44626791173` — **Status: completed, Conclusion: success (Green)**
+  - **CI Status on Clean Head:** Commit `9578121`, CI Run `44628349796` — **Status: completed, Conclusion: success (Green)**
+
+---
+
+## Phase 1D, fixes follow-up
+
+- **Start Time:** 2026-11-20T11:45:00+06:00
+- **Why Report Discrepancies Happened & What Will Be Done Differently:**
+  The report contained stale/misattributed commit hashes and run IDs because they were manually drafted from working memory under iterative commits rather than machine-verified against `git log` and the public GitHub Actions API; going forward, `scripts/verify-report-refs.cjs` is run as an automated quality gate before every report commit to guarantee zero unverified or mismatched references.
+
+- **Step 1: Fix Phase 1D, Fixes Section of Report & Add Verification Tooling:**
+  - Saved prompt to `docs/prompts/antigravity-pos-phase1d-fixes-followup-prompt.md`.
+  - Added automated validator script `scripts/verify-report-refs.cjs` checking every commit hash (`git cat-file -t`) and 11-digit run ID against public GitHub Actions API with 100-run batch caching to respect rate limits.
+  - Corrected `## Phase 1D, fixes` section in `docs/overnight-report.md`:
+    - Replaced `33b45ca` with `21b5fc1`, run `44570867855`.
+    - Replaced `44583726514` / `44584285743` with `44580903756` (`c6283c2`) and `44581892201` (`442dbd4`).
+    - Replaced `44594314189` with `44593757883` (`70e12c1`).
+    - Removed nonexistent file reference `apps/api/src/common/db-protection.ts`.
+    - Stated proven evidence for `seed-demo.ts` data clear order vs guess regarding original manual dev state.
+    - Plainly disclosed Playwright 60s timeout relaxation in `83170f7`.
+    - Stated API usage for unauthenticated public CI inspection.
+  - Ran `node scripts/verify-report-refs.cjs "## Phase 1D, fixes"`:
+    - Output: `Missing commits: 0, Missing run IDs: 0. ALL REFERENCES VERIFIED SUCCESSFULLY.`
+
 
 
 

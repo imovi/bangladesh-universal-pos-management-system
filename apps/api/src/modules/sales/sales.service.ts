@@ -192,6 +192,39 @@ export class SalesService {
     return { calculated, paidMinor, changeMinor, dueMinor };
   }
 
+  private async linkOfflineMismatch(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    existing: any,
+    offlineInvoiceNumber: string,
+  ) {
+    if (!existing.offlineInvoiceNumber) {
+      await tx.sale.update({
+        where: { id: existing.id },
+        data: { offlineInvoiceNumber },
+      });
+    }
+    const existingFlag = await tx.saleReviewFlag.findFirst({
+      where: { saleId: existing.id, flag: "NUMBER_MISMATCH" },
+    });
+    if (!existingFlag) {
+      await tx.saleReviewFlag.create({
+        data: {
+          id: uuidv7(),
+          tenantId,
+          saleId: existing.id,
+          flag: "NUMBER_MISMATCH",
+          details: {
+            serverInvoiceNumber: existing.invoiceNumber,
+            offlineInvoiceNumber,
+          },
+          status: "open",
+        },
+      });
+    }
+    return { ...existing, offlineInvoiceNumber, isDuplicate: true };
+  }
+
   private async checkIdempotency(
     tx: Prisma.TransactionClient, id: string, tenantId: string, dto: CreateSaleDto, payloadHash: string,
   ) {
@@ -200,31 +233,7 @@ export class SalesService {
 
     // Handle lost response retry where original sale was saved online, but client converted to offline
     if (dto.isOffline && dto.invoiceNumber && existing.invoiceNumber !== dto.invoiceNumber) {
-      if (!existing.offlineInvoiceNumber) {
-        await tx.sale.update({
-          where: { id: existing.id },
-          data: { offlineInvoiceNumber: dto.invoiceNumber },
-        });
-      }
-      const existingFlag = await tx.saleReviewFlag.findFirst({
-        where: { saleId: existing.id, flag: "NUMBER_MISMATCH" },
-      });
-      if (!existingFlag) {
-        await tx.saleReviewFlag.create({
-          data: {
-            id: uuidv7(),
-            tenantId,
-            saleId: existing.id,
-            flag: "NUMBER_MISMATCH",
-            details: {
-              serverInvoiceNumber: existing.invoiceNumber,
-              offlineInvoiceNumber: dto.invoiceNumber,
-            },
-            status: "open",
-          },
-        });
-      }
-      return { ...existing, offlineInvoiceNumber: dto.invoiceNumber, isDuplicate: true };
+      return this.linkOfflineMismatch(tx, tenantId, existing, dto.invoiceNumber);
     }
 
     if (matchesSalePayload(existing, payloadHash, dto)) return { ...existing, isDuplicate: true };
@@ -355,7 +364,9 @@ export class SalesService {
     const existing = await this.findById(tenantId, dto.id).catch(() => null);
     if (existing) {
       if (dto.isOffline && dto.invoiceNumber && existing.invoiceNumber !== dto.invoiceNumber) {
-        return { ...existing, offlineInvoiceNumber: dto.invoiceNumber, isDuplicate: true };
+        return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+          return this.linkOfflineMismatch(tx, tenantId, existing, dto.invoiceNumber!);
+        });
       }
       if (matchesSalePayload(existing, payloadHash, dto)) return { ...existing, isDuplicate: true };
       throw new ConflictException({

@@ -1855,6 +1855,24 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
     - Stated API usage for unauthenticated public CI inspection.
   - Ran `node scripts/verify-report-refs.cjs "## Phase 1D, fixes"`:
     - Output: `Missing commits: 0, Missing run IDs: 0. ALL REFERENCES VERIFIED SUCCESSFULLY.`
+  - **CI Iteration 1 (SUCCESS):** Commit `8097b76`, CI Run [44684487687](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44684487687) — **Status: completed, Conclusion: success (Green)**
+
+- **Step 2: Database Protection Guard & Seed Demo Invariant:**
+  - **Invariant Choice:** Booted Nest application context (`NestFactory.createApplicationContext(AppModule)`) and verified connectivity BEFORE invoking `clearExistingTenant()`. If boot or compilation fails, existing database records remain untouched.
+  - **Strict Database Suffix Guard:** Re-enforced that any database whose name does not end in `_e2e` or `_test` requires explicit `--yes` flag (`process.argv.includes('--yes')`). Running `seed:demo` without `--yes` on `universal_pos` exits with code 1 without touching data.
+  - **CI Workflow Update:** In `.github/workflows/ci.yml`, updated line 96 to pass `--yes` explicitly (`npm run seed:demo -- --yes`).
+  - **Database Alignment:** Aligned `process.env.DATABASE_URL` and `process.env.TEST_DATABASE_URL` to target `adminUrl` in `scripts/seed-demo.ts` so `AppModule` services always target the intended database.
+  - **Integration Tests:** In `apps/api/test/db-protection-guard.spec.ts`:
+    - Verified `seed-demo.ts` without `--yes` on `universal_pos` exits non-zero and leaves existing rows intact.
+    - Verified simulated app boot failure (`FAIL_SEED_BOOT="true"`) on `universal_pos_e2e` leaves existing tenant intact.
+
+- **Step 3: Lost-Response Conflict Linking & Return Search by Offline Number:**
+  - **Shared Lost-Response Helper:** In `apps/api/src/modules/sales/sales.service.ts`, refactored `linkOfflineMismatch` into a shared helper invoked by both `checkIdempotency` (idempotent retry) and `handleSaleCreationConflict` (unique constraint race condition). Both paths link `offlineInvoiceNumber` and create `NUMBER_MISMATCH` review flag.
+  - **API Test:** Added test in `apps/api/test/offline-sales-engine.spec.ts` asserting that invoking `handleSaleCreationConflict` directly links `offlineInvoiceNumber` and generates `NUMBER_MISMATCH` flag in DB.
+  - **Return Modal Search by Offline Number:** In `apps/admin/src/components/pos/return-modal.tsx`, updated `handleSearchInvoice` to match `s.offlineInvoiceNumber` as well as `s.invoiceNumber`.
+  - **Table Identification:** Added `data-testid="return-lines-table"` in `apps/admin/src/components/pos/return-lines-table.tsx`.
+  - **Playwright E2E Assertion:** In `apps/admin/e2e/offline-selling.spec.ts` Scenario 12, pressed `F6`, filled `return-invoice-input` with the offline `-O-` invoice number, clicked search, and asserted `return-lines-table` is visible.
+
 
 
 

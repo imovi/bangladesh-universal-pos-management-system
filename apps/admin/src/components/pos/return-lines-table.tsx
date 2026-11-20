@@ -43,7 +43,10 @@ export function ReturnLinesTable({
   const { locale } = useTranslation();
 
   return (
-    <div className="border border-neutral-200 dark:border-neutral-800 rounded-xl overflow-hidden">
+    <div
+      data-testid="return-lines-table"
+      className="border border-neutral-200 dark:border-neutral-800 rounded-xl overflow-hidden"
+    >
       <table className="w-full text-xs">
         <thead className="bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 font-semibold border-b border-neutral-200 dark:border-neutral-800">
           <tr>

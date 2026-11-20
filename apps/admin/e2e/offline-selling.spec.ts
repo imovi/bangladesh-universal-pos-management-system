@@ -1121,5 +1121,16 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
     const mismatchFlag = flags.find((f: any) => f.flag === "NUMBER_MISMATCH" && f.saleId === saleId);
     expect(mismatchFlag).toBeDefined();
     expect(mismatchFlag.details?.offlineInvoiceNumber).toBe(offlineInv);
+
+    // 4. Return dialog search by offline number:
+    // Press F6 on /pos, search by offline invoice number (-O-), verify sale lines appear
+    await page.keyboard.press("F6");
+    const returnDialog = page.locator('[data-testid="return-dialog"]');
+    await expect(returnDialog).toBeVisible({ timeout: 5000 });
+    await page.fill('[data-testid="return-invoice-input"]', offlineInv);
+    await page.locator('[data-testid="search-invoice-button"]').click();
+    await expect(page.locator('[data-testid="return-lines-table"]')).toBeVisible({ timeout: 10000 });
+    await page.keyboard.press("Escape");
+    await expect(returnDialog).toBeHidden({ timeout: 5000 });
   });
 });

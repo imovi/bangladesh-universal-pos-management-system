@@ -25,14 +25,23 @@ import {
   DEMO_CUSTOMERS,
 } from "./demo-data.js";
 
-async function clearExistingTenant() {
-  const adminUrl = process.env.MIGRATION_DATABASE_URL || "postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public";
+function getTargetDbInfo() {
+  const adminUrl =
+    process.env.MIGRATION_DATABASE_URL ||
+    process.env.DATABASE_URL ||
+    "postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public";
   const parsed = new URL(adminUrl);
   const dbName = parsed.pathname.replace(/^\//, "");
+  return { adminUrl, dbName };
+}
 
-  if (!dbName.endsWith("_e2e") && !dbName.endsWith("_test") && dbName !== "universal_pos") {
+async function clearExistingTenant(adminUrl: string, dbName: string) {
+  const isAllowedTestDb = dbName.endsWith("_e2e") || dbName.endsWith("_test");
+  const hasYesFlag = process.argv.includes("--yes");
+
+  if (!isAllowedTestDb && !hasYesFlag) {
     throw new Error(
-      `[seed:demo] Refusing destructive tenant clear on non-development database '${dbName}': database name must be 'universal_pos' or end in '_e2e' or '_test'.`,
+      `[seed:demo] Refusing destructive tenant clear without explicit --yes flag on non-test database '${dbName}'. Pass --yes to confirm.`,
     );
   }
 
@@ -180,15 +189,44 @@ async function runSeeder() {
   if (process.env.NODE_ENV === "production") {
     throw new Error("Refusing to seed demo data in production environment (NODE_ENV=production)");
   }
-  await clearExistingTenant();
+
+  const { adminUrl, dbName } = getTargetDbInfo();
+  // Ensure AppModule / PrismaService connects to the target database
+  process.env.DATABASE_URL = adminUrl;
+  if (process.env.TEST_DATABASE_URL) {
+    process.env.TEST_DATABASE_URL = adminUrl;
+  }
+  const isAllowedTestDb = dbName.endsWith("_e2e") || dbName.endsWith("_test");
+  const hasYesFlag = process.argv.includes("--yes");
+
+  if (!isAllowedTestDb && !hasYesFlag) {
+    throw new Error(
+      `[seed:demo] Refusing destructive tenant clear without explicit --yes flag on non-test database '${dbName}'. Pass --yes to confirm.`,
+    );
+  }
+
+  // Check if simulated boot failure is requested by tests
+  if (process.env.FAIL_SEED_BOOT === "true") {
+    throw new Error("[seed:demo] Simulated application boot failure before tenant clearing");
+  }
+
+  // 1. Boot Nest app context and verify it works BEFORE deleting anything!
   const app = await NestFactory.createApplicationContext(AppModule, { logger: false });
-  const { tenantId, branchId, ownerId, cashierId, keeperId } = await seedTenantAndUsers(app);
-  const variants = await seedCatalog(app, tenantId, branchId, ownerId, keeperId);
-  await seedPurchasing(app, tenantId, branchId, keeperId, variants);
-  const { customerIds, reg1Id } = await seedCustomersAndRegisters(app, tenantId, branchId, ownerId);
-  await seedShiftsAndSales(app, tenantId, branchId, ownerId, cashierId, variants, customerIds, reg1Id);
-  await app.close();
-  return { tenantId, branchId, ownerEmail: "owner@artisan.com" };
+
+  try {
+    // 2. Clear existing tenant ONLY after app context is booted and ready
+    await clearExistingTenant(adminUrl, dbName);
+
+    // 3. Seed tenant and dependencies
+    const { tenantId, branchId, ownerId, cashierId, keeperId } = await seedTenantAndUsers(app);
+    const variants = await seedCatalog(app, tenantId, branchId, ownerId, keeperId);
+    await seedPurchasing(app, tenantId, branchId, keeperId, variants);
+    const { customerIds, reg1Id } = await seedCustomersAndRegisters(app, tenantId, branchId, ownerId);
+    await seedShiftsAndSales(app, tenantId, branchId, ownerId, cashierId, variants, customerIds, reg1Id);
+    return { tenantId, branchId, ownerEmail: "owner@artisan.com" };
+  } finally {
+    await app.close();
+  }
 }
 
 runSeeder()

@@ -124,10 +124,14 @@ export function ReturnModal({
 
         const json = await res.json();
         const salesList = Array.isArray(json.data) ? json.data : json.data?.items || [];
-        const found = salesList.find(
-          (s: any) =>
-            s.invoiceNumber.toLowerCase() === q.toLowerCase() || s.id === q,
-        );
+        const found =
+          salesList.find(
+            (s: any) =>
+              s.invoiceNumber?.toLowerCase() === q.toLowerCase() ||
+              (s.offlineInvoiceNumber &&
+                s.offlineInvoiceNumber.toLowerCase() === q.toLowerCase()) ||
+              s.id === q,
+          ) || (salesList.length === 1 ? salesList[0] : null);
 
         if (!found) {
           setSearchError(strings.pos.invoiceNotFound);

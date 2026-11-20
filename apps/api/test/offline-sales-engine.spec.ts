@@ -9,6 +9,7 @@ import { TransformInterceptor } from "../src/common/interceptors/transform.inter
 import { HttpExceptionFilter } from "../src/common/filters/http-exception.filter.js";
 import { AuthService } from "../src/modules/auth/auth.service.js";
 import { TenantsService } from "../src/modules/tenants/tenants.service.js";
+import { SalesService } from "../src/modules/sales/sales.service.js";
 import { TenantContextService } from "../src/common/database/tenant-context.service.js";
 import { SystemDbService } from "../src/common/database/system-db.service.js";
 import { truncateTestDatabase } from "./test-db-helper.js";
@@ -20,6 +21,7 @@ describe("Milestone D1: Offline Sales Engine & API Integration Tests", () => {
   let authService: AuthService;
   let tenantsService: TenantsService;
   let tenantContext: TenantContextService;
+  let salesService: SalesService;
   let ownerToken: string;
   let managerToken: string;
   let cashierToken: string;
@@ -168,6 +170,7 @@ describe("Milestone D1: Offline Sales Engine & API Integration Tests", () => {
     authService = app.get(AuthService);
     tenantsService = app.get(TenantsService);
     tenantContext = app.get(TenantContextService);
+    salesService = app.get(SalesService);
 
     await setupAuthAndTenants();
     await setupCatalogAndStock();
@@ -1212,7 +1215,7 @@ describe("Milestone D1: Offline Sales Engine & API Integration Tests", () => {
           payments: [{ paymentMethod: "cash", amountMinor: variantPriceMinor }],
           expectedTotalMinor: variantPriceMinor,
         });
-      expect([200, 201]).toContain(onlineRes.status);
+      expect([200, 201], `Status was ${onlineRes.status}, body: ${JSON.stringify(onlineRes.body)}`).toContain(onlineRes.status);
       const serverInvoiceNumber = onlineRes.body.data.invoiceNumber;
       expect(serverInvoiceNumber).toBeDefined();
 
@@ -1266,6 +1269,80 @@ describe("Milestone D1: Offline Sales Engine & API Integration Tests", () => {
         .set("Authorization", `Bearer ${ownerToken}`);
       expect(searchOfflineRes.status).toBe(200);
       expect(searchOfflineRes.body.data.items.some((s: any) => s.id === lostSaleId)).toBe(true);
+    });
+
+    it("handles concurrent conflict race path via handleSaleCreationConflict and links offlineInvoiceNumber with NUMBER_MISMATCH flag", async () => {
+      const rCode = "RC" + Math.floor(Math.random() * 899 + 100);
+      const regRes = await request(app.getHttpServer())
+        .post("/api/v1/registers")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ branchId, name: `Conflict Counter ${rCode}`, code: rCode, allowOffline: true });
+      const testRegId = regRes.body.data.id;
+
+      const shiftRes = await request(app.getHttpServer())
+        .post("/api/v1/shifts/open")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ registerId: testRegId, branchId, openingCashMinor: 10000 });
+      const testShiftId = shiftRes.body.data.id;
+
+      const conflictSaleId = uuidv7();
+      const dateKey = formatDateKey(new Date(), "Asia/Dhaka");
+
+      // 1. Initial sale created
+      const onlineRes = await request(app.getHttpServer())
+        .post("/api/v1/sales")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .set("Idempotency-Key", conflictSaleId)
+        .send({
+          id: conflictSaleId,
+          shiftId: testShiftId,
+          branchId,
+          isOffline: false,
+          items: [{ variantId, quantity: 1, unitPriceMinor: variantPriceMinor }],
+          payments: [{ paymentMethod: "cash", amountMinor: variantPriceMinor }],
+          expectedTotalMinor: variantPriceMinor,
+        });
+      expect([200, 201]).toContain(onlineRes.status);
+      const serverInvoiceNumber = onlineRes.body.data.invoiceNumber;
+      expect(serverInvoiceNumber).toBeDefined();
+
+      // 2. Invoke handleSaleCreationConflict directly (simulating P2002 conflict catch branch)
+      const offlineInvoiceNumber = `${rCode}-O-${dateKey}-8888`;
+      const offlineDto: any = {
+        id: conflictSaleId,
+        shiftId: testShiftId,
+        branchId,
+        isOffline: true,
+        invoiceNumber: offlineInvoiceNumber,
+        occurredAt: new Date().toISOString(),
+        items: [{ variantId, quantity: 1, unitPriceMinor: variantPriceMinor }],
+        payments: [{ paymentMethod: "cash", amountMinor: variantPriceMinor }],
+        expectedTotalMinor: variantPriceMinor,
+      };
+
+      const resolvedSale = await (salesService as any).handleSaleCreationConflict(
+        tenantId,
+        offlineDto,
+        "dummy-hash",
+      );
+
+      expect(resolvedSale.id).toBe(conflictSaleId);
+      expect(resolvedSale.offlineInvoiceNumber).toBe(offlineInvoiceNumber);
+
+      // Verify DB stored offlineInvoiceNumber and NUMBER_MISMATCH flag
+      await tenantContext.runWithTenant(tenantId, async (tx) => {
+        const stored = await tx.sale.findUnique({
+          where: { id: conflictSaleId },
+          include: { reviewFlags: true },
+        });
+        expect(stored?.offlineInvoiceNumber).toBe(offlineInvoiceNumber);
+        const flag = stored?.reviewFlags.find((f) => f.flag === "NUMBER_MISMATCH");
+        expect(flag).toBeDefined();
+        expect(flag?.details).toEqual({
+          serverInvoiceNumber,
+          offlineInvoiceNumber,
+        });
+      });
     });
   });
 });

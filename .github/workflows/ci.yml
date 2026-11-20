@@ -93,7 +93,7 @@ jobs:
           JWT_REFRESH_SECRET: test-jwt-refresh-secret-minimum-32-chars-long
 
       - name: Seed demo dataset
-        run: npm run seed:demo
+        run: npm run seed:demo -- --yes
         env:
           NODE_ENV: test
           DATABASE_URL: postgresql://pos_runtime:pos_runtime_secret@localhost:5432/universal_pos?schema=public

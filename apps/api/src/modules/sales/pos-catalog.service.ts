@@ -21,6 +21,7 @@ export class PosCatalogService {
       const variantWhere: Prisma.ProductVariantWhereInput = { tenantId };
       const categoryWhere: Prisma.CategoryWhereInput = { tenantId };
       const taxWhere: Prisma.TaxClassWhereInput = { tenantId };
+      const promoWhere: Prisma.PromotionWhereInput = { tenantId, status: "active" };
 
       if (isValidDate) {
         productWhere.OR = [
@@ -33,9 +34,10 @@ export class PosCatalogService {
         ];
         categoryWhere.updatedAt = { gte: sinceDate };
         taxWhere.updatedAt = { gte: sinceDate };
+        promoWhere.updatedAt = { gte: sinceDate };
       }
 
-      const [products, variants, categories, taxClasses] = await Promise.all([
+      const [products, variants, categories, taxClasses, promotions] = await Promise.all([
         tx.product.findMany({
           where: productWhere,
           select: {
@@ -82,6 +84,10 @@ export class PosCatalogService {
             isDefault: true,
           },
         }),
+        tx.promotion.findMany({
+          where: promoWhere,
+          orderBy: { priority: "desc" },
+        }),
       ]);
 
       let maxUpdated = 0;
@@ -90,6 +96,9 @@ export class PosCatalogService {
       }
       for (const v of variants) {
         maxUpdated = Math.max(maxUpdated, v.updatedAt.getTime());
+      }
+      for (const pr of promotions) {
+        maxUpdated = Math.max(maxUpdated, pr.updatedAt.getTime());
       }
 
       const catalogVersion = maxUpdated > 0 ? `v-${maxUpdated}` : `v-${Date.now()}`;
@@ -123,6 +132,21 @@ export class PosCatalogService {
         lastOfflineSeq,
         categories,
         taxClasses,
+        promotions: promotions.map((pr) => ({
+          id: pr.id,
+          name: pr.name,
+          description: pr.description,
+          type: pr.type,
+          status: pr.status,
+          priority: pr.priority,
+          stackableWithBill: pr.stackableWithBill,
+          startDate: pr.startDate ? pr.startDate.toISOString() : null,
+          endDate: pr.endDate ? pr.endDate.toISOString() : null,
+          config: pr.config,
+          targets: pr.targets,
+          conditions: pr.conditions,
+          updatedAt: pr.updatedAt.toISOString(),
+        })),
         products: products.map((p) => ({
           ...p,
           updatedAt: p.updatedAt.toISOString(),

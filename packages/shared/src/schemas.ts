@@ -446,4 +446,5 @@ export * from "./schemas/sales.schemas.js";
 export * from "./schemas/returns.schemas.js";
 export * from "./schemas/transfers.schemas.js";
 export * from "./schemas/reports.schemas.js";
+export * from "./schemas/promotions.schemas.js";
 

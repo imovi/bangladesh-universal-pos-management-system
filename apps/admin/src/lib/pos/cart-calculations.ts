@@ -3,6 +3,9 @@ import {
   SaleLineItemInput,
   SaleCalculationOptions,
   CalculatedSaleTotals,
+  evaluatePromotions,
+  PromotionRule,
+  PromotionEvaluationLineItem,
 } from "@universal-pos/shared";
 import { getVariantStock } from "./variant-matrix";
 
@@ -38,6 +41,9 @@ export interface CartTotalsResult {
     effectiveLineNetMinor: number;
     taxMinor: number;
     totalMinor: number;
+    promotionId?: string;
+    promotionLabel?: string;
+    promotionDiscountMinor: number;
   }>;
   grossMinor: number;
   lineDiscountMinor: number;
@@ -48,6 +54,35 @@ export interface CartTotalsResult {
   totalMinor: number;
   expectedTotalMinor: number;
   effectiveDiscountBp: number;
+  linePromotionDiscountMinor: number;
+  billPromotionId?: string;
+  billPromotionLabel?: string;
+  billPromotionDiscountMinor: number;
+  totalPromotionDiscountMinor: number;
+  manualDiscountMinor: number;
+  appliedPromotions: Array<{
+    id: string;
+    name: string;
+    type: string;
+    discountMinor: number;
+    reason: string;
+  }>;
+  billThresholdHint?: {
+    promotionId: string;
+    name: string;
+    thresholdMinor: number;
+    currentSubtotalMinor: number;
+    remainingMinor: number;
+    hintText: string;
+  };
+  couponState?: {
+    code: string;
+    valid: boolean;
+    invalidReason?: string;
+    savingMinor?: number;
+    promotionId?: string;
+    promotionName?: string;
+  };
 }
 
 export function computeCartTotals(
@@ -55,6 +90,11 @@ export function computeCartTotals(
   options: {
     pricesIncludeTax: boolean;
     billDiscount?: CartLineDiscount;
+    promotions?: any[];
+    couponCode?: string;
+    customerId?: string;
+    branchId?: string;
+    allowPromotionOverride?: boolean;
   },
 ): CartTotalsResult {
   if (items.length === 0) {
@@ -69,6 +109,130 @@ export function computeCartTotals(
       totalMinor: 0,
       expectedTotalMinor: 0,
       effectiveDiscountBp: 0,
+      linePromotionDiscountMinor: 0,
+      billPromotionDiscountMinor: 0,
+      totalPromotionDiscountMinor: 0,
+      manualDiscountMinor: 0,
+      appliedPromotions: [],
+    };
+  }
+
+  if (options.promotions && options.promotions.length > 0) {
+    const promoRules: PromotionRule[] = options.promotions.map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      type: p.type,
+      status: p.status,
+      priority: p.priority ?? 0,
+      stackableWithBill: p.stackableWithBill ?? true,
+      membersOnly: Boolean(p.conditions?.membersOnly),
+      branchIds: p.conditions?.branchIds,
+      minQuantity: p.conditions?.minQuantity,
+      startAt: p.startDate || p.startAt || new Date("2020-01-01"),
+      endAt: p.endDate || p.endAt || new Date("2030-01-01"),
+      daysOfWeek: p.conditions?.daysOfWeek,
+      hours: p.conditions?.hours,
+      targetType: p.targets?.targetType || p.targetType || "ALL",
+      targetIds: p.targets?.targetIds || p.targetIds,
+      exclusionIds: p.targets?.exclusionIds || p.exclusionIds,
+      config: p.config || {},
+      couponRequired: Boolean(p.couponRequired),
+      couponCodes: p.couponCodes,
+      createdAt: p.createdAt,
+    }));
+
+    const evalLines: PromotionEvaluationLineItem[] = items.map((it) => ({
+      lineId: it.lineId,
+      variantId: it.variantId,
+      productId: it.productId,
+      unitPriceMinor: it.overrideUnitPriceMinor !== undefined ? it.overrideUnitPriceMinor : it.unitPriceMinor,
+      quantity: it.quantity,
+      taxRateBp: it.taxRateBp,
+      manualDiscount: it.discount
+        ? {
+            type: it.discount.type,
+            amountMinor: it.discount.amountMinor,
+            percentBp: it.discount.percentBp,
+          }
+        : undefined,
+    }));
+
+    const evalResult = evaluatePromotions({
+      lines: evalLines,
+      promotions: promoRules,
+      couponCode: options.couponCode,
+      customerId: options.customerId,
+      branchId: options.branchId,
+      allowPromotionOverride: options.allowPromotionOverride,
+      manualBillDiscount: options.billDiscount
+        ? {
+            type: options.billDiscount.type,
+            amountMinor: options.billDiscount.amountMinor,
+            percentBp: options.billDiscount.percentBp,
+          }
+        : undefined,
+    });
+
+    const grossNum = Number(evalResult.grossMinor);
+    const manualDiscNum = Number(evalResult.manualDiscountMinor);
+    const effectiveDiscountBp = grossNum > 0 ? Math.ceil((manualDiscNum * 10000) / grossNum) : 0;
+
+    return {
+      lines: evalResult.lines.map((l) => ({
+        variantId: l.variantId,
+        grossMinor: Number(l.grossMinor),
+        lineDiscountMinor: Number(l.promotionDiscountMinor + l.manualDiscountMinor),
+        allocatedBillDiscountMinor: Number(l.allocatedBillPromotionMinor),
+        effectiveLineNetMinor: Number(l.effectiveLineNetMinor),
+        taxMinor: Number(l.taxMinor),
+        totalMinor: Number(l.totalMinor),
+        promotionId: l.promotionId,
+        promotionLabel: l.promotionLabel,
+        promotionDiscountMinor: Number(l.promotionDiscountMinor),
+      })),
+      grossMinor: grossNum,
+      lineDiscountMinor: Number(evalResult.linePromotionDiscountMinor),
+      billDiscountMinor: Number(evalResult.billPromotionDiscountMinor),
+      totalDiscountMinor: Number(evalResult.totalDiscountMinor),
+      subtotalNetMinor: Number(evalResult.netMinor),
+      taxMinor: Number(evalResult.taxMinor),
+      totalMinor: Number(evalResult.totalMinor),
+      expectedTotalMinor: Number(evalResult.totalMinor),
+      effectiveDiscountBp,
+      linePromotionDiscountMinor: Number(evalResult.linePromotionDiscountMinor),
+      billPromotionId: evalResult.billPromotionId,
+      billPromotionLabel: evalResult.billPromotionLabel,
+      billPromotionDiscountMinor: Number(evalResult.billPromotionDiscountMinor),
+      totalPromotionDiscountMinor: Number(evalResult.totalPromotionDiscountMinor),
+      manualDiscountMinor: manualDiscNum,
+      appliedPromotions: evalResult.appliedPromotions.map((p) => ({
+        id: p.id,
+        name: p.name,
+        type: p.type,
+        discountMinor: Number(p.discountMinor),
+        reason: p.reason,
+      })),
+      billThresholdHint: evalResult.billThresholdHint
+        ? {
+            promotionId: evalResult.billThresholdHint.promotionId,
+            name: evalResult.billThresholdHint.name,
+            thresholdMinor: Number(evalResult.billThresholdHint.thresholdMinor),
+            currentSubtotalMinor: Number(evalResult.billThresholdHint.currentSubtotalMinor),
+            remainingMinor: Number(evalResult.billThresholdHint.remainingMinor),
+            hintText: evalResult.billThresholdHint.hintText,
+          }
+        : undefined,
+      couponState: evalResult.couponState
+        ? {
+            code: evalResult.couponState.code,
+            valid: evalResult.couponState.valid,
+            invalidReason: evalResult.couponState.invalidReason,
+            savingMinor: evalResult.couponState.savingMinor ? Number(evalResult.couponState.savingMinor) : undefined,
+            promotionId: evalResult.couponState.promotionId,
+            promotionName: evalResult.couponState.promotionName,
+          }
+        : undefined,
     };
   }
 
@@ -114,6 +278,7 @@ export function computeCartTotals(
       effectiveLineNetMinor: Number(l.effectiveLineNetMinor),
       taxMinor: Number(l.taxMinor),
       totalMinor: Number(l.totalMinor),
+      promotionDiscountMinor: 0,
     })),
     grossMinor: grossNum,
     lineDiscountMinor: Number(calculated.lineDiscountMinor),
@@ -124,6 +289,11 @@ export function computeCartTotals(
     totalMinor: Number(calculated.totalMinor),
     expectedTotalMinor: Number(calculated.totalMinor),
     effectiveDiscountBp,
+    linePromotionDiscountMinor: 0,
+    billPromotionDiscountMinor: 0,
+    totalPromotionDiscountMinor: 0,
+    manualDiscountMinor: totalDiscNum,
+    appliedPromotions: [],
   };
 }
 

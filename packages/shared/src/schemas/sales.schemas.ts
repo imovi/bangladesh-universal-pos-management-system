@@ -13,6 +13,9 @@ export const SaleItemInputSchema = z.object({
   overrideUnitPriceMinor: z.coerce.number().int().min(0).optional(),
   unitPriceMinor: z.coerce.number().int().min(0).optional(),
   discount: LineDiscountInputSchema.optional(),
+  promotionId: z.string().uuid().optional().nullable(),
+  promotionDiscountMinor: z.coerce.number().int().min(0).optional(),
+  promotionLabel: z.string().optional().nullable(),
 });
 
 export const SALE_PAYMENT_METHODS = [
@@ -22,6 +25,7 @@ export const SALE_PAYMENT_METHODS = [
   "nagad",
   "rocket",
   "bank_transfer",
+  "points",
 ] as const;
 
 export type SalePaymentMethod = (typeof SALE_PAYMENT_METHODS)[number];
@@ -36,16 +40,18 @@ export const CreateSaleSchema = z.object({
   id: z.string().uuid(),
   shiftId: z.string().uuid(),
   branchId: z.string().uuid(),
-  customerId: z.string().uuid().optional(),
+  customerId: z.string().uuid().optional().nullable(),
   billDiscount: LineDiscountInputSchema.optional(),
+  couponCode: z.string().trim().max(100).optional().nullable(),
+  pointsRedeemed: z.coerce.number().int().min(0).optional(),
   items: z.array(SaleItemInputSchema).min(1, "Sale must have at least one line item"),
   payments: z.array(SalePaymentInputSchema).default([]),
-  notes: z.string().trim().max(500).optional(),
+  notes: z.string().trim().max(500).optional().nullable(),
   expectedTotalMinor: z.coerce.number().int().min(0),
   isOffline: z.boolean().optional().default(false),
   occurredAt: z.string().optional(),
-  catalogVersion: z.string().trim().max(100).optional(),
-  invoiceNumber: z.string().trim().max(100).optional(),
+  catalogVersion: z.string().trim().max(100).optional().nullable(),
+  invoiceNumber: z.string().trim().max(100).optional().nullable(),
 });
 export type CreateSaleDto = z.infer<typeof CreateSaleSchema>;
 

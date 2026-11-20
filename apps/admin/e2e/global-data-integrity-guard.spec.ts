@@ -26,6 +26,8 @@ const routes = [
   "/pos",
   "/sales/returns",
   "/sales/offline-review",
+  "/promotions",
+  "/promotions/new",
   "/reports/due",
   "/reports/returns",
   "/reports/damaged",

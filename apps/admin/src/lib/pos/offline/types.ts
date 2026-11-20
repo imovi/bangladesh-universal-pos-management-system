@@ -108,4 +108,5 @@ export interface PosCatalogResponse {
   serverTime: string;
   cursor?: string | null;
   lastOfflineSeq?: number;
+  promotions?: any[];
 }

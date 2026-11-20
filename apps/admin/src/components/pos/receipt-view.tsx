@@ -47,9 +47,16 @@ export interface ReceiptData {
     discountMinor: number;
     taxMinor: number;
     totalMinor: number;
+    promotionLabel?: string;
   }>;
   grossMinor: number;
   discountMinor: number;
+  billPromotionLabel?: string;
+  billPromotionDiscountMinor?: number;
+  couponCode?: string;
+  pointsEarned?: number;
+  pointsRedeemed?: number;
+  newPointsBalance?: number;
   taxMinor: number;
   totalMinor: number;
   paidMinor: number;
@@ -244,6 +251,11 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
                         {[item.color, item.size].filter(Boolean).join(" / ")}
                       </div>
                     )}
+                    {item.promotionLabel && (
+                      <div className="text-[10px] text-emerald-700 italic">
+                        {item.promotionLabel}
+                      </div>
+                    )}
                     {item.discountMinor > 0 && (
                       <div className="text-[10px] text-gray-500 whitespace-nowrap">
                         -{formatMoney(item.discountMinor)}
@@ -269,6 +281,18 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
             <div className="flex justify-between text-gray-700">
               <span>{strings.pos.discount}:</span>
               <span className="tabular-nums whitespace-nowrap">-{formatMoney(receipt.discountMinor)}</span>
+            </div>
+          )}
+          {Boolean(receipt.billPromotionDiscountMinor && receipt.billPromotionDiscountMinor > 0) && (
+            <div className="flex justify-between text-emerald-700">
+              <span>{receipt.billPromotionLabel || strings.promotions.pos.billPromotion}:</span>
+              <span className="tabular-nums whitespace-nowrap">-{formatMoney(receipt.billPromotionDiscountMinor!)}</span>
+            </div>
+          )}
+          {receipt.discountMinor > 0 && (
+            <div className="flex justify-between font-bold text-emerald-700">
+              <span>{strings.promotions.pos.totalSavings}:</span>
+              <span className="tabular-nums whitespace-nowrap">৳{formatMoney(receipt.discountMinor)}</span>
             </div>
           )}
           {receipt.taxMinor > 0 && (

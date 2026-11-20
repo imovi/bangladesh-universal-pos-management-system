@@ -152,6 +152,13 @@ export async function syncCatalog(
         }
       }
 
+      if (data.promotions) {
+        await targetDb.settings.put({
+          key: "cachedPromotions",
+          value: data.promotions,
+        });
+      }
+
       await targetDb.settings.put({
         key: "catalogVersion",
         value: data.catalogVersion,

@@ -1961,6 +1961,32 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - All 56 admin unit tests passed.
   - All 314 API integration tests passed.
   - Production build across `@universal-pos/shared`, `@universal-pos/admin`, `@universal-pos/api` succeeded with 0 errors.
+- **Commit:** `4cda049` (pushed).
+- **CI Run:** `44698322274` (Conclusion: `success` / Green).
+
+### Milestone E2: Promotions Back Office, POS Integration & Verification
+- **Back Office Management (`/promotions`, `/promotions/new`, `/promotions/[id]`):**
+  - Promotion list view with filtering by status (`active`, `paused`, `scheduled`, `ended`) and type (`PERCENT_OFF`, `AMOUNT_OFF`, `FIXED_PRICE`, `BUY_X_GET_Y`, `BUNDLE_PRICE`, `BILL_THRESHOLD`), search by name/description, columns for total uses and discount given in ৳, and actions: pause, resume, end, duplicate, and delete.
+  - Form with dynamic configuration fields tailored to promotion type, targeting selector (`ALL`, `PRODUCTS`, `CATEGORIES`), schedule window in `Asia/Dhaka`, condition limits (member-only, minimum quantity, usage caps).
+  - Interactive Preview Calculator Box: allows building up to 5 cart lines and runs live promotion simulation against `POST /api/v1/promotions/preview`.
+  - Added sidebar navigation link under Sales.
+- **POS Integration (`/pos`):**
+  - Cached active promotions in Dexie IndexedDB via catalog sync, bumping catalog version on promotion changes.
+  - Integrated `evaluatePromotions` directly into POS `computeCartTotals`:
+    - Shows promotion badge on cart lines with discount amount.
+    - Locks manual cashier line discount when a promotion applies unless user holds `promotion.override` permission.
+    - Shows 20% bill threshold hint banner ("আর ৳X কিনলে অফার পাবেন").
+    - Bill promotion discount row in checkout summary.
+    - "আপনি সাশ্রয় করলেন ৳X" total savings row on screen and on 80mm/58mm receipts.
+- **Server Sales Engine (`SalesService`):**
+  - Validates and applies active promotions and coupon codes during checkout, enforcing that client calculations match server results to the poisha.
+  - Automatically flags `PROMOTION_CHANGED` on offline synced sales when promotions changed while offline.
+  - Increments promotion usage counters and total discount given.
+  - Persists promotion items and bill promotion details to database.
+- **Verification:**
+  - 12 integration tests in `apps/api/test/promotions.spec.ts` (CRUD, tenant isolation, preview calculator, DB accuracy to poisha).
+  - E2E Playwright test in `apps/admin/e2e/promotions-pos-flow.spec.ts` (Buy 2 Get 1, receipt verification, F6 return).
+  - Full test suite: 27 shared tests, 56 admin unit tests, 326 API integration tests, 0 lint warnings/errors across all workspaces.
 
 
 

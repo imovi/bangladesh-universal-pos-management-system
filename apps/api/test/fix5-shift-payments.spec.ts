@@ -151,6 +151,7 @@ describe("Fix 5: Per-payment-method figures in shift close and shift report", ()
       nagad: 4000,
       rocket: 5000,
       bank_transfer: 6000,
+      points: 7000,
     };
 
     let totalExpectedSalesMinor = 0;

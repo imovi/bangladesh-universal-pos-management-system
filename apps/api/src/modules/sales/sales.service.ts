@@ -8,7 +8,15 @@ import { TenantContextService } from "../../common/database/tenant-context.servi
 import { SystemDbService } from "../../common/database/system-db.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { InventoryService } from "../inventory/inventory.service.js";
-import { CreateSaleDto, VoidSaleDto, calculateSaleTotals, formatDateKey } from "@universal-pos/shared";
+import {
+  CreateSaleDto,
+  VoidSaleDto,
+  calculateSaleTotals,
+  formatDateKey,
+  evaluatePromotions,
+  PromotionRule,
+  PromotionEvaluationLineItem,
+} from "@universal-pos/shared";
 import { validateDiscountsNonNegative, enforceDiscountAndOverrideLimits } from "./sales-discount.helper.js";
 import { computeSalePayloadHash, matchesSalePayload } from "./sales-hash.helper.js";
 import { CustomersService } from "../shifts/customers.service.js";
@@ -249,8 +257,13 @@ export class SalesService {
       id: uuidv7(), tenantId, variantId: l.variantId, unitPriceMinor: l.unitPriceMinor,
       originalUnitPriceMinor: originalPrices[idx] ?? null, unitCostMinor: costMap.get(l.variantId) ?? 0n,
       quantity: new Prisma.Decimal(l.quantity), subtotalMinor: l.grossMinor,
-      discountMinor: l.lineDiscountMinor + l.allocatedBillDiscountMinor,
+      discountMinor: l.lineDiscountMinor !== undefined && l.allocatedBillDiscountMinor !== undefined
+        ? l.lineDiscountMinor + l.allocatedBillDiscountMinor
+        : l.discountMinor ?? 0n,
       taxRateBp: l.taxRateBp, taxMinor: l.taxMinor, totalMinor: l.totalMinor,
+      promotionId: l.promotionId ?? null,
+      promotionDiscountMinor: l.promotionDiscountMinor ? BigInt(l.promotionDiscountMinor) : 0n,
+      promotionLabel: l.promotionLabel ?? null,
     }));
   }
 
@@ -260,6 +273,7 @@ export class SalesService {
       saleId: string; inv: string; calc: any; paid: bigint; change: bigint; due: bigint;
       userId: string; costMap: Map<string, bigint>; originalPrices: (bigint | null)[]; payloadHash: string;
       occurredAt: Date; syncedAt: Date | null; isOffline: boolean; catalogVersion: string | null;
+      billPromotionId?: string | null; billPromotionDiscountMinor?: bigint; couponCode?: string | null;
     },
   ) {
     return tx.sale.create({
@@ -270,6 +284,9 @@ export class SalesService {
         taxMinor: meta.calc.taxMinor, totalMinor: meta.calc.totalMinor, paidMinor: meta.paid,
         changeMinor: meta.change, dueMinor: meta.due, notes: dto.notes, requestPayloadHash: meta.payloadHash,
         occurredAt: meta.occurredAt, syncedAt: meta.syncedAt, isOffline: meta.isOffline, catalogVersion: meta.catalogVersion,
+        billPromotionId: meta.billPromotionId ?? null,
+        billPromotionDiscountMinor: meta.billPromotionDiscountMinor ?? 0n,
+        couponCode: meta.couponCode ?? null,
         items: { create: this.buildSaleItemsData(tenantId, meta.calc.lines, meta.costMap, meta.originalPrices) },
         payments: {
           create: dto.payments.map((p) => ({ id: uuidv7(), tenantId, paymentMethod: p.paymentMethod, amountMinor: BigInt(p.amountMinor), reference: p.reference })),
@@ -397,9 +414,162 @@ export class SalesService {
           defaultTaxRateBp,
           user,
           dto.isOffline,
-          dto.catalogVersion,
+          dto.catalogVersion ?? undefined,
         );
-        const { calculated, paidMinor, changeMinor, dueMinor } = this.computeAndValidateTotals(dto, lineInputs, pricesIncludeTax);
+        let calculated: any;
+        let paidMinor: bigint;
+        let changeMinor: bigint;
+        let dueMinor: bigint;
+        let billPromotionId: string | null = null;
+        let billPromotionDiscountMinor: bigint = 0n;
+        let appliedPromoSummary: any[] = [];
+
+        // Check if tenant has active promotions or couponCode provided
+        const activePromos = await tx.promotion.findMany({
+          where: { tenantId, status: "active" },
+          orderBy: { priority: "desc" },
+        });
+
+        if (activePromos.length > 0 || dto.couponCode) {
+          const promoRules: PromotionRule[] = activePromos.map((p) => ({
+            id: p.id,
+            name: p.name,
+            description: p.description || undefined,
+            type: p.type as any,
+            status: p.status as any,
+            priority: p.priority,
+            stackableWithBill: p.stackableWithBill,
+            membersOnly: Boolean((p.conditions as any)?.membersOnly),
+            branchIds: (p.conditions as any)?.branchIds,
+            minQuantity: (p.conditions as any)?.minQuantity,
+            startAt: p.startDate ? p.startDate : new Date("2020-01-01"),
+            endAt: p.endDate ? p.endDate : new Date("2030-01-01"),
+            daysOfWeek: (p.conditions as any)?.daysOfWeek,
+            hours: (p.conditions as any)?.hours,
+            targetType: ((p.targets as any)?.targetType || "ALL") as any,
+            targetIds: (p.targets as any)?.targetIds,
+            exclusionIds: (p.targets as any)?.exclusionIds,
+            config: (p.config || {}) as any,
+            createdAt: p.createdAt,
+          }));
+
+          let promoOccurredAt = dto.isOffline && dto.occurredAt ? new Date(dto.occurredAt) : new Date();
+          const promoLineInputs: PromotionEvaluationLineItem[] = lineInputs.map((l: any, idx: number) => {
+            const v = variantMap.get(l.variantId);
+            const origItem = dto.items[idx];
+            return {
+              lineId: l.lineId,
+              variantId: l.variantId,
+              productId: v?.productId || "",
+              categoryId: v?.product?.categoryId || undefined,
+              unitPriceMinor: l.unitPriceMinor,
+              quantity: l.quantity,
+              taxRateBp: l.taxRateBp,
+              manualDiscount: origItem?.discount ? {
+                type: origItem.discount.type,
+                amountMinor: origItem.discount.amountMinor,
+                percentBp: origItem.discount.percentBp,
+              } : undefined,
+            };
+          });
+
+          const promoEval = evaluatePromotions({
+            lines: promoLineInputs,
+            promotions: promoRules,
+            couponCode: dto.couponCode || undefined,
+            customerId: dto.customerId || undefined,
+            branchId: dto.branchId,
+            evaluationTime: promoOccurredAt,
+            manualBillDiscount: dto.billDiscount ? {
+              type: dto.billDiscount.type,
+              amountMinor: dto.billDiscount.amountMinor ? BigInt(dto.billDiscount.amountMinor) : undefined,
+              percentBp: dto.billDiscount.percentBp,
+            } : undefined,
+          });
+
+          if (dto.isOffline && BigInt(dto.expectedTotalMinor) !== promoEval.totalMinor) {
+            priceFlags.push({
+              flag: "PROMOTION_CHANGED",
+              details: {
+                clientExpectedTotalMinor: dto.expectedTotalMinor,
+                serverComputedTotalMinor: Number(promoEval.totalMinor),
+                serverPromotionDiscountMinor: Number(promoEval.totalPromotionDiscountMinor),
+              },
+            });
+            const res = this.computeAndValidateTotals(dto, lineInputs, pricesIncludeTax);
+            calculated = res.calculated;
+            paidMinor = res.paidMinor;
+            changeMinor = res.changeMinor;
+            dueMinor = res.dueMinor;
+          } else {
+            if (BigInt(dto.expectedTotalMinor) !== promoEval.totalMinor) {
+              throw new UnprocessableEntityException({
+                code: dto.isOffline ? "TOTALS_MISMATCH" : "CALCULATION_MISMATCH",
+                message: "Totals mismatch: client total differs from server recomputation",
+                details: [{
+                  field: "expectedTotalMinor",
+                  issue: `Expected total ${dto.expectedTotalMinor} does not match computed total ${promoEval.totalMinor}`,
+                  serverTotalMinor: Number(promoEval.totalMinor),
+                  clientTotalMinor: dto.expectedTotalMinor,
+                }],
+              });
+            }
+
+            appliedPromoSummary = promoEval.appliedPromotions;
+            billPromotionId = promoEval.billPromotionId || null;
+            billPromotionDiscountMinor = promoEval.billPromotionDiscountMinor;
+
+            calculated = {
+              grossMinor: promoEval.grossMinor,
+              totalDiscountMinor: promoEval.totalDiscountMinor,
+              lineDiscountMinor: promoEval.linePromotionDiscountMinor,
+              billDiscountMinor: promoEval.billPromotionDiscountMinor,
+              taxMinor: promoEval.taxMinor,
+              netMinor: promoEval.netMinor,
+              totalMinor: promoEval.totalMinor,
+              lines: promoEval.lines.map((l) => ({
+                variantId: l.variantId,
+                quantity: l.quantity,
+                unitPriceMinor: l.unitPriceMinor,
+                grossMinor: l.grossMinor,
+                lineDiscountMinor: l.promotionDiscountMinor,
+                allocatedBillDiscountMinor: l.allocatedBillPromotionMinor,
+                effectiveLineNetMinor: l.effectiveLineNetMinor,
+                taxRateBp: l.taxRateBp,
+                taxMinor: l.taxMinor,
+                totalMinor: l.totalMinor,
+                promotionId: l.promotionId,
+                promotionDiscountMinor: l.promotionDiscountMinor,
+                promotionLabel: l.promotionLabel,
+              })),
+            };
+
+            const paid = dto.payments.reduce((sum, p) => sum + BigInt(p.amountMinor), 0n);
+            let change = 0n;
+            let due = 0n;
+            if (paid > calculated.totalMinor) {
+              change = paid - calculated.totalMinor;
+              const cashPaid = dto.payments.filter((p) => p.paymentMethod === "cash").reduce((s, p) => s + BigInt(p.amountMinor), 0n);
+              if (change > cashPaid) {
+                throw new UnprocessableEntityException({
+                  code: "NON_CASH_OVERPAYMENT_PROHIBITED",
+                  message: "Non-cash payments cannot generate cash change",
+                });
+              }
+            } else if (paid < calculated.totalMinor) {
+              due = calculated.totalMinor - paid;
+            }
+            paidMinor = paid;
+            changeMinor = change;
+            dueMinor = due;
+          }
+        } else {
+          const res = this.computeAndValidateTotals(dto, lineInputs, pricesIncludeTax);
+          calculated = res.calculated;
+          paidMinor = res.paidMinor;
+          changeMinor = res.changeMinor;
+          dueMinor = res.dueMinor;
+        }
 
         const reviewFlags: Array<{ flag: string; details?: any }> = [...priceFlags];
 
@@ -519,10 +689,23 @@ export class SalesService {
         const sale = await this.executeSaleInsert(tx, tenantId, dto, {
           saleId, inv, calc: calculated, paid: paidMinor, change: changeMinor, due: dueMinor,
           userId, costMap, originalPrices, payloadHash, occurredAt, syncedAt, isOffline, catalogVersion,
+          billPromotionId, billPromotionDiscountMinor, couponCode: dto.couponCode || null,
         });
 
+        if (appliedPromoSummary.length > 0) {
+          for (const ap of appliedPromoSummary) {
+            await tx.promotion.update({
+              where: { id: ap.id },
+              data: {
+                totalUses: { increment: 1 },
+                totalDiscountMinor: { increment: ap.discountMinor },
+              },
+            });
+          }
+        }
+
         const { negativeStockItems } = await this.finalizeSaleOperations(tx, tenantId, {
-          saleId, inv, calc: calculated, branchId: dto.branchId, customerId: dto.customerId, userId, ip, costMap, isOffline,
+          saleId, inv, calc: calculated, branchId: dto.branchId, customerId: dto.customerId || undefined, userId, ip, costMap, isOffline,
         });
 
         if (negativeStockItems && negativeStockItems.length > 0) {

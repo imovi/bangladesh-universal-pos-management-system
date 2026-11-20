@@ -294,6 +294,10 @@ export default function PosPage() {
   const [editingPriceLineIdx, setEditingPriceLineIdx] = useState<number | null>(null);
   const [overridePriceVal, setOverridePriceVal] = useState<string>("");
 
+  // Promotions & Coupon
+  const [activePromotions, setActivePromotions] = useState<any[]>([]);
+  const [couponCode, setCouponCode] = useState<string>("");
+
   // Submitting states
   const [isCompletingSale, setIsCompletingSale] = useState(false);
   const [isShiftSubmitting, setIsShiftSubmitting] = useState(false);
@@ -307,6 +311,11 @@ export default function PosPage() {
   const cartTotals = computeCartTotals(cartItems, {
     pricesIncludeTax: posConfig.pricesIncludeTax,
     billDiscount,
+    promotions: activePromotions,
+    couponCode: couponCode.trim() || undefined,
+    customerId: selectedCustomer?.id,
+    branchId: currentBranch?.id,
+    allowPromotionOverride: hasPermission("promotion.override"),
   });
 
   const exchangeReturnCreditMinor = exchangeContext?.returnRefundMinor ?? 0;
@@ -650,6 +659,10 @@ export default function PosPage() {
       if (cached.length > 0) {
         setProducts(cached as any);
       }
+      const cachedPromoSetting = await db.settings.get("cachedPromotions");
+      if (cachedPromoSetting && Array.isArray(cachedPromoSetting.value)) {
+        setActivePromotions(cachedPromoSetting.value);
+      }
     } catch {}
 
     // 2. If online, perform catalog delta sync
@@ -669,6 +682,20 @@ export default function PosPage() {
             setProducts(updated as any);
             syncSucceeded = true;
           }
+          const promoSetting = await db.settings.get("cachedPromotions");
+          if (promoSetting && Array.isArray(promoSetting.value)) {
+            setActivePromotions(promoSetting.value);
+          }
+        }
+      } catch {}
+
+      try {
+        const promoRes = await apiFetch("/promotions?status=active");
+        if (promoRes.ok) {
+          const promoJson = await promoRes.json();
+          const pList = promoJson.data || [];
+          setActivePromotions(pList);
+          await db.settings.put({ key: "cachedPromotions", value: pList });
         }
       } catch {}
 
@@ -1259,20 +1286,29 @@ export default function PosPage() {
             percentBp: billDiscount.percentBp,
           }
         : undefined,
-      items: cartItems.map((it) => ({
-        variantId: it.variantId,
-        productId: it.productId,
-        quantity: it.quantity,
-        overrideUnitPriceMinor: it.overrideUnitPriceMinor,
-        unitPriceMinor: it.overrideUnitPriceMinor !== undefined ? it.overrideUnitPriceMinor : it.unitPriceMinor,
-        discount: it.discount
-          ? {
-              type: it.discount.type,
-              amountMinor: it.discount.amountMinor,
-              percentBp: it.discount.percentBp,
-            }
-          : undefined,
-      })),
+      billPromotionId: cartTotals.billPromotionId || null,
+      billPromotionDiscountMinor: cartTotals.billPromotionDiscountMinor || 0,
+      couponCode: couponCode.trim() ? couponCode.trim().toUpperCase() : null,
+      items: cartItems.map((it, idx) => {
+        const calcLine = cartTotals.lines[idx];
+        return {
+          variantId: it.variantId,
+          productId: it.productId,
+          quantity: it.quantity,
+          overrideUnitPriceMinor: it.overrideUnitPriceMinor,
+          unitPriceMinor: it.overrideUnitPriceMinor !== undefined ? it.overrideUnitPriceMinor : it.unitPriceMinor,
+          discount: it.discount
+            ? {
+                type: it.discount.type,
+                amountMinor: it.discount.amountMinor,
+                percentBp: it.discount.percentBp,
+              }
+            : undefined,
+          promotionId: calcLine?.promotionId || null,
+          promotionDiscountMinor: calcLine?.promotionDiscountMinor || 0,
+          promotionLabel: calcLine?.promotionLabel || null,
+        };
+      }),
       payments: payments
         .filter((p) => p.amountMinor > 0)
         .map((p) => ({
@@ -1414,10 +1450,14 @@ export default function PosPage() {
             discountMinor: (calcLine?.lineDiscountMinor ?? 0) + (calcLine?.allocatedBillDiscountMinor ?? 0),
             taxMinor: calcLine?.taxMinor ?? 0,
             totalMinor: calcLine?.totalMinor ?? it.unitPriceMinor * it.quantity,
+            promotionLabel: calcLine?.promotionLabel,
           };
         }),
         grossMinor: cartTotals.grossMinor,
         discountMinor: cartTotals.totalDiscountMinor,
+        billPromotionLabel: cartTotals.billPromotionLabel,
+        billPromotionDiscountMinor: cartTotals.billPromotionDiscountMinor,
+        couponCode: couponCode.trim() ? couponCode.trim().toUpperCase() : undefined,
         taxMinor: cartTotals.taxMinor,
         totalMinor: cartTotals.totalMinor,
         paidMinor: totalPaid,
@@ -2418,7 +2458,10 @@ export default function PosPage() {
                         {/* Line Discount Trigger */}
                         <button
                           type="button"
+                          disabled={Boolean(calcLine?.promotionId && !hasPermission("promotion.override"))}
+                          title={calcLine?.promotionId && !hasPermission("promotion.override") ? strings.promotions.conditions.stackableHelp : ""}
                           onClick={() => {
+                            if (calcLine?.promotionId && !hasPermission("promotion.override")) return;
                             setEditingDiscountLineIdx(idx);
                             setLineDiscountType(item.discount?.type || "percent");
                             setLineDiscountVal(
@@ -2465,6 +2508,19 @@ export default function PosPage() {
                           </button>
                         )}
                       </div>
+
+                      {calcLine?.promotionLabel && (
+                        <div className="mt-1">
+                          <Badge
+                            data-testid={`line-promo-badge-${idx}`}
+                            variant="secondary"
+                            className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 text-[10px] px-1.5 py-0 font-normal"
+                          >
+                            <Tag className="h-2.5 w-2.5 inline mr-1" />
+                            {calcLine.promotionLabel} ({strings.promotions.pos.badgeSaving} ৳{formatMoney(calcLine.promotionDiscountMinor)})
+                          </Badge>
+                        </div>
+                      )}
                     </div>
 
                     {/* Quantity Controls (Min 44px touch target) */}
@@ -2527,12 +2583,66 @@ export default function PosPage() {
 
           {/* Pinned Bottom Summary & Checkout Button (Always visible at 1024x768 and 1366x768) */}
           <div className="p-4 border-t border-border bg-card shrink-0 space-y-3 shadow-lg">
+            {/* Bill Threshold Hint Banner */}
+            {cartTotals.billThresholdHint && (
+              <div
+                data-testid="bill-threshold-hint"
+                className="p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded text-xs text-emerald-800 dark:text-emerald-300 font-medium flex items-center justify-between"
+              >
+                <span>{cartTotals.billThresholdHint.hintText}</span>
+              </div>
+            )}
+
+            {/* Coupon Code Input */}
+            <div className="space-y-1">
+              <div className="flex gap-2">
+                <Input
+                  data-testid="coupon-code-input"
+                  placeholder={strings.promotions.coupon.placeholder}
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                  className="h-7 text-xs font-mono uppercase"
+                />
+              </div>
+              {cartTotals.couponState && couponCode.trim() && (
+                <div className="text-[11px] pt-0.5">
+                  {cartTotals.couponState.valid ? (
+                    <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 text-[10px]">
+                      {cartTotals.couponState.promotionName || cartTotals.couponState.code} ({strings.promotions.pos.badgeSaving} ৳{formatMoney(cartTotals.couponState.savingMinor || 0)})
+                    </Badge>
+                  ) : (
+                    <span className="text-destructive font-medium text-[11px]">
+                      {cartTotals.couponState.invalidReason === "EXPIRED"
+                        ? strings.promotions.coupon.expired
+                        : cartTotals.couponState.invalidReason === "NOT_STARTED"
+                        ? strings.promotions.coupon.notStarted
+                        : cartTotals.couponState.invalidReason === "WRONG_BRANCH"
+                        ? strings.promotions.coupon.wrongBranch
+                        : cartTotals.couponState.invalidReason === "USAGE_LIMIT_EXCEEDED"
+                        ? strings.promotions.coupon.limitReached
+                        : cartTotals.couponState.invalidReason === "THRESHOLD_NOT_MET"
+                        ? strings.promotions.coupon.thresholdNotMet
+                        : strings.promotions.coupon.invalid}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Calculation Figures */}
             <div className="space-y-1.5 text-xs">
               <div className="flex justify-between text-muted-foreground">
                 <span>{strings.pos.subtotal}</span>
                 <span className="font-mono tabular-nums">{formatMoney(cartTotals.grossMinor)}</span>
               </div>
+
+              {/* Bill Promotion Row */}
+              {cartTotals.billPromotionDiscountMinor > 0 && (
+                <div data-testid="bill-promotion-row" className="flex justify-between items-center text-emerald-600 dark:text-emerald-400 font-medium">
+                  <span>{cartTotals.billPromotionLabel || strings.promotions.pos.billPromotion}</span>
+                  <span className="font-mono tabular-nums">-{formatMoney(cartTotals.billPromotionDiscountMinor)}</span>
+                </div>
+              )}
 
               {/* Bill Discount Row */}
               <div className="flex justify-between items-center text-muted-foreground">
@@ -2578,6 +2688,14 @@ export default function PosPage() {
                 <div className="flex justify-between text-xs text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 p-1.5 rounded border border-amber-200 dark:border-amber-800">
                   <span>{locale === "bn" ? "ফেরত বাবদ সমন্বয়:" : "Return Credit:"}</span>
                   <span className="font-mono tabular-nums font-semibold">-{formatMoney(exchangeReturnCreditMinor)}</span>
+                </div>
+              )}
+
+              {/* Total Savings */}
+              {cartTotals.totalDiscountMinor > 0 && (
+                <div data-testid="total-savings-row" className="flex justify-between text-xs text-emerald-600 dark:text-emerald-400 font-semibold pt-0.5">
+                  <span>{strings.promotions.pos.totalSavings}</span>
+                  <span className="font-mono tabular-nums">৳{formatMoney(cartTotals.totalDiscountMinor)}</span>
                 </div>
               )}
 

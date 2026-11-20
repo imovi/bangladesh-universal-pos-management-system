@@ -1994,7 +1994,13 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - *Cause 2:* In `apps/admin/e2e/promotions-pos-flow.spec.ts`, opening the shift clicked `[data-testid="open-shift-button"]` but did not click `[data-testid="confirm-open-shift-button"]`, leaving the modal backdrop open and blocking product card selection.
 - **Fix Commit:** `25e2aa0` (pushed).
   - *Changes:* Unwrapped paginated responses in `promotions/page.tsx`, `promotions/[id]/page.tsx`, and `promotion-form.tsx`; added modal confirm in `promotions-pos-flow.spec.ts`.
-- **CI Run 2:** `44708483415` (Status: `completed`, Conclusion: `success` / Green).
+- **CI Run 2:** `44708483415` (Status: `completed`, Conclusion: `failure`).
+  - *Failure analysis:* Step 17 ("Run Admin Dashboard E2E tests") failed with exit code 1 (annotation line 480).
+  - *Cause:*
+    1. In `apps/admin/src/app/pos/page.tsx` line 696, `promoRes = await apiFetch("/promotions?status=active")` returned `{ data: [...], meta: ... }` which was not unwrapped, setting `activePromotions` to an object instead of an array.
+    2. In `apps/admin/e2e/promotions-pos-flow.spec.ts` line 147, checkout targeted `[data-testid="checkout-button"]`, but the actual control attribute is `data-testid="pos-checkout-button"`.
+    3. In `apps/admin/e2e/promotions-pos-flow.spec.ts` line 124, `varCells.nth(0).click()` closed the variant modal, causing subsequent clicks on `varCells.nth(1)` to fail.
+  - *Resolution status:* Fixed in commit `3083d88`.
 
 ### Mid-run fix: offline PROMOTION_CHANGED
 - **Saved Prompt:** `docs/prompts/antigravity-pos-phase1e-midrun-fix-prompt.md`.
@@ -2039,9 +2045,28 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
 - **Fix Commit 1:** `3d61aa7` (pushed).
 - **CI Run 2:** `44721789069` (Status: `completed`, Conclusion: `failure`).
   - *Failure analysis:* Step 17 ("Run Admin Dashboard E2E tests") failed. Steps 1-16 passed.
-  - *Root Cause 1:* In `apps/admin/src/app/pos/page.tsx` line 696, `promoRes = await apiFetch('/promotions?status=active')` returned `{ data: [...], meta: ... }` wrapped by `TransformInterceptor`. Setting `pList = promoJson.data || []` set `activePromotions` to an object instead of an array, breaking client-side promotion calculations and preventing `cachedPromotions` array verification in IndexedDB, so promotion badges never appeared in POS.
-  - *Root Cause 2:* In `apps/admin/e2e/promotions-pos-flow.spec.ts`, the checkout locator targeted `[data-testid="checkout-button"]`, but the actual button attribute in `pos/page.tsx` is `pos-checkout-button`.
-  - *Root Cause 3:* Selecting a variant cell in `VariantPickerModal` closes the modal immediately upon item selection. Clicking subsequent variant cells failed because the modal was closed; updated test to increment quantity using the cart's `qty-plus-0` control.
+  - *Cause:* Still affected by the three E2 issues inherited from `25e2aa0` (missing unwrap of `activePromotions` in `pos/page.tsx`, `checkout-button` testid mismatch, and variant modal closure on select in `promotions-pos-flow.spec.ts`).
+  - *Resolution status:* Fixed in commit `3083d88`.
+- **Fix Commit 2:** `3083d88` (pushed).
+- **CI Run 3:** `44724837184` (Status: `completed`, Conclusion: `failure`).
+  - *Failure analysis:* Step 17 ("Run Admin Dashboard E2E tests") failed. Steps 1-16 passed.
+  - *Cause:* In `apps/admin/e2e/promotions-pos-flow.spec.ts`, test 1 failed due to open shifts blocking the POS UI and searching for non-existent product "Panjabi", and test 2 failed because active promotions from previous tests were not cleared, causing the offline sale to match a leftover promotion instead of triggering `PROMOTION_CHANGED`.
+  - *Resolution status:* Fixed in upcoming commit.
+
+### Mid-run note: CI truth
+- **Saved Prompt:** `docs/prompts/antigravity-pos-phase1e-ci-truth-note.md`.
+- **Sentence on cause and prevention:** A wrong conclusion was written because the agent logged an expected success from local tests before polling the final CI conclusion from the public API, which is now mechanically prevented by requiring `node scripts/ci-status.cjs <sha>` output and gating with conclusion verification in `scripts/verify-report-refs.cjs`.
+- **Mechanical CI Output:**
+  - `node scripts/ci-status.cjs 4cda049`: `44698322274 4cda049 completed success`
+  - `node scripts/ci-status.cjs e641606`: `44705513182 e641606 completed failure`
+  - `node scripts/ci-status.cjs 25e2aa0`: `44708483415 25e2aa0 completed failure`
+  - `node scripts/ci-status.cjs 78295ce`: `44719703495 78295ce completed failure`
+  - `node scripts/ci-status.cjs 3d61aa7`: `44721789069 3d61aa7 completed failure`
+  - `node scripts/ci-status.cjs 3083d88`: `44724837184 3083d88 completed failure`
+- **Validation:**
+  - Added unit test suite in `scripts/test-verify-report-refs.cjs` covering matching vs mismatched conclusions without network (passes).
+  - Extended `scripts/verify-report-refs.cjs` to enforce conclusion match for every 11-digit run ID against the API.
+
 
 
 

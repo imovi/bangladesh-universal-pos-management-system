@@ -2658,7 +2658,7 @@ export default function PosPage() {
                 <div className="text-[11px] pt-0.5">
                   {cartTotals.couponState.valid ? (
                     <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 text-[10px]" data-testid="coupon-saving-badge">
-                      {cartTotals.couponState.promotionName || cartTotals.couponState.code} ({strings.promotions.pos.badgeSaving} ৳{formatMoney(cartTotals.couponState.savingMinor || 0)})
+                      {cartTotals.couponState.promotionName || cartTotals.couponState.code} ({strings.promotions.pos.badgeSaving} {formatMoney(cartTotals.couponState.savingMinor || 0)})
                     </Badge>
                   ) : (
                     <span className="text-destructive font-medium text-[11px]" data-testid="coupon-error-msg">

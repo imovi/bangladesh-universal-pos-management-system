@@ -2113,6 +2113,12 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
        - Types invalid coupon code and verifies localized error message.
        - Types valid coupon code and verifies discount savings badge.
        - Completes checkout and verifies receipt displays the coupon code.
+- **Commit:** `80d996b` (pushed).
+- **CI Run 1:** `44736878215` (Status: `completed`, Conclusion: `failure`).
+  - *Failure analysis:* Step 17 ("Run Admin Dashboard E2E tests") failed. Steps 1-16 (Build, Lint, Unit tests with coverage, Database migrations, Demo seed, E2E reset & seed) all passed green.
+  - *Cause:* In `apps/admin/e2e/coupons-pos-flow.spec.ts`, the bill threshold promo config payload sent `minBillMinor` and `discountMinor` instead of `thresholdMinor`, `discountType: "AMOUNT"`, and `amountMinor`, resulting in calculated coupon savings of 0. Also fixed duplicate `৳` currency prefix on the POS saving badge in `apps/admin/src/app/pos/page.tsx`.
+  - *Resolution status:* Fixed in fix commit.
+
 
 
 

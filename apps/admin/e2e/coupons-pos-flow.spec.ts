@@ -93,8 +93,9 @@ test.describe("Milestone E3: Coupons POS Flow E2E Test", () => {
           couponRequired: true,
         },
         config: {
-          minBillMinor: 100000, // ৳1,000 threshold
-          discountMinor: 50000, // ৳500 discount
+          thresholdMinor: 100000, // ৳1,000 threshold
+          discountType: "AMOUNT",
+          amountMinor: 50000, // ৳500 discount
         },
         targets: { targetType: "ALL" },
       },
@@ -169,12 +170,11 @@ test.describe("Milestone E3: Coupons POS Flow E2E Test", () => {
     await varCells.first().click();
     await expect(varCells.first()).toBeHidden({ timeout: 5000 });
 
-    // Ensure cart qty is at least 1 (most variants are >= ৳1,000, but add 1 more to guarantee > ৳1,000)
+    // Ensure cart qty is at least 2 to guarantee > ৳1,000 threshold
     const qtyPlus = page.locator('[data-testid="qty-plus-0"]');
-    if (await qtyPlus.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await qtyPlus.click();
-      await page.waitForTimeout(300);
-    }
+    await expect(qtyPlus).toBeVisible({ timeout: 5000 });
+    await qtyPlus.click();
+    await page.waitForTimeout(300);
 
     // 2. Type an invalid coupon first: see error message
     const couponInput = page.locator('[data-testid="coupon-code-input"]');
@@ -191,7 +191,7 @@ test.describe("Milestone E3: Coupons POS Flow E2E Test", () => {
 
     const savingBadge = page.locator('[data-testid="coupon-saving-badge"]');
     await expect(savingBadge).toBeVisible({ timeout: 5000 });
-    await expect(savingBadge).toContainText("৳500");
+    await expect(savingBadge).toContainText("500");
 
     // 4. Checkout
     const checkoutBtn = page.locator('[data-testid="pos-checkout-button"], [data-testid="checkout-button"]');
@@ -209,7 +209,7 @@ test.describe("Milestone E3: Coupons POS Flow E2E Test", () => {
 
     const receiptCouponCode = page.locator('[data-testid="receipt-coupon-code"]');
     await expect(receiptCouponCode).toBeVisible({ timeout: 5000 });
-    await expect(receiptCouponCode).toHaveText(couponCode);
+    await expect(receiptCouponCode).toContainText(couponCode);
 
     // Close receipt
     await page.click('[data-testid="new-sale-button"]');

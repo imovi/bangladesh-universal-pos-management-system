@@ -56,7 +56,8 @@ https.get(url, options, (res) => {
     }
 
     if (json.message && json.message.includes("API rate limit exceeded")) {
-      console.log("RATE_LIMITED");
+      const reset = res.headers["x-ratelimit-reset"];
+      console.log(`RATE_LIMITED reset=${reset || "unknown"}`);
       process.exit(2);
     }
 

@@ -1992,10 +1992,46 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - *Failure analysis:* Step 17 ("Run Admin Dashboard E2E tests") failed. Steps 1-16 (build, lint, unit tests with coverage, database migrations, demo seeding) were all green.
   - *Cause 1:* In `apps/admin/src/app/(admin)/promotions/page.tsx`, `promotionsData.data` was assumed to be an array, but `TransformInterceptor` wrapped the paginated response in `{ data: [...], meta: ... }`. When `global-data-integrity-guard.spec.ts` visited `/promotions`, `promotions.map is not a function` caused a React crash.
   - *Cause 2:* In `apps/admin/e2e/promotions-pos-flow.spec.ts`, opening the shift clicked `[data-testid="open-shift-button"]` but did not click `[data-testid="confirm-open-shift-button"]`, leaving the modal backdrop open and blocking product card selection.
-  - *Fix:*
-    - Safely unwrap paginated response arrays in `promotions/page.tsx`, `promotions/[id]/page.tsx`, and `promotion-form.tsx`.
-    - Added `[data-testid="confirm-open-shift-button"]` click and flexible regex in `promotions-pos-flow.spec.ts`.
-- **Fix:** Unwrapped paginated responses in `promotions/page.tsx`, `promotions/[id]/page.tsx`, and `promotion-form.tsx`; added modal confirm in `promotions-pos-flow.spec.ts`.
+- **Fix Commit:** `25e2aa0` (pushed).
+  - *Changes:* Unwrapped paginated responses in `promotions/page.tsx`, `promotions/[id]/page.tsx`, and `promotion-form.tsx`; added modal confirm in `promotions-pos-flow.spec.ts`.
+- **CI Run 2:** `44708483415` (Status: `completed`, Conclusion: `success` / Green).
+
+### Mid-run fix: offline PROMOTION_CHANGED
+- **Saved Prompt:** `docs/prompts/antigravity-pos-phase1e-midrun-fix-prompt.md`.
+- **Bug Diagnosed:**
+  - In `apps/api/src/modules/sales/sales.service.ts` (around lines 489–503 at `e641606`), when an offline sale arrived whose promotion had ended, paused, changed, or expired on the server before sync, the server pushed `PROMOTION_CHANGED` but called `computeAndValidateTotals`, which recomputed totals without promotions and threw 422 `TOTALS_MISMATCH`, rejecting legitimate sales made while disconnected.
+  - Customers had already paid and left the counter; rejecting valid offline sales violated core POS reliability invariants.
+- **What Was Built:**
+  1. **Schema Updates:** Added `billPromotionId` (`z.string().uuid().optional().nullable()`) and `billPromotionDiscountMinor` (`z.coerce.number().int().min(0).optional().nullable()`) to `CreateSaleSchema` in `packages/shared/src/schemas/sales.schemas.ts`. Confirmed POS UI already sends these fields along with per-line promotion attributes.
+  2. **Sanity Checks (HTTP 400):**
+     - Verified all discounts (line promotion, line manual, bill promotion, bill manual) are $\ge 0$.
+     - Enforced that no line's promotion discount exceeds line gross (`grossMinor`).
+     - Checked that all referenced promotion IDs (`item.promotionId`, `dto.billPromotionId`) belong to the tenant, even if currently ended or paused.
+  3. **Rebuild Engine from Applied Client Values:**
+     - For offline sales where today's server promotions differ from `expectedTotalMinor`, rebuilt the sale from client values using shared money code (`calculateSaleTotals` / `distributeProportional`):
+       - Line promotion discount applied as fixed line discount before manual line discounts.
+       - Bill promotion discount applied before manual bill discount and distributed proportionally across lines.
+       - Recomputed line nets, taxes, and totals to the poisha.
+     - If rebuilt total matches `expectedTotalMinor`:
+       - Sale accepted (201).
+       - Persisted client's promotion columns on `sales` and `sale_items`.
+       - Appended `PROMOTION_CHANGED` review flag with details: `clientTotalMinor`, `clientExpectedTotalMinor`, `serverTotalMinor`, `serverPromotionDiscountMinor`, and `differingPromotionIds`.
+       - Updated promotion usage counters (`totalUses` and `totalDiscountMinor`) for all applied promotions.
+     - If rebuilt total differs from `expectedTotalMinor`: retained strict 422 `TOTALS_MISMATCH`.
+  4. **Strict Online Policy:** Non-offline sales with promotion changes remain strictly rejected with 422 `CALCULATION_MISMATCH` so cashiers see refreshed promotions.
+  5. **Returns Integrity:** Verified returns on flagged sales refund the stored line net amount correctly.
+  6. **UI & E2E Integration:** Added `PROMOTION_CHANGED` filter option in `/sales/offline-review` table. Added Playwright scenario to `apps/admin/e2e/promotions-pos-flow.spec.ts` (sell offline with promotion, end promotion via API, reconnect, verify clean outbox sync and review badge in `/sales/offline-review`).
+- **Integration Tests (`apps/api/test/promotions-offline.spec.ts`):**
+  - 7 comprehensive tests covering:
+    1. Ended promotion (accepts offline sale, flags `PROMOTION_CHANGED`, increments discount total by ৳880).
+    2. Edited promotion (stores client 20% discount, records server 10% in flag).
+    3. Lost bill threshold (accepts paused bill threshold promo, stores bill promo discount).
+    4. Tampered payload (line promotion discount > line gross returns 400).
+    5. Inconsistent payload (client math mismatch returns 422 `TOTALS_MISMATCH`).
+    6. Online stays strict (non-offline sale with changed promo rejected with 422 `CALCULATION_MISMATCH`).
+    7. Return on flagged sale (refunds stored line net amount ৳1,760 for 1 unit).
+  - All 7 tests pass locally.
+
 
 
 

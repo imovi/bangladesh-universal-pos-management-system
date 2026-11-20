@@ -42,6 +42,8 @@ export const CreateSaleSchema = z.object({
   branchId: z.string().uuid(),
   customerId: z.string().uuid().optional().nullable(),
   billDiscount: LineDiscountInputSchema.optional(),
+  billPromotionId: z.string().uuid().optional().nullable(),
+  billPromotionDiscountMinor: z.coerce.number().int().min(0).optional().nullable(),
   couponCode: z.string().trim().max(100).optional().nullable(),
   pointsRedeemed: z.coerce.number().int().min(0).optional(),
   items: z.array(SaleItemInputSchema).min(1, "Sale must have at least one line item"),

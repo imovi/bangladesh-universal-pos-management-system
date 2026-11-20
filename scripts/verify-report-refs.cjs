@@ -3,8 +3,17 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 const targetSection = process.argv[2] || '## Phase 1D, fixes';
-const reportPath = path.join(__dirname, '..', 'docs', 'overnight-report.md');
-const content = fs.readFileSync(reportPath, 'utf8');
+let reportPath = process.argv[3] ? path.resolve(process.argv[3]) : path.join(__dirname, '..', 'docs', 'overnight-report.md');
+let content = fs.existsSync(reportPath) ? fs.readFileSync(reportPath, 'utf8') : '';
+
+if (content.indexOf(targetSection) === -1) {
+  // If not found in report, check overnight-log.md
+  const logPath = path.join(__dirname, '..', 'docs', 'overnight-log.md');
+  if (fs.existsSync(logPath) && fs.readFileSync(logPath, 'utf8').includes(targetSection)) {
+    reportPath = logPath;
+    content = fs.readFileSync(reportPath, 'utf8');
+  }
+}
 
 const sectionIndex = content.indexOf(targetSection);
 if (sectionIndex === -1) {

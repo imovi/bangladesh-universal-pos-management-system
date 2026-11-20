@@ -39,7 +39,44 @@ test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
     expect(promoRes.ok()).toBeTruthy();
     const promoData = await promoRes.json();
     promoId = (promoData.data || promoData).id;
+
+    // 3. Ensure all registers have allowOffline = true
+    const regRes = await request.get("http://localhost:4000/api/v1/registers", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (regRes.ok()) {
+      const regData = await regRes.json();
+      const registers = regData.data || [];
+      for (const reg of registers) {
+        if (!reg.allowOffline) {
+          await request.patch(`http://localhost:4000/api/v1/registers/${reg.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            data: { allowOffline: true },
+          });
+        }
+      }
+    }
   });
+
+  async function ensureShiftIsOpen(page: any) {
+    const confirmBtn = page.locator('[data-testid="confirm-open-shift-button"]');
+    if (await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await page.fill('[data-testid="opening-cash-input"]', "500");
+      await confirmBtn.click();
+      await expect(confirmBtn).toBeHidden({ timeout: 5000 });
+    } else {
+      const openShiftBtn = page.locator('[data-testid="open-shift-button"], button:has-text("শিফট শুরু করুন")');
+      if (await openShiftBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await openShiftBtn.click();
+        await page.waitForTimeout(300);
+        if (await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await page.fill('[data-testid="opening-cash-input"]', "500");
+          await confirmBtn.click();
+          await expect(confirmBtn).toBeHidden({ timeout: 5000 });
+        }
+      }
+    }
+  }
 
   test.afterAll(async ({ request }) => {
     if (promoId && token) {
@@ -62,15 +99,7 @@ test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
     await page.waitForLoadState("networkidle");
 
     // Ensure a shift is open
-    const openShiftBtn = page.locator('[data-testid="open-shift-button"]');
-    if (await openShiftBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await openShiftBtn.click();
-      const confirmOpenShiftBtn = page.locator('[data-testid="confirm-open-shift-button"]');
-      if (await confirmOpenShiftBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await confirmOpenShiftBtn.click();
-        await expect(confirmOpenShiftBtn).toBeHidden({ timeout: 5000 });
-      }
-    }
+    await ensureShiftIsOpen(page);
 
     // Search and select product
     const searchInput = page.locator('[data-testid="pos-search-input"]');
@@ -192,5 +221,122 @@ test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
     const doneReceiptBtn = page.locator('[data-testid="return-receipt-done-button"]');
     await expect(doneReceiptBtn).toBeVisible({ timeout: 5000 });
     await doneReceiptBtn.click();
+  });
+
+  test("offline sale with promotion ended before sync: syncs cleanly and shows PROMOTION_CHANGED in offline review", async ({
+    page,
+    context,
+    request,
+  }) => {
+    test.setTimeout(60000);
+
+    // 1. Create a dedicated promotion via API
+    const promoRes = await request.post("http://localhost:4000/api/v1/promotions", {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        name: "Playwright Offline Promo Ended Before Sync",
+        type: "PERCENT_OFF",
+        status: "active",
+        priority: 70,
+        stackableWithBill: true,
+        config: { percentBp: 2000 },
+        targets: { targetType: "ALL" },
+      },
+    });
+    expect(promoRes.ok()).toBeTruthy();
+    const offlinePromoId = (await promoRes.json()).data.id;
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/pos");
+    await page.waitForLoadState("networkidle");
+
+    // Ensure a shift is open
+    await ensureShiftIsOpen(page);
+
+    const connPill = page.locator('[data-testid="connection-status-pill"]');
+    await expect(connPill).toBeVisible({ timeout: 10000 });
+
+    // 2. Go offline
+    await context.setOffline(true);
+    await expect(connPill).toContainText(/অফলাইন|Offline/, { timeout: 10000 });
+
+    // 3. Sell with the promotion while offline
+    const searchInput = page.locator('[data-testid="pos-search-input"]');
+    await expect(searchInput).toBeVisible({ timeout: 10000 });
+    await searchInput.fill("Panjabi");
+    await page.waitForTimeout(500);
+
+    const prodCard = page.locator('[data-testid^="product-card-"]').first();
+    await expect(prodCard).toBeVisible({ timeout: 10000 });
+    await prodCard.click();
+
+    const varCell = page.locator('[data-testid^="variant-cell-"]').first();
+    if (await varCell.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await varCell.click();
+    }
+
+    // Verify promo discount applied
+    const promoBadge = page.locator('[data-testid^="line-promo-badge-"]').first();
+    await expect(promoBadge).toBeVisible({ timeout: 5000 });
+
+    const checkoutBtn = page.locator('[data-testid="checkout-button"]');
+    await expect(checkoutBtn).toBeEnabled({ timeout: 5000 });
+    await checkoutBtn.click();
+
+    const confirmPaymentBtn = page.locator('[data-testid="confirm-payment-button"]');
+    await expect(confirmPaymentBtn).toBeVisible({ timeout: 5000 });
+    await confirmPaymentBtn.click();
+
+    // Receipt appears
+    const receiptContainer = page.locator("#pos-receipt-print");
+    await expect(receiptContainer).toBeVisible({ timeout: 10000 });
+    const receiptText = await receiptContainer.innerText();
+    const invMatch = receiptText.match(/[A-Za-z0-9-]+-\d{6}-\d{4}/);
+    expect(invMatch).toBeTruthy();
+    const invoiceNumber = invMatch![0];
+
+    // Close receipt
+    await page.click('[data-testid="new-sale-button"]');
+    await expect(receiptContainer).toBeHidden({ timeout: 5000 });
+
+    // 4. End the promotion through the API while POS is offline
+    const endRes = await request.post(`http://localhost:4000/api/v1/promotions/${offlinePromoId}/end`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(endRes.ok()).toBeTruthy();
+
+    // 5. Go online
+    await context.setOffline(false);
+    await expect(connPill).toContainText(/অনলাইন|Online/, { timeout: 10000 });
+
+    // Trigger sync
+    await page.evaluate(() => {
+      if (typeof (window as any).__triggerPosSync === "function") {
+        (window as any).__triggerPosSync();
+      } else {
+        window.dispatchEvent(new Event("online"));
+      }
+    });
+
+    // 6. The sale must sync, with no item stuck in the outbox
+    await page.waitForTimeout(3000);
+
+    // Verify sale exists on server and has PROMOTION_CHANGED in offline review
+    await expect.poll(async () => {
+      const reviewRes = await request.get("http://localhost:4000/api/v1/sales/offline-review", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!reviewRes.ok()) return false;
+      const json = await reviewRes.json();
+      const flags = json.data?.data || json.data || [];
+      return flags.some((f: any) => f.sale?.invoiceNumber === invoiceNumber && f.flag === "PROMOTION_CHANGED");
+    }, { timeout: 20000, intervals: [1000, 2000] }).toBe(true);
+
+    // Navigate to /sales/offline-review and verify badge is visible
+    await page.goto("/sales/offline-review");
+    await page.waitForLoadState("networkidle");
+    const reviewRow = page.locator(`tr:has-text("${invoiceNumber}")`);
+    await expect(reviewRow).toBeVisible({ timeout: 10000 });
+    await expect(reviewRow).toContainText(/PROMOTION_CHANGED/);
   });
 });

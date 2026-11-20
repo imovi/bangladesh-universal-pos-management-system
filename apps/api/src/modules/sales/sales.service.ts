@@ -14,6 +14,10 @@ import {
   calculateSaleTotals,
   formatDateKey,
   evaluatePromotions,
+  distributeProportional,
+  parseQuantityThousandths,
+  formatQuantityFromThousandths,
+  roundHalfUp,
   PromotionRule,
   PromotionEvaluationLineItem,
 } from "@universal-pos/shared";
@@ -424,125 +428,397 @@ export class SalesService {
         let billPromotionDiscountMinor: bigint = 0n;
         let appliedPromoSummary: any[] = [];
 
+        // Basic sanity checks on discounts
+        for (const item of dto.items) {
+          if (item.promotionDiscountMinor !== undefined && item.promotionDiscountMinor !== null && item.promotionDiscountMinor < 0) {
+            throw new BadRequestException("Line promotion discount cannot be negative");
+          }
+          if (item.discount?.amountMinor !== undefined && item.discount.amountMinor !== null && item.discount.amountMinor < 0) {
+            throw new BadRequestException("Line discount cannot be negative");
+          }
+        }
+        if (dto.billPromotionDiscountMinor !== undefined && dto.billPromotionDiscountMinor !== null && dto.billPromotionDiscountMinor < 0) {
+          throw new BadRequestException("Bill promotion discount cannot be negative");
+        }
+        if (dto.billDiscount?.amountMinor !== undefined && dto.billDiscount.amountMinor !== null && dto.billDiscount.amountMinor < 0) {
+          throw new BadRequestException("Bill discount cannot be negative");
+        }
+
+        // Check no line's discount is greater than line gross
+        for (let idx = 0; idx < dto.items.length; idx++) {
+          const item = dto.items[idx];
+          const lineInput = lineInputs[idx];
+          const unitPrice = BigInt(lineInput.unitPriceMinor);
+          const qtyThousandths = parseQuantityThousandths(lineInput.quantity);
+          const grossMinor = roundHalfUp(unitPrice * qtyThousandths, 1000n);
+
+          if (item.promotionDiscountMinor !== undefined && item.promotionDiscountMinor !== null) {
+            if (BigInt(item.promotionDiscountMinor) > grossMinor) {
+              throw new BadRequestException("Line promotion discount exceeds line gross amount");
+            }
+          }
+        }
+
+        // Check all client promotion IDs belong to this tenant
+        const clientPromoIds = [
+          dto.billPromotionId,
+          ...dto.items.map((i) => i.promotionId),
+        ].filter(Boolean) as string[];
+
+        const uniqueClientPromoIds = [...new Set(clientPromoIds)];
+        if (uniqueClientPromoIds.length > 0) {
+          const matchingPromos = await tx.promotion.findMany({
+            where: {
+              tenantId,
+              id: { in: uniqueClientPromoIds },
+            },
+            select: { id: true, name: true },
+          });
+          if (matchingPromos.length !== uniqueClientPromoIds.length) {
+            throw new BadRequestException("One or more promotion IDs do not belong to this tenant");
+          }
+        }
+
+        const hasClientPromotions =
+          uniqueClientPromoIds.length > 0 ||
+          (dto.billPromotionDiscountMinor !== undefined && dto.billPromotionDiscountMinor !== null && dto.billPromotionDiscountMinor > 0) ||
+          dto.items.some((i) => i.promotionDiscountMinor !== undefined && i.promotionDiscountMinor !== null && i.promotionDiscountMinor > 0);
+
         // Check if tenant has active promotions or couponCode provided
         const activePromos = await tx.promotion.findMany({
           where: { tenantId, status: "active" },
           orderBy: { priority: "desc" },
         });
 
-        if (activePromos.length > 0 || dto.couponCode) {
-          const promoRules: PromotionRule[] = activePromos.map((p) => ({
-            id: p.id,
-            name: p.name,
-            description: p.description || undefined,
-            type: p.type as any,
-            status: p.status as any,
-            priority: p.priority,
-            stackableWithBill: p.stackableWithBill,
-            membersOnly: Boolean((p.conditions as any)?.membersOnly),
-            branchIds: (p.conditions as any)?.branchIds,
-            minQuantity: (p.conditions as any)?.minQuantity,
-            startAt: p.startDate ? p.startDate : new Date("2020-01-01"),
-            endAt: p.endDate ? p.endDate : new Date("2030-01-01"),
-            daysOfWeek: (p.conditions as any)?.daysOfWeek,
-            hours: (p.conditions as any)?.hours,
-            targetType: ((p.targets as any)?.targetType || "ALL") as any,
-            targetIds: (p.targets as any)?.targetIds,
-            exclusionIds: (p.targets as any)?.exclusionIds,
-            config: (p.config || {}) as any,
-            createdAt: p.createdAt,
-          }));
+        const shouldEvaluatePromotions = activePromos.length > 0 || Boolean(dto.couponCode) || (dto.isOffline && hasClientPromotions);
 
-          let promoOccurredAt = dto.isOffline && dto.occurredAt ? new Date(dto.occurredAt) : new Date();
-          const promoLineInputs: PromotionEvaluationLineItem[] = lineInputs.map((l: any, idx: number) => {
-            const v = variantMap.get(l.variantId);
-            const origItem = dto.items[idx];
-            return {
-              lineId: l.lineId,
-              variantId: l.variantId,
-              productId: v?.productId || "",
-              categoryId: v?.product?.categoryId || undefined,
-              unitPriceMinor: l.unitPriceMinor,
-              quantity: l.quantity,
-              taxRateBp: l.taxRateBp,
-              manualDiscount: origItem?.discount ? {
-                type: origItem.discount.type,
-                amountMinor: origItem.discount.amountMinor,
-                percentBp: origItem.discount.percentBp,
-              } : undefined,
-            };
-          });
+        if (shouldEvaluatePromotions) {
+          let promoEval: any = null;
+          let serverComputedTotalMinor: bigint;
+          let serverPromotionDiscountMinor: bigint = 0n;
 
-          const promoEval = evaluatePromotions({
-            lines: promoLineInputs,
-            promotions: promoRules,
-            couponCode: dto.couponCode || undefined,
-            customerId: dto.customerId || undefined,
-            branchId: dto.branchId,
-            evaluationTime: promoOccurredAt,
-            manualBillDiscount: dto.billDiscount ? {
-              type: dto.billDiscount.type,
-              amountMinor: dto.billDiscount.amountMinor ? BigInt(dto.billDiscount.amountMinor) : undefined,
-              percentBp: dto.billDiscount.percentBp,
-            } : undefined,
-          });
+          if (activePromos.length > 0 || dto.couponCode) {
+            const promoRules: PromotionRule[] = activePromos.map((p) => ({
+              id: p.id,
+              name: p.name,
+              description: p.description || undefined,
+              type: p.type as any,
+              status: p.status as any,
+              priority: p.priority,
+              stackableWithBill: p.stackableWithBill,
+              membersOnly: Boolean((p.conditions as any)?.membersOnly),
+              branchIds: (p.conditions as any)?.branchIds,
+              minQuantity: (p.conditions as any)?.minQuantity,
+              startAt: p.startDate ? p.startDate : new Date("2020-01-01"),
+              endAt: p.endDate ? p.endDate : new Date("2030-01-01"),
+              daysOfWeek: (p.conditions as any)?.daysOfWeek,
+              hours: (p.conditions as any)?.hours,
+              targetType: ((p.targets as any)?.targetType || "ALL") as any,
+              targetIds: (p.targets as any)?.targetIds,
+              exclusionIds: (p.targets as any)?.exclusionIds,
+              config: (p.config || {}) as any,
+              createdAt: p.createdAt,
+            }));
 
-          if (dto.isOffline && BigInt(dto.expectedTotalMinor) !== promoEval.totalMinor) {
-            priceFlags.push({
-              flag: "PROMOTION_CHANGED",
-              details: {
-                clientExpectedTotalMinor: dto.expectedTotalMinor,
-                serverComputedTotalMinor: Number(promoEval.totalMinor),
-                serverPromotionDiscountMinor: Number(promoEval.totalPromotionDiscountMinor),
-              },
+            const promoOccurredAt = dto.isOffline && dto.occurredAt ? new Date(dto.occurredAt) : new Date();
+            const promoLineInputs: PromotionEvaluationLineItem[] = lineInputs.map((l: any, idx: number) => {
+              const v = variantMap.get(l.variantId);
+              const origItem = dto.items[idx];
+              return {
+                lineId: l.lineId,
+                variantId: l.variantId,
+                productId: v?.productId || "",
+                categoryId: v?.product?.categoryId || undefined,
+                unitPriceMinor: l.unitPriceMinor,
+                quantity: l.quantity,
+                taxRateBp: l.taxRateBp,
+                manualDiscount: origItem?.discount ? {
+                  type: origItem.discount.type,
+                  amountMinor: origItem.discount.amountMinor,
+                  percentBp: origItem.discount.percentBp,
+                } : undefined,
+              };
             });
-            const res = this.computeAndValidateTotals(dto, lineInputs, pricesIncludeTax);
-            calculated = res.calculated;
-            paidMinor = res.paidMinor;
-            changeMinor = res.changeMinor;
-            dueMinor = res.dueMinor;
+
+            promoEval = evaluatePromotions({
+              lines: promoLineInputs,
+              promotions: promoRules,
+              couponCode: dto.couponCode || undefined,
+              customerId: dto.customerId || undefined,
+              branchId: dto.branchId,
+              evaluationTime: promoOccurredAt,
+              manualBillDiscount: dto.billDiscount ? {
+                type: dto.billDiscount.type,
+                amountMinor: dto.billDiscount.amountMinor ? BigInt(dto.billDiscount.amountMinor) : undefined,
+                percentBp: dto.billDiscount.percentBp,
+              } : undefined,
+            });
+
+            serverComputedTotalMinor = promoEval.totalMinor;
+            serverPromotionDiscountMinor = promoEval.totalPromotionDiscountMinor;
           } else {
-            if (BigInt(dto.expectedTotalMinor) !== promoEval.totalMinor) {
+            const standardCalc = calculateSaleTotals(lineInputs, { pricesIncludeTax, billDiscount: dto.billDiscount });
+            serverComputedTotalMinor = standardCalc.totalMinor;
+            serverPromotionDiscountMinor = 0n;
+          }
+
+          if (BigInt(dto.expectedTotalMinor) === serverComputedTotalMinor) {
+            if (promoEval) {
+              appliedPromoSummary = promoEval.appliedPromotions;
+              billPromotionId = promoEval.billPromotionId || null;
+              billPromotionDiscountMinor = promoEval.billPromotionDiscountMinor;
+
+              calculated = {
+                grossMinor: promoEval.grossMinor,
+                totalDiscountMinor: promoEval.totalDiscountMinor,
+                lineDiscountMinor: promoEval.linePromotionDiscountMinor,
+                billDiscountMinor: promoEval.billPromotionDiscountMinor,
+                taxMinor: promoEval.taxMinor,
+                netMinor: promoEval.netMinor,
+                totalMinor: promoEval.totalMinor,
+                lines: promoEval.lines.map((l: any) => ({
+                  variantId: l.variantId,
+                  quantity: l.quantity,
+                  unitPriceMinor: l.unitPriceMinor,
+                  grossMinor: l.grossMinor,
+                  lineDiscountMinor: l.promotionDiscountMinor,
+                  allocatedBillDiscountMinor: l.allocatedBillPromotionMinor,
+                  effectiveLineNetMinor: l.effectiveLineNetMinor,
+                  taxRateBp: l.taxRateBp,
+                  taxMinor: l.taxMinor,
+                  totalMinor: l.totalMinor,
+                  promotionId: l.promotionId,
+                  promotionDiscountMinor: l.promotionDiscountMinor,
+                  promotionLabel: l.promotionLabel,
+                })),
+              };
+            } else {
+              const res = this.computeAndValidateTotals(dto, lineInputs, pricesIncludeTax);
+              calculated = res.calculated;
+            }
+
+            const paid = dto.payments.reduce((sum, p) => sum + BigInt(p.amountMinor), 0n);
+            let change = 0n;
+            let due = 0n;
+            if (paid > calculated.totalMinor) {
+              change = paid - calculated.totalMinor;
+              const cashPaid = dto.payments.filter((p) => p.paymentMethod === "cash").reduce((s, p) => s + BigInt(p.amountMinor), 0n);
+              if (change > cashPaid) {
+                throw new UnprocessableEntityException({
+                  code: "NON_CASH_OVERPAYMENT_PROHIBITED",
+                  message: "Non-cash payments cannot generate cash change",
+                });
+              }
+            } else if (paid < calculated.totalMinor) {
+              due = calculated.totalMinor - paid;
+            }
+            paidMinor = paid;
+            changeMinor = change;
+            dueMinor = due;
+          } else {
+            // Totals mismatch
+            if (!dto.isOffline) {
               throw new UnprocessableEntityException({
-                code: dto.isOffline ? "TOTALS_MISMATCH" : "CALCULATION_MISMATCH",
+                code: "CALCULATION_MISMATCH",
                 message: "Totals mismatch: client total differs from server recomputation",
                 details: [{
                   field: "expectedTotalMinor",
-                  issue: `Expected total ${dto.expectedTotalMinor} does not match computed total ${promoEval.totalMinor}`,
-                  serverTotalMinor: Number(promoEval.totalMinor),
+                  issue: `Expected total ${dto.expectedTotalMinor} does not match computed total ${serverComputedTotalMinor}`,
+                  serverTotalMinor: Number(serverComputedTotalMinor),
                   clientTotalMinor: dto.expectedTotalMinor,
                 }],
               });
             }
 
-            appliedPromoSummary = promoEval.appliedPromotions;
-            billPromotionId = promoEval.billPromotionId || null;
-            billPromotionDiscountMinor = promoEval.billPromotionDiscountMinor;
+            // Offline sale whose total differs from today's promotions:
+            // Rebuild the sale from the client's applied values.
+            const rebuiltLines = dto.items.map((item, idx) => {
+              const lineInput = lineInputs[idx];
+              const unitPrice = BigInt(lineInput.unitPriceMinor);
+              const qtyThousandths = parseQuantityThousandths(lineInput.quantity);
+              const gross = roundHalfUp(unitPrice * qtyThousandths, 1000n);
+              const promoDisc = BigInt(item.promotionDiscountMinor ?? 0);
+              const netAfterLinePromo = gross - promoDisc;
 
-            calculated = {
-              grossMinor: promoEval.grossMinor,
-              totalDiscountMinor: promoEval.totalDiscountMinor,
-              lineDiscountMinor: promoEval.linePromotionDiscountMinor,
-              billDiscountMinor: promoEval.billPromotionDiscountMinor,
-              taxMinor: promoEval.taxMinor,
-              netMinor: promoEval.netMinor,
-              totalMinor: promoEval.totalMinor,
-              lines: promoEval.lines.map((l) => ({
+              return {
+                lineId: item.lineId || `line-${idx}`,
+                variantId: lineInput.variantId,
+                unitPriceMinor: unitPrice,
+                quantityThousandths: qtyThousandths,
+                quantity: formatQuantityFromThousandths(qtyThousandths),
+                grossMinor: gross,
+                promotionDiscountMinor: promoDisc,
+                netAfterLinePromo,
+                promotionId: item.promotionId || null,
+                promotionLabel: item.promotionLabel || null,
+                taxRateBp: lineInput.taxRateBp,
+                manualDiscount: item.discount,
+              };
+            });
+
+            const clientBillPromoDisc = BigInt(dto.billPromotionDiscountMinor ?? 0);
+            const allocatedBillPromo = distributeProportional(
+              rebuiltLines.map((l) => ({ valueMinor: l.netAfterLinePromo })),
+              clientBillPromoDisc,
+            );
+
+            const manualLineDiscounts = rebuiltLines.map((l, idx) => {
+              const remainingLineNet = l.netAfterLinePromo - allocatedBillPromo[idx];
+              if (remainingLineNet <= 0n || !l.manualDiscount) return 0n;
+              if (l.manualDiscount.type === "fixed") {
+                const amt = BigInt(l.manualDiscount.amountMinor ?? 0);
+                return amt > remainingLineNet ? remainingLineNet : amt;
+              } else if (l.manualDiscount.type === "percent") {
+                const bp = BigInt(l.manualDiscount.percentBp ?? 0);
+                const amt = roundHalfUp(remainingLineNet * bp, 10000n);
+                return amt > remainingLineNet ? remainingLineNet : amt;
+              }
+              return 0n;
+            });
+
+            const postManualLineSubtotal = rebuiltLines.reduce((acc, l, idx) => {
+              const net = l.netAfterLinePromo - allocatedBillPromo[idx] - manualLineDiscounts[idx];
+              return acc + (net > 0n ? net : 0n);
+            }, 0n);
+
+            let manualBillDiscountMinor = 0n;
+            if (dto.billDiscount && postManualLineSubtotal > 0n) {
+              if (dto.billDiscount.type === "fixed") {
+                const amt = BigInt(dto.billDiscount.amountMinor ?? 0);
+                manualBillDiscountMinor = amt > postManualLineSubtotal ? postManualLineSubtotal : amt;
+              } else if (dto.billDiscount.type === "percent") {
+                const bp = BigInt(dto.billDiscount.percentBp ?? 0);
+                manualBillDiscountMinor = roundHalfUp(postManualLineSubtotal * bp, 10000n);
+                if (manualBillDiscountMinor > postManualLineSubtotal) {
+                  manualBillDiscountMinor = postManualLineSubtotal;
+                }
+              }
+            }
+
+            const linesForManualBill = rebuiltLines.map((l, idx) => ({
+              valueMinor: l.netAfterLinePromo - allocatedBillPromo[idx] - manualLineDiscounts[idx],
+            }));
+            const allocatedManualBill = distributeProportional(linesForManualBill, manualBillDiscountMinor);
+
+            let totalTaxMinor = 0n;
+            const finalLines = rebuiltLines.map((l, idx) => {
+              const promoDisc = l.promotionDiscountMinor;
+              const billPromoDisc = allocatedBillPromo[idx];
+              const manualLine = manualLineDiscounts[idx];
+              const manualBill = allocatedManualBill[idx];
+              const totalLineDisc = promoDisc + manualLine;
+              const effectiveLineNet = l.grossMinor - totalLineDisc - billPromoDisc - manualBill;
+
+              let taxMinor = 0n;
+              if (l.taxRateBp > 0 && effectiveLineNet > 0n) {
+                const rate = BigInt(l.taxRateBp);
+                if (pricesIncludeTax) {
+                  taxMinor = roundHalfUp(effectiveLineNet * rate, 10000n + rate);
+                } else {
+                  taxMinor = roundHalfUp(effectiveLineNet * rate, 10000n);
+                }
+              }
+              totalTaxMinor += taxMinor;
+
+              const total = pricesIncludeTax ? effectiveLineNet : effectiveLineNet + taxMinor;
+
+              return {
+                lineId: l.lineId,
                 variantId: l.variantId,
                 quantity: l.quantity,
                 unitPriceMinor: l.unitPriceMinor,
                 grossMinor: l.grossMinor,
-                lineDiscountMinor: l.promotionDiscountMinor,
-                allocatedBillDiscountMinor: l.allocatedBillPromotionMinor,
-                effectiveLineNetMinor: l.effectiveLineNetMinor,
+                lineDiscountMinor: totalLineDisc,
+                allocatedBillDiscountMinor: billPromoDisc + manualBill,
+                effectiveLineNetMinor: effectiveLineNet,
                 taxRateBp: l.taxRateBp,
-                taxMinor: l.taxMinor,
-                totalMinor: l.totalMinor,
+                taxMinor,
+                totalMinor: total,
                 promotionId: l.promotionId,
-                promotionDiscountMinor: l.promotionDiscountMinor,
+                promotionDiscountMinor: promoDisc,
                 promotionLabel: l.promotionLabel,
-              })),
+              };
+            });
+
+            const grossMinor = finalLines.reduce((acc, l) => acc + l.grossMinor, 0n);
+            const lineDiscountMinor = finalLines.reduce((acc, l) => acc + l.lineDiscountMinor, 0n);
+            const billDiscountMinor = clientBillPromoDisc + manualBillDiscountMinor;
+            const totalDiscountMinor = lineDiscountMinor + billDiscountMinor;
+            const netMinor = grossMinor - totalDiscountMinor;
+            const totalMinor = finalLines.reduce((acc, l) => acc + l.totalMinor, 0n);
+
+            const rebuiltCalculated = {
+              grossMinor,
+              totalDiscountMinor,
+              lineDiscountMinor,
+              billDiscountMinor,
+              taxMinor: totalTaxMinor,
+              netMinor,
+              totalMinor,
+              lines: finalLines,
             };
+
+            if (rebuiltCalculated.totalMinor !== BigInt(dto.expectedTotalMinor)) {
+              throw new UnprocessableEntityException({
+                code: "TOTALS_MISMATCH",
+                message: "Totals mismatch: client total differs from server recomputation",
+                details: [{
+                  field: "expectedTotalMinor",
+                  issue: `Expected total ${dto.expectedTotalMinor} does not match computed total ${rebuiltCalculated.totalMinor}`,
+                  serverTotalMinor: Number(rebuiltCalculated.totalMinor),
+                  clientTotalMinor: dto.expectedTotalMinor,
+                }],
+              });
+            }
+
+            calculated = rebuiltCalculated;
+            billPromotionId = dto.billPromotionId || null;
+            billPromotionDiscountMinor = clientBillPromoDisc;
+
+            const serverAppliedPromos: any[] = promoEval?.appliedPromotions || [];
+            const serverAppliedMap = new Map<string, bigint>();
+            for (const sp of serverAppliedPromos) {
+              serverAppliedMap.set(sp.id, sp.discountMinor);
+            }
+
+            const clientPromoDiscMap = new Map<string, bigint>();
+            for (const fl of finalLines) {
+              if (fl.promotionId && fl.promotionDiscountMinor > 0n) {
+                clientPromoDiscMap.set(fl.promotionId, (clientPromoDiscMap.get(fl.promotionId) || 0n) + fl.promotionDiscountMinor);
+              }
+            }
+            if (dto.billPromotionId && clientBillPromoDisc > 0n) {
+              clientPromoDiscMap.set(dto.billPromotionId, (clientPromoDiscMap.get(dto.billPromotionId) || 0n) + clientBillPromoDisc);
+            }
+
+            const differingIds = new Set<string>();
+            for (const [id, cDisc] of clientPromoDiscMap.entries()) {
+              const sDisc = serverAppliedMap.get(id);
+              if (sDisc === undefined || sDisc !== cDisc) {
+                differingIds.add(id);
+              }
+            }
+            for (const id of serverAppliedMap.keys()) {
+              if (!clientPromoDiscMap.has(id)) {
+                differingIds.add(id);
+              }
+            }
+
+            priceFlags.push({
+              flag: "PROMOTION_CHANGED",
+              details: {
+                clientTotalMinor: dto.expectedTotalMinor,
+                clientExpectedTotalMinor: dto.expectedTotalMinor,
+                serverTotalMinor: Number(serverComputedTotalMinor),
+                serverPromotionDiscountMinor: Number(serverPromotionDiscountMinor),
+                differingPromotionIds: Array.from(differingIds),
+              },
+            });
+
+            appliedPromoSummary = Array.from(clientPromoDiscMap.entries()).map(([id, discountMinor]) => ({
+              id,
+              discountMinor,
+            }));
 
             const paid = dto.payments.reduce((sum, p) => sum + BigInt(p.amountMinor), 0n);
             let change = 0n;

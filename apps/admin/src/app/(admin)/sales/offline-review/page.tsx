@@ -262,6 +262,7 @@ export default function OfflineReviewPage() {
             <SelectContent>
               <SelectItem value="all">{t.filterAllFlags}</SelectItem>
               <SelectItem value="PRICE_CHANGED">{t.flagPriceChanged}</SelectItem>
+              <SelectItem value="PROMOTION_CHANGED">PROMOTION_CHANGED</SelectItem>
               <SelectItem value="OUT_OF_STOCK_NEGATIVE">{t.flagNegativeStock}</SelectItem>
               <SelectItem value="CATALOG_STALE">{t.flagCatalogStale}</SelectItem>
             </SelectContent>

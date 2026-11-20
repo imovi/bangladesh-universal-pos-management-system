@@ -2179,7 +2179,10 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - *Cause:*
     1. In `apps/admin/src/app/pos/page.tsx`, `minRedeemPoints` was passed to `PaymentDialog` as `loyaltySettings.minRedeemPoints || 100`. When `minRedeemPoints` was configured as `0`, JavaScript truthiness fallback evaluated `0 || 100` to `100`. As a result, the customer's initial earned balance (e.g. 12-24 pts) was below 100 pts, causing `canUseLoyalty` in `PaymentDialog` to evaluate to `false` and hiding `add-payment-method-points` and `payment-loyalty-banner`.
     2. In `apps/admin/e2e/loyalty-pos-flow.spec.ts`, `addProductToCart` used `await varCell.isVisible({ timeout: 2000 })` inside an `if` condition; in Playwright `isVisible()` does not wait, so it immediately returned false while the variant modal was mounting, skipping variant selection and leaving the cart empty.
-  - *Resolution status:* Fixed in next commit: Changed `minRedeemPoints` in `pos/page.tsx` to nullish coalescing `?? 0`, and updated `addProductToCart` in `loyalty-pos-flow.spec.ts` to `await expect(varCells.first()).toBeVisible({ timeout: 8000 })` matching the reliable pattern in `promotions-pos-flow.spec.ts`.
+  - *Resolution status:* Fixed in commit `35a9808`: Changed `minRedeemPoints` in `pos/page.tsx` to nullish coalescing `?? 0`, and updated `addProductToCart` in `loyalty-pos-flow.spec.ts` to `await expect(varCells.first()).toBeVisible({ timeout: 8000 })` matching the reliable pattern in `promotions-pos-flow.spec.ts`.
+- **Commit 3:** `35a9808` (pushed).
+- **CI Run 3:** `44791372247` (Status: `completed`, Conclusion: `success`).
+  - *Result:* All 17 CI steps passed green (Build, Lint, Unit tests with coverage, Database migrations, Demo seed, Reset & seed E2E database, Run Admin Dashboard E2E tests including Loyalty POS flow, Development database untouched check).
 
 
 

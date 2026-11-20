@@ -2051,7 +2051,10 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
 - **CI Run 3:** `44724837184` (Status: `completed`, Conclusion: `failure`).
   - *Failure analysis:* Step 17 ("Run Admin Dashboard E2E tests") failed. Steps 1-16 passed.
   - *Cause:* In `apps/admin/e2e/promotions-pos-flow.spec.ts`, test 1 failed due to open shifts blocking the POS UI and searching for non-existent product "Panjabi", and test 2 failed because active promotions from previous tests were not cleared, causing the offline sale to match a leftover promotion instead of triggering `PROMOTION_CHANGED`.
-  - *Resolution status:* Fixed in upcoming commit.
+  - *Resolution status:* Fixed in commit `ff17aa8`.
+- **Fix Commit 3:** `ff17aa8` (pushed).
+- **CI Run 4:** `44729980566` (Status: `completed`, Conclusion: `success`).
+  - *Result:* All 17 steps passed green (Build, Lint, Unit tests with coverage, Seed demo dataset, Playwright browsers install, Reset & seed E2E database, Run Admin Dashboard E2E tests including POS promotions flows).
 
 ### Mid-run note: CI truth
 - **Saved Prompt:** `docs/prompts/antigravity-pos-phase1e-ci-truth-note.md`.
@@ -2063,6 +2066,7 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - `node scripts/ci-status.cjs 78295ce`: `44719703495 78295ce completed failure`
   - `node scripts/ci-status.cjs 3d61aa7`: `44721789069 3d61aa7 completed failure`
   - `node scripts/ci-status.cjs 3083d88`: `44724837184 3083d88 completed failure`
+  - `node scripts/ci-status.cjs ff17aa8`: `44729980566 ff17aa8 completed success`
 - **Validation:**
   - Added unit test suite in `scripts/test-verify-report-refs.cjs` covering matching vs mismatched conclusions without network (passes).
   - Extended `scripts/verify-report-refs.cjs` to enforce conclusion match for every 11-digit run ID against the API.

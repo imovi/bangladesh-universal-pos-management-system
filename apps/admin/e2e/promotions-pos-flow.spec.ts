@@ -86,7 +86,7 @@ test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
     }
   });
 
-  test("cashier flow: buy 2 get 1, badge, receipt, and F6 return of most expensive item", async ({ page, request }) => {
+  async function loginAndGoToPos(page: any) {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/login");
     await page.fill("#tenantSlug", "artisan-apparel");
@@ -94,9 +94,12 @@ test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
     await page.fill("#password", "Password123!");
     await page.click('button[type="submit"]');
     await page.waitForURL(/\/(pos|dashboard)/, { timeout: 15000 });
-
     await page.goto("/pos");
     await page.waitForLoadState("networkidle");
+  }
+
+  test("cashier flow: buy 2 get 1, badge, receipt, and F6 return of most expensive item", async ({ page, request }) => {
+    await loginAndGoToPos(page);
 
     // Ensure a shift is open
     await ensureShiftIsOpen(page);
@@ -246,9 +249,7 @@ test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
     expect(promoRes.ok()).toBeTruthy();
     const offlinePromoId = (await promoRes.json()).data.id;
 
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/pos");
-    await page.waitForLoadState("networkidle");
+    await loginAndGoToPos(page);
 
     // Ensure a shift is open
     await ensureShiftIsOpen(page);

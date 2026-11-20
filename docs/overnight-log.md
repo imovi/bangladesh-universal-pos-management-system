@@ -2031,6 +2031,12 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
     6. Online stays strict (non-offline sale with changed promo rejected with 422 `CALCULATION_MISMATCH`).
     7. Return on flagged sale (refunds stored line net amount ৳1,760 for 1 unit).
   - All 7 tests pass locally.
+- **Commit:** `78295ce` (pushed).
+- **CI Run 1:** `44719703495` (Status: `completed`, Conclusion: `failure`).
+  - *Failure analysis:* Step 17 ("Run Admin Dashboard E2E tests") failed. Steps 1-16 (build, lint, unit tests with coverage, database migrations, demo seeding) were all green.
+  - *Cause:* In `apps/admin/e2e/promotions-pos-flow.spec.ts`, the new test scenario (`offline sale with promotion ended before sync`) navigated to `/pos` directly without logging in first. Because Playwright creates an isolated browser context for each test, `/pos` redirected to `/login`, where POS elements were not found and the test timed out.
+  - *Fix:* Extracted `loginAndGoToPos(page)` helper and invoked it in both test cases.
+
 
 
 

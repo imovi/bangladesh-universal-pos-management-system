@@ -57,6 +57,11 @@ model Tenant {
   transferCounters           TransferCounter[]
   barcodeCounters            BarcodeCounter[]
   saleReviewFlags            SaleReviewFlag[]
+  promotions                 Promotion[]
+  coupons                    Coupon[]
+  couponUsages               CouponUsage[]
+  loyaltySetting             LoyaltySetting?
+  loyaltyLedger              LoyaltyLedger[]
 
   @@map("tenants")
 }
@@ -639,12 +644,16 @@ model Customer {
   totalSpentMinor BigInt   @default(0) @map("total_spent_minor")
   totalVisits     Int      @default(0) @map("total_visits")
   creditLimitMinor BigInt  @default(0) @map("credit_limit_minor")
+  loyaltyPointsBalance Int @default(0) @map("loyalty_points_balance")
+  birthDate       DateTime? @map("birth_date")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   sales    Sale[]
   payments CustomerPayment[]
+  couponUsages CouponUsage[]
+  loyaltyLedger LoyaltyLedger[]
 
   @@unique([tenantId, phone])
   @@index([tenantId])
@@ -755,6 +764,12 @@ model Sale {
   isOffline        Boolean   @default(false) @map("is_offline")
   offlineInvoiceNumber String? @map("offline_invoice_number")
   catalogVersion   String?   @map("catalog_version")
+  billPromotionId  String?   @map("bill_promotion_id") @db.Uuid
+  billPromotionDiscountMinor BigInt @default(0) @map("bill_promotion_discount_minor")
+  couponCode       String?   @map("coupon_code")
+  pointsEarned     Int       @default(0) @map("points_earned")
+  pointsRedeemed   Int       @default(0) @map("points_redeemed")
+  pointsRedeemedMinor BigInt @default(0) @map("points_redeemed_minor")
   createdAt        DateTime  @default(now()) @map("created_at")
 
   tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -769,6 +784,9 @@ model Sale {
   exchangeReturns SaleReturn[] @relation("ExchangeSaleReturn")
   customerPaymentAllocations CustomerPaymentAllocation[]
   reviewFlags SaleReviewFlag[]
+  billPromotion Promotion? @relation("BillPromotionSales", fields: [billPromotionId], references: [id], onDelete: SetNull)
+  couponUsages  CouponUsage[]
+  loyaltyLedger LoyaltyLedger[]
 
   @@unique([tenantId, invoiceNumber])
   @@unique([tenantId, offlineInvoiceNumber])
@@ -797,11 +815,15 @@ model SaleItem {
   taxRateBp      Int            @default(0) @map("tax_rate_bp")
   taxMinor       BigInt         @default(0) @map("tax_minor")
   totalMinor     BigInt         @map("total_minor")
+  promotionId    String?        @map("promotion_id") @db.Uuid
+  promotionDiscountMinor BigInt @default(0) @map("promotion_discount_minor")
+  promotionLabel String?        @map("promotion_label")
   createdAt      DateTime       @default(now()) @map("created_at")
 
   tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   sale    Sale           @relation(fields: [saleId], references: [id], onDelete: Cascade)
   variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  promotion Promotion?   @relation(fields: [promotionId], references: [id], onDelete: SetNull)
   returnItems SaleReturnItem[]
 
   @@index([tenantId])
@@ -888,6 +910,7 @@ model SaleReturn {
   overrideUser  User?            @relation("ReturnOverrideUser", fields: [overrideByUserId], references: [id], onDelete: SetNull)
   exchangeSale  Sale?            @relation("ExchangeSaleReturn", fields: [exchangeSaleId], references: [id], onDelete: SetNull)
   items         SaleReturnItem[]
+  loyaltyLedger LoyaltyLedger[]
 
   @@unique([tenantId, returnNumber])
   @@index([tenantId])
@@ -1108,6 +1131,127 @@ model SaleReviewFlag {
   @@index([status])
   @@map("sale_review_flags")
 }
+
+model Promotion {
+  id                 String     @id @default(uuid(7)) @db.Uuid
+  tenantId           String     @map("tenant_id") @db.Uuid
+  name               String
+  description        String?
+  type               String     // PERCENT_OFF, AMOUNT_OFF, FIXED_PRICE, BUY_X_GET_Y, BUNDLE_PRICE, BILL_THRESHOLD
+  status             String     @default("active") // draft, active, paused, ended
+  priority           Int        @default(0)
+  stackableWithBill  Boolean    @default(true) @map("stackable_with_bill")
+  config             Json       @default("{}")
+  targets            Json       @default("{}")
+  conditions         Json       @default("{}")
+  startDate          DateTime?  @map("start_date")
+  endDate            DateTime?  @map("end_date")
+  totalUses          Int        @default(0) @map("total_uses")
+  totalDiscountMinor BigInt     @default(0) @map("total_discount_minor")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
+
+  tenant             Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  coupons            Coupon[]
+  saleItems          SaleItem[]
+  billSales          Sale[]     @relation("BillPromotionSales")
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, type])
+  @@index([startDate, endDate])
+  @@map("promotions")
+}
+
+model Coupon {
+  id                    String        @id @default(uuid(7)) @db.Uuid
+  tenantId              String        @map("tenant_id") @db.Uuid
+  promotionId           String?       @map("promotion_id") @db.Uuid
+  code                  String
+  usageLimitTotal       Int?          @map("usage_limit_total")
+  usageLimitPerCustomer Int?          @map("usage_limit_per_customer")
+  timesUsed             Int           @default(0) @map("times_used")
+  isActive              Boolean       @default(true) @map("is_active")
+  expiresAt             DateTime?     @map("expires_at")
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
+
+  tenant                Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  promotion             Promotion?    @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  usages                CouponUsage[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([promotionId])
+  @@index([code])
+  @@map("coupons")
+}
+
+model CouponUsage {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  couponId   String    @map("coupon_id") @db.Uuid
+  saleId     String    @map("sale_id") @db.Uuid
+  customerId String?   @map("customer_id") @db.Uuid
+  usedAt     DateTime  @default(now()) @map("used_at")
+
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  coupon     Coupon    @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  sale       Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([couponId])
+  @@index([saleId])
+  @@index([customerId])
+  @@map("coupon_usages")
+}
+
+model LoyaltySetting {
+  id                  String   @id @default(uuid(7)) @db.Uuid
+  tenantId            String   @unique @map("tenant_id") @db.Uuid
+  isEnabled           Boolean  @default(false) @map("is_enabled")
+  earnRateMinor       BigInt   @default(10000) @map("earn_rate_minor")
+  pointValueMinor     BigInt   @default(100) @map("point_value_minor")
+  minRedeemPoints     Int      @default(100) @map("min_redeem_points")
+  maxBillSharePercent Int      @default(50) @map("max_bill_share_percent")
+  expiryMonths        Int      @default(12) @map("expiry_months")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("loyalty_settings")
+}
+
+model LoyaltyLedger {
+  id         String      @id @default(uuid(7)) @db.Uuid
+  tenantId   String      @map("tenant_id") @db.Uuid
+  customerId String      @map("customer_id") @db.Uuid
+  saleId     String?     @map("sale_id") @db.Uuid
+  returnId   String?     @map("return_id") @db.Uuid
+  type       String      // EARN, REDEEM, REVERSE_EARN, REFUND_REDEEM, EXPIRE, ADJUST
+  points     Int         // signed
+  reason     String?
+  expiresAt  DateTime?   @map("expires_at")
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  sale       Sale?       @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  return     SaleReturn? @relation(fields: [returnId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([saleId])
+  @@index([returnId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([expiresAt])
+  @@map("loyalty_ledger")
+}
+
 
 
 

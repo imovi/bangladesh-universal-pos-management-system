@@ -7,3 +7,4 @@ export * from "./phone.js";
 export * from "./timezone.js";
 export * from "./barcodes.js";
 export * from "./sizes.js";
+export * from "./promotions.js";

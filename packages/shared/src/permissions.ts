@@ -64,6 +64,15 @@ export const PERMISSIONS = {
   REPORT_SALES: "report.sales",
   REPORT_FINANCIAL: "report.financial",
   REPORT_PROFIT: "report.profit",
+
+  // Promotions
+  PROMOTION_VIEW: "promotion.view",
+  PROMOTION_MANAGE: "promotion.manage",
+  PROMOTION_OVERRIDE: "promotion.override",
+
+  // Loyalty
+  LOYALTY_MANAGE: "loyalty.manage",
+  LOYALTY_ADJUST: "loyalty.adjust",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -119,6 +128,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     PERMISSIONS.PURCHASE_RECEIVE,
     PERMISSIONS.REPORT_SALES,
     PERMISSIONS.REPORT_PROFIT,
+    PERMISSIONS.PROMOTION_VIEW,
+    PERMISSIONS.PROMOTION_MANAGE,
+    PERMISSIONS.PROMOTION_OVERRIDE,
+    PERMISSIONS.LOYALTY_ADJUST,
   ],
   [SYSTEM_ROLES.CASHIER]: [
     PERMISSIONS.BRANCH_READ,

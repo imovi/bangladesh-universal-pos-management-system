@@ -1914,6 +1914,54 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
 - **Local Verification:**
   - `apps/api/test/db-protection-guard.spec.ts`: all 5 tests passed (13.2s).
   - `apps/api/test/seed-demo-and-permissions.spec.ts`: all 3 tests passed.
+- **Commit:** `1648168` (pushed).
+- **CI Run:** `44694593391` (Conclusion: `success` / Green).
+
+### Milestone E1: Schema, Pure Shared Engine, and Math Foundations
+- **Design Documentation:**
+  - Created `docs/promotions-and-loyalty.md` with complete architecture:
+    - Pure shared evaluation function `evaluatePromotions` with zero I/O.
+    - 6 promotion types (`PERCENT_OFF`, `AMOUNT_OFF`, `FIXED_PRICE`, `BUY_X_GET_Y`, `BUNDLE_PRICE`, `BILL_THRESHOLD`).
+    - Stacking hierarchy: line promotions first, bill promotion second, manual discounts last.
+    - Largest Remainder Method (Hamilton-Hare) for proportional discount distribution across lines for fair returns.
+    - Concurrency and coupon locking via `SELECT ... FOR UPDATE`.
+    - Append-only loyalty ledger table (`loyalty_ledger`) with immutable transaction history.
+- **Prisma Schema & Database Migration:**
+  - Added models in `apps/api/prisma/schema.prisma`:
+    - `Promotion`, `Coupon`, `CouponUsage`, `LoyaltySetting`, `LoyaltyLedger`.
+    - Added columns to `Sale`: `bill_promotion_id`, `bill_promotion_discount_minor`, `coupon_code`, `points_earned`, `points_redeemed`, `points_redeemed_minor`.
+    - Added columns to `SaleItem`: `promotion_id`, `promotion_discount_minor`, `promotion_label`.
+    - Added columns to `Customer`: `loyalty_points_balance`, `birth_date`.
+  - Created migration `20261120040000_milestone_e1_promotions_and_loyalty`:
+    - Enabled and forced Row Level Security on all new tables.
+    - Attached tenant isolation policy for `pos_app`.
+    - Granted `SELECT, INSERT, UPDATE, DELETE` to `pos_app` for mutable tables.
+    - Enforced append-only security for `loyalty_ledger`: granted strictly `SELECT, INSERT` to `pos_app` (NO UPDATE, NO DELETE).
+  - Deployed migration to both `universal_pos` and `universal_pos_test` databases.
+- **Permissions:**
+  - Added 5 new permissions to `packages/shared/src/permissions.ts`: `promotion.view`, `promotion.manage`, `promotion.override`, `loyalty.manage`, `loyalty.adjust`.
+- **Pure Calculation Engine (`packages/shared/src/promotions.ts`):**
+  - Implemented `evaluatePromotions`, `distributeProportional`, `isPromotionTimeActive` using standard `Intl.DateTimeFormat` with `Asia/Dhaka` timezone.
+  - Implemented loyalty math functions: `earnPoints`, `maxRedeemablePoints`, `reversePoints`.
+- **Unit & Property Tests (`packages/shared/test/promotions.spec.ts`):**
+  - 27 comprehensive tests covering:
+    - All 1.3 worked examples to the poisha (20% off Panjabi, Buy 2 get 1 free with fair return spread, Bill threshold 10% over ৳5,000 max ৳1,000).
+    - Edge cases for each promotion type (line caps, fixed price above current price, BUY_X_GET_Y with 2, 3, 5, 6 units, bundles with leftovers).
+    - Competing promotions: highest discount combination wins, priority tie-break.
+    - Time windows in `Asia/Dhaka` timezone around midnight, days of week, inclusive start / exclusive end.
+    - VAT computation on effective line nets.
+    - 1,000 seeded random carts property test (line total >= 0, discount <= gross, sum of line nets = total net, cart line order invariance).
+    - Coupon validation with all invalid reasons (`INVALID_CODE`, `NOT_STARTED`, `EXPIRED`, `WRONG_BRANCH`, `USAGE_LIMIT_EXCEEDED`, `CUSTOMER_LIMIT_EXCEEDED`, `THRESHOLD_NOT_MET`) and valid amount/percent with cap.
+    - Bill threshold hint within 20% of qualification ("আর ৳X কিনলে অফার পাবেন").
+    - Stacking with `stackableWithBill = false` and cashier override permissions (`promotion.override`).
+    - Loyalty math edge cases.
+  - **Coverage of `promotions.ts`:** **100% Statements**, **100% Lines**, **100% Functions** (exceeding the >=95% requirement).
+- **Workspace Verification:**
+  - All 27 shared tests passed.
+  - All 56 admin unit tests passed.
+  - All 314 API integration tests passed.
+  - Production build across `@universal-pos/shared`, `@universal-pos/admin`, `@universal-pos/api` succeeded with 0 errors.
+
 
 
 

@@ -37,7 +37,7 @@ export class PosCatalogService {
         promoWhere.updatedAt = { gte: sinceDate };
       }
 
-      const [products, variants, categories, taxClasses, promotions] = await Promise.all([
+      const [products, variants, categories, taxClasses, promotions, coupons] = await Promise.all([
         tx.product.findMany({
           where: productWhere,
           select: {
@@ -86,7 +86,18 @@ export class PosCatalogService {
         }),
         tx.promotion.findMany({
           where: promoWhere,
+          include: { coupons: true },
           orderBy: { priority: "desc" },
+        }),
+        tx.coupon.findMany({
+          where: { tenantId, isActive: true },
+          select: {
+            code: true,
+            usageLimitTotal: true,
+            usageLimitPerCustomer: true,
+            promotionId: true,
+            updatedAt: true,
+          },
         }),
       ]);
 
@@ -99,6 +110,9 @@ export class PosCatalogService {
       }
       for (const pr of promotions) {
         maxUpdated = Math.max(maxUpdated, pr.updatedAt.getTime());
+      }
+      for (const c of coupons) {
+        maxUpdated = Math.max(maxUpdated, c.updatedAt.getTime());
       }
 
       const catalogVersion = maxUpdated > 0 ? `v-${maxUpdated}` : `v-${Date.now()}`;
@@ -132,21 +146,33 @@ export class PosCatalogService {
         lastOfflineSeq,
         categories,
         taxClasses,
-        promotions: promotions.map((pr) => ({
-          id: pr.id,
-          name: pr.name,
-          description: pr.description,
-          type: pr.type,
-          status: pr.status,
-          priority: pr.priority,
-          stackableWithBill: pr.stackableWithBill,
-          startDate: pr.startDate ? pr.startDate.toISOString() : null,
-          endDate: pr.endDate ? pr.endDate.toISOString() : null,
-          config: pr.config,
-          targets: pr.targets,
-          conditions: pr.conditions,
-          updatedAt: pr.updatedAt.toISOString(),
-        })),
+        promotions: promotions.map((pr) => {
+          const promoCoupons = pr.coupons || [];
+          const unlimitedCodes = promoCoupons
+            .filter((c: any) => c.isActive && c.usageLimitTotal === null && c.usageLimitPerCustomer === null)
+            .map((c: any) => c.code.toUpperCase());
+          const isCouponRequired = Boolean((pr.conditions as any)?.couponRequired || promoCoupons.length > 0);
+          return {
+            id: pr.id,
+            name: pr.name,
+            description: pr.description,
+            type: pr.type,
+            status: pr.status,
+            priority: pr.priority,
+            stackableWithBill: pr.stackableWithBill,
+            startDate: pr.startDate ? pr.startDate.toISOString() : null,
+            endDate: pr.endDate ? pr.endDate.toISOString() : null,
+            config: pr.config,
+            targets: pr.targets,
+            conditions: pr.conditions,
+            couponRequired: isCouponRequired,
+            couponCodes: unlimitedCodes.length > 0 ? unlimitedCodes : undefined,
+            updatedAt: pr.updatedAt.toISOString(),
+          };
+        }),
+        limitedCouponCodes: coupons
+          .filter((c) => c.usageLimitTotal !== null || c.usageLimitPerCustomer !== null)
+          .map((c) => c.code.toUpperCase()),
         products: products.map((p) => ({
           ...p,
           updatedAt: p.updatedAt.toISOString(),

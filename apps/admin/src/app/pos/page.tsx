@@ -298,6 +298,46 @@ export default function PosPage() {
   const [activePromotions, setActivePromotions] = useState<any[]>([]);
   const [couponCode, setCouponCode] = useState<string>("");
 
+  const mappedPromotions = useMemo(() => {
+    return activePromotions.map((p) => {
+      const promoCoupons = p.coupons || [];
+      const validCodes = promoCoupons
+        .filter((c: any) => {
+          if (!c.isActive) return false;
+          if (!isEffectivelyOnline) {
+            return c.usageLimitTotal === null && c.usageLimitPerCustomer === null;
+          }
+          return true;
+        })
+        .map((c: any) => c.code.toUpperCase());
+
+      const isCouponRequired = Boolean((p.conditions as any)?.couponRequired || promoCoupons.length > 0);
+      const explicitCodes = (p.conditions as any)?.couponCodes || [];
+      const allCodes = Array.from(new Set([...validCodes, ...explicitCodes.map((c: string) => c.toUpperCase())]));
+      return {
+        ...p,
+        couponRequired: isCouponRequired,
+        couponCodes: allCodes.length > 0 ? allCodes : undefined,
+      };
+    });
+  }, [activePromotions, isEffectivelyOnline]);
+
+  const isOfflineCouponLimited = useMemo(() => {
+    if (isEffectivelyOnline || !couponCode.trim()) return false;
+    const upper = couponCode.trim().toUpperCase();
+    for (const p of activePromotions) {
+      const coupons = p.coupons || [];
+      for (const c of coupons) {
+        if (c.code.toUpperCase() === upper) {
+          if (c.usageLimitTotal !== null || c.usageLimitPerCustomer !== null) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }, [isEffectivelyOnline, couponCode, activePromotions]);
+
   // Submitting states
   const [isCompletingSale, setIsCompletingSale] = useState(false);
   const [isShiftSubmitting, setIsShiftSubmitting] = useState(false);
@@ -311,7 +351,7 @@ export default function PosPage() {
   const cartTotals = computeCartTotals(cartItems, {
     pricesIncludeTax: posConfig.pricesIncludeTax,
     billDiscount,
-    promotions: activePromotions,
+    promotions: mappedPromotions,
     couponCode: couponCode.trim() || undefined,
     customerId: selectedCustomer?.id,
     branchId: currentBranch?.id,
@@ -2608,14 +2648,20 @@ export default function PosPage() {
                   className="h-7 text-xs font-mono uppercase"
                 />
               </div>
-              {cartTotals.couponState && couponCode.trim() && (
+              {isOfflineCouponLimited && couponCode.trim() ? (
+                <div className="text-[11px] pt-0.5">
+                  <span className="text-destructive font-medium text-[11px]" data-testid="coupon-offline-disabled-msg">
+                    {strings.promotions.coupon.limitReached || "কুপনটিতে ব্যবহারের লিমিট থাকায় এটি অফলাইনে ব্যবহার করা যাবে না"}
+                  </span>
+                </div>
+              ) : cartTotals.couponState && couponCode.trim() ? (
                 <div className="text-[11px] pt-0.5">
                   {cartTotals.couponState.valid ? (
-                    <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 text-[10px]">
+                    <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 text-[10px]" data-testid="coupon-saving-badge">
                       {cartTotals.couponState.promotionName || cartTotals.couponState.code} ({strings.promotions.pos.badgeSaving} ৳{formatMoney(cartTotals.couponState.savingMinor || 0)})
                     </Badge>
                   ) : (
-                    <span className="text-destructive font-medium text-[11px]">
+                    <span className="text-destructive font-medium text-[11px]" data-testid="coupon-error-msg">
                       {cartTotals.couponState.invalidReason === "EXPIRED"
                         ? strings.promotions.coupon.expired
                         : cartTotals.couponState.invalidReason === "NOT_STARTED"
@@ -2630,7 +2676,7 @@ export default function PosPage() {
                     </span>
                   )}
                 </div>
-              )}
+              ) : null}
             </div>
 
             {/* Calculation Figures */}

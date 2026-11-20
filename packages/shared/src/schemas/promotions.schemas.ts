@@ -89,3 +89,22 @@ export const PreviewPromotionSchema = z.object({
 });
 
 export type PreviewPromotionInput = z.infer<typeof PreviewPromotionSchema>;
+
+export const CreateCouponSchema = z.object({
+  code: z.string().min(3).max(50).transform((c) => c.trim().toUpperCase()),
+  usageLimitTotal: z.number().int().min(1).optional().nullable(),
+  usageLimitPerCustomer: z.number().int().min(1).optional().nullable(),
+  expiresAt: z.string().or(z.date()).optional().nullable(),
+  isActive: z.boolean().default(true),
+});
+export type CreateCouponInput = z.infer<typeof CreateCouponSchema>;
+
+export const GenerateCouponsSchema = z.object({
+  count: z.number().int().min(1).max(1000).default(1),
+  prefix: z.string().max(10).optional().default(""),
+  usageLimitTotal: z.number().int().min(1).optional().nullable(),
+  usageLimitPerCustomer: z.number().int().min(1).optional().nullable(),
+  expiresAt: z.string().or(z.date()).optional().nullable(),
+});
+export type GenerateCouponsInput = z.infer<typeof GenerateCouponsSchema>;
+

@@ -356,6 +356,27 @@ export class ReturnsService {
         });
       }
 
+      // 13b. Coupon usage return on full sale return
+      // "A return of the whole sale gives the use back. A partial return does not."
+      const allSaleItems = await tx.saleItem.findMany({
+        where: { saleId: sale.id },
+        include: { returnItems: true },
+      });
+      const isFullReturn = allSaleItems.every((si) => {
+        const totalReturned = si.returnItems.reduce((acc, ri) => acc + Number(ri.quantity), 0);
+        return totalReturned >= Number(si.quantity);
+      });
+      if (isFullReturn) {
+        const usages = await tx.couponUsage.findMany({ where: { saleId: sale.id } });
+        for (const usage of usages) {
+          await tx.coupon.update({
+            where: { id: usage.couponId },
+            data: { timesUsed: { decrement: 1 } },
+          });
+          await tx.couponUsage.delete({ where: { id: usage.id } });
+        }
+      }
+
       // 14. Audit Log
       await this.auditService.log(
         {

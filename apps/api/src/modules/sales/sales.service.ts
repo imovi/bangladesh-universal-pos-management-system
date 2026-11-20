@@ -487,8 +487,119 @@ export class SalesService {
         // Check if tenant has active promotions or couponCode provided
         const activePromos = await tx.promotion.findMany({
           where: { tenantId, status: "active" },
+          include: { coupons: true },
           orderBy: { priority: "desc" },
         });
+
+        let lockedCoupon: any = null;
+        if (dto.couponCode) {
+          const normalizedCode = dto.couponCode.trim().toUpperCase();
+          const rows = await tx.$queryRaw<Array<{
+            id: string;
+            tenant_id: string;
+            promotion_id: string | null;
+            code: string;
+            usage_limit_total: number | null;
+            usage_limit_per_customer: number | null;
+            times_used: number;
+            is_active: boolean;
+            expires_at: Date | null;
+          }>>`
+            SELECT id, tenant_id, promotion_id, code, usage_limit_total, usage_limit_per_customer, times_used, is_active, expires_at
+            FROM coupons
+            WHERE tenant_id = ${tenantId}::uuid AND UPPER(code) = ${normalizedCode}
+            FOR UPDATE;
+          `;
+          lockedCoupon = rows[0] || null;
+
+          if (!lockedCoupon) {
+            if (!dto.isOffline) {
+              throw new UnprocessableEntityException({
+                code: "COUPON_INVALID",
+                message: "Coupon code is invalid",
+              });
+            } else {
+              priceFlags.push({
+                flag: "COUPON_LIMIT_EXCEEDED",
+                details: { couponCode: normalizedCode, reason: "INVALID_CODE" },
+              });
+            }
+          } else {
+            if (!lockedCoupon.is_active) {
+              if (!dto.isOffline) {
+                throw new UnprocessableEntityException({
+                  code: "COUPON_INACTIVE",
+                  message: "Coupon is not active",
+                });
+              } else {
+                priceFlags.push({
+                  flag: "COUPON_LIMIT_EXCEEDED",
+                  details: { couponCode: normalizedCode, reason: "INACTIVE" },
+                });
+              }
+            }
+
+            if (
+              lockedCoupon.expires_at &&
+              new Date(lockedCoupon.expires_at) < (dto.isOffline && dto.occurredAt ? new Date(dto.occurredAt) : new Date())
+            ) {
+              if (!dto.isOffline) {
+                throw new UnprocessableEntityException({
+                  code: "COUPON_EXPIRED",
+                  message: "Coupon has expired",
+                });
+              } else {
+                priceFlags.push({
+                  flag: "COUPON_LIMIT_EXCEEDED",
+                  details: { couponCode: normalizedCode, reason: "EXPIRED" },
+                });
+              }
+            }
+
+            if (lockedCoupon.usage_limit_total !== null && lockedCoupon.times_used >= lockedCoupon.usage_limit_total) {
+              if (!dto.isOffline) {
+                throw new UnprocessableEntityException({
+                  code: "COUPON_LIMIT_REACHED",
+                  message: "Coupon usage limit reached",
+                });
+              } else {
+                priceFlags.push({
+                  flag: "COUPON_LIMIT_EXCEEDED",
+                  details: {
+                    couponCode: normalizedCode,
+                    reason: "USAGE_LIMIT_REACHED",
+                    timesUsed: lockedCoupon.times_used,
+                    usageLimitTotal: lockedCoupon.usage_limit_total,
+                  },
+                });
+              }
+            }
+
+            if (lockedCoupon.usage_limit_per_customer !== null && dto.customerId) {
+              const custUses = await tx.couponUsage.count({
+                where: { couponId: lockedCoupon.id, customerId: dto.customerId },
+              });
+              if (custUses >= lockedCoupon.usage_limit_per_customer) {
+                if (!dto.isOffline) {
+                  throw new UnprocessableEntityException({
+                    code: "COUPON_LIMIT_REACHED",
+                    message: "Coupon per-customer usage limit reached",
+                  });
+                } else {
+                  priceFlags.push({
+                    flag: "COUPON_LIMIT_EXCEEDED",
+                    details: {
+                      couponCode: normalizedCode,
+                      reason: "CUSTOMER_LIMIT_REACHED",
+                      timesUsed: custUses,
+                      usageLimitPerCustomer: lockedCoupon.usage_limit_per_customer,
+                    },
+                  });
+                }
+              }
+            }
+          }
+        }
 
         const shouldEvaluatePromotions = activePromos.length > 0 || Boolean(dto.couponCode) || (dto.isOffline && hasClientPromotions);
 
@@ -498,27 +609,34 @@ export class SalesService {
           let serverPromotionDiscountMinor: bigint = 0n;
 
           if (activePromos.length > 0 || dto.couponCode) {
-            const promoRules: PromotionRule[] = activePromos.map((p) => ({
-              id: p.id,
-              name: p.name,
-              description: p.description || undefined,
-              type: p.type as any,
-              status: p.status as any,
-              priority: p.priority,
-              stackableWithBill: p.stackableWithBill,
-              membersOnly: Boolean((p.conditions as any)?.membersOnly),
-              branchIds: (p.conditions as any)?.branchIds,
-              minQuantity: (p.conditions as any)?.minQuantity,
-              startAt: p.startDate ? p.startDate : new Date("2020-01-01"),
-              endAt: p.endDate ? p.endDate : new Date("2030-01-01"),
-              daysOfWeek: (p.conditions as any)?.daysOfWeek,
-              hours: (p.conditions as any)?.hours,
-              targetType: ((p.targets as any)?.targetType || "ALL") as any,
-              targetIds: (p.targets as any)?.targetIds,
-              exclusionIds: (p.targets as any)?.exclusionIds,
-              config: (p.config || {}) as any,
-              createdAt: p.createdAt,
-            }));
+            const promoRules: PromotionRule[] = activePromos.map((p) => {
+              const promoCoupons = (p as any).coupons || [];
+              const couponCodes = promoCoupons.map((c: any) => c.code.toUpperCase());
+              const isCouponRequired = Boolean((p.conditions as any)?.couponRequired || promoCoupons.length > 0);
+              return {
+                id: p.id,
+                name: p.name,
+                description: p.description || undefined,
+                type: p.type as any,
+                status: p.status as any,
+                priority: p.priority,
+                stackableWithBill: p.stackableWithBill,
+                membersOnly: Boolean((p.conditions as any)?.membersOnly),
+                branchIds: (p.conditions as any)?.branchIds,
+                minQuantity: (p.conditions as any)?.minQuantity,
+                startAt: p.startDate ? p.startDate : new Date("2020-01-01"),
+                endAt: p.endDate ? p.endDate : new Date("2030-01-01"),
+                daysOfWeek: (p.conditions as any)?.daysOfWeek,
+                hours: (p.conditions as any)?.hours,
+                targetType: ((p.targets as any)?.targetType || "ALL") as any,
+                targetIds: (p.targets as any)?.targetIds,
+                exclusionIds: (p.targets as any)?.exclusionIds,
+                couponRequired: isCouponRequired,
+                couponCodes: couponCodes.length > 0 ? couponCodes : undefined,
+                config: (p.config || {}) as any,
+                createdAt: p.createdAt,
+              };
+            });
 
             const promoOccurredAt = dto.isOffline && dto.occurredAt ? new Date(dto.occurredAt) : new Date();
             const promoLineInputs: PromotionEvaluationLineItem[] = lineInputs.map((l: any, idx: number) => {
@@ -978,6 +1096,23 @@ export class SalesService {
               },
             });
           }
+        }
+
+        if (lockedCoupon) {
+          await tx.$executeRaw`
+            UPDATE coupons
+            SET times_used = times_used + 1, updated_at = NOW()
+            WHERE id = ${lockedCoupon.id}::uuid;
+          `;
+          await tx.couponUsage.create({
+            data: {
+              id: uuidv7(),
+              tenantId,
+              couponId: lockedCoupon.id,
+              saleId,
+              customerId: dto.customerId || null,
+            },
+          });
         }
 
         const { negativeStockItems } = await this.finalizeSaleOperations(tx, tenantId, {

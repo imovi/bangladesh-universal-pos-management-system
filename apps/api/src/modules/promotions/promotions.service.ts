@@ -10,6 +10,8 @@ import {
   UpdatePromotionInput,
   PromotionQueryInput,
   PreviewPromotionInput,
+  CreateCouponInput,
+  GenerateCouponsInput,
   evaluatePromotions,
   PromotionRule,
 } from "@universal-pos/shared";
@@ -43,6 +45,7 @@ export class PromotionsService {
         tx.promotion.count({ where }),
         tx.promotion.findMany({
           where,
+          include: { coupons: true },
           orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
           skip,
           take: limit,
@@ -65,6 +68,7 @@ export class PromotionsService {
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const promo = await tx.promotion.findFirst({
         where: { id, tenantId },
+        include: { coupons: true },
       });
       if (!promo) {
         throw new NotFoundException({
@@ -279,6 +283,167 @@ export class PromotionsService {
       branchId: input.branchId,
       customerId: input.customerId,
       evaluationTime: input.evaluationTime,
+    });
+  }
+
+  async createCoupon(
+    tenantId: string,
+    userId: string,
+    promotionId: string,
+    input: CreateCouponInput,
+    ip?: string,
+  ) {
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const promo = await tx.promotion.findFirst({
+        where: { id: promotionId, tenantId },
+      });
+      if (!promo) {
+        throw new NotFoundException({
+          code: "PROMOTION_NOT_FOUND",
+          message: "Promotion not found",
+        });
+      }
+
+      const existing = await tx.coupon.findUnique({
+        where: {
+          tenantId_code: {
+            tenantId,
+            code: input.code,
+          },
+        },
+      });
+      if (existing) {
+        throw new BadRequestException({
+          code: "COUPON_CODE_EXISTS",
+          message: "Coupon code already exists",
+        });
+      }
+
+      const coupon = await tx.coupon.create({
+        data: {
+          tenantId,
+          promotionId,
+          code: input.code,
+          usageLimitTotal: input.usageLimitTotal ?? null,
+          usageLimitPerCustomer: input.usageLimitPerCustomer ?? null,
+          expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+          isActive: input.isActive ?? true,
+        },
+      });
+
+      await this.auditService.log(
+        {
+          tenantId,
+          actorUserId: userId,
+          action: "COUPON_CREATED",
+          entityType: "coupon",
+          entityId: coupon.id,
+          after: coupon as any,
+          ip,
+        },
+        tx,
+      );
+
+      return coupon;
+    });
+  }
+
+  async generateCoupons(
+    tenantId: string,
+    userId: string,
+    promotionId: string,
+    input: GenerateCouponsInput,
+    ip?: string,
+  ) {
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const promo = await tx.promotion.findFirst({
+        where: { id: promotionId, tenantId },
+      });
+      if (!promo) {
+        throw new NotFoundException({
+          code: "PROMOTION_NOT_FOUND",
+          message: "Promotion not found",
+        });
+      }
+
+      const count = input.count || 1;
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      const createdCoupons: any[] = [];
+      const prefix = input.prefix ? `${input.prefix.toUpperCase()}-` : "";
+
+      for (let i = 0; i < count; i++) {
+        let code = "";
+        for (let j = 0; j < 8; j++) {
+          code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        const fullCode = `${prefix}${code}`;
+
+        try {
+          const coupon = await tx.coupon.create({
+            data: {
+              tenantId,
+              promotionId,
+              code: fullCode,
+              usageLimitTotal: input.usageLimitTotal ?? 1,
+              usageLimitPerCustomer: input.usageLimitPerCustomer ?? 1,
+              expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+              isActive: true,
+            },
+          });
+          createdCoupons.push(coupon);
+        } catch {
+          // Retry on rare collision
+          i--;
+        }
+      }
+
+      await this.auditService.log(
+        {
+          tenantId,
+          actorUserId: userId,
+          action: "COUPONS_BATCH_GENERATED",
+          entityType: "promotion",
+          entityId: promotionId,
+          after: { count: createdCoupons.length, prefix: input.prefix },
+          ip,
+        },
+        tx,
+      );
+
+      return createdCoupons;
+    });
+  }
+
+  async listCoupons(tenantId: string, promotionId: string) {
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      return tx.coupon.findMany({
+        where: { tenantId, promotionId },
+        orderBy: { createdAt: "desc" },
+      });
+    });
+  }
+
+  async exportCouponsCsv(tenantId: string, promotionId: string) {
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const coupons = await tx.coupon.findMany({
+        where: { tenantId, promotionId },
+        orderBy: { createdAt: "asc" },
+      });
+
+      const header = "Code,Usage Limit Total,Times Used,Limit Per Customer,Expires At,Active,Created At\n";
+      const rows = coupons.map((c) =>
+        [
+          c.code,
+          c.usageLimitTotal ?? "Unlimited",
+          c.timesUsed,
+          c.usageLimitPerCustomer ?? "Unlimited",
+          c.expiresAt ? c.expiresAt.toISOString() : "",
+          c.isActive ? "Yes" : "No",
+          c.createdAt.toISOString(),
+        ].join(","),
+      );
+
+      return header + rows.join("\n");
     });
   }
 }

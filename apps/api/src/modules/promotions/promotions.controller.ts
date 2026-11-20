@@ -8,12 +8,14 @@ import {
   Param,
   Query,
   Req,
+  Res,
   Ip,
   UseGuards,
   HttpCode,
   HttpStatus,
   BadRequestException,
 } from "@nestjs/common";
+import type { Response } from "express";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard.js";
 import { PermissionsGuard } from "../../common/guards/permissions.guard.js";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator.js";
@@ -23,6 +25,8 @@ import {
   UpdatePromotionSchema,
   PromotionQuerySchema,
   PreviewPromotionSchema,
+  CreateCouponSchema,
+  GenerateCouponsSchema,
 } from "@universal-pos/shared";
 import { PromotionsService } from "./promotions.service.js";
 
@@ -151,5 +155,84 @@ export class PromotionsController {
   async delete(@Req() req: any, @Param("id") id: string, @Ip() ip: string) {
     const userId = req.user.sub || req.user.userId || req.user.id;
     return this.promotionsService.delete(req.user.tenantId, userId, id, ip);
+  }
+
+  @Post(":id/coupons")
+  @RequirePermission(PERMISSIONS.PROMOTION_MANAGE)
+  @HttpCode(HttpStatus.CREATED)
+  async createCoupon(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() body: any,
+    @Ip() ip: string,
+  ) {
+    const parse = CreateCouponSchema.safeParse(body);
+    if (!parse.success) {
+      throw new BadRequestException({
+        code: "VALIDATION_ERROR",
+        message: "Invalid coupon input",
+        errors: parse.error.flatten(),
+      });
+    }
+    const userId = req.user.sub || req.user.userId || req.user.id;
+    return this.promotionsService.createCoupon(
+      req.user.tenantId,
+      userId,
+      id,
+      parse.data,
+      ip,
+    );
+  }
+
+  @Post(":id/coupons/generate")
+  @RequirePermission(PERMISSIONS.PROMOTION_MANAGE)
+  @HttpCode(HttpStatus.CREATED)
+  async generateCoupons(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Body() body: any,
+    @Ip() ip: string,
+  ) {
+    const parse = GenerateCouponsSchema.safeParse(body);
+    if (!parse.success) {
+      throw new BadRequestException({
+        code: "VALIDATION_ERROR",
+        message: "Invalid generate coupons input",
+        errors: parse.error.flatten(),
+      });
+    }
+    const userId = req.user.sub || req.user.userId || req.user.id;
+    return this.promotionsService.generateCoupons(
+      req.user.tenantId,
+      userId,
+      id,
+      parse.data,
+      ip,
+    );
+  }
+
+  @Get(":id/coupons")
+  @RequirePermission(PERMISSIONS.PROMOTION_VIEW)
+  async listCoupons(@Req() req: any, @Param("id") id: string) {
+    return this.promotionsService.listCoupons(req.user.tenantId, id);
+  }
+
+  @Get(":id/coupons/export")
+  @RequirePermission(PERMISSIONS.PROMOTION_VIEW)
+  async exportCoupons(
+    @Req() req: any,
+    @Param("id") id: string,
+    @Res() res: Response,
+  ) {
+    const csv = await this.promotionsService.exportCouponsCsv(
+      req.user.tenantId,
+      id,
+    );
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="coupons-${id}.csv"`,
+    );
+    res.status(HttpStatus.OK).send(csv);
   }
 }

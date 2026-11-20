@@ -289,6 +289,12 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
               <span className="tabular-nums whitespace-nowrap">-{formatMoney(receipt.billPromotionDiscountMinor!)}</span>
             </div>
           )}
+          {receipt.couponCode && (
+            <div className="flex justify-between text-gray-700">
+              <span>{strings.promotions.coupon.placeholder}:</span>
+              <span className="font-mono font-bold" data-testid="receipt-coupon-code">{receipt.couponCode}</span>
+            </div>
+          )}
           {receipt.discountMinor > 0 && (
             <div className="flex justify-between font-bold text-emerald-700">
               <span>{strings.promotions.pos.totalSavings}:</span>

@@ -2071,6 +2071,50 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - Added unit test suite in `scripts/test-verify-report-refs.cjs` covering matching vs mismatched conclusions without network (passes).
   - Extended `scripts/verify-report-refs.cjs` to enforce conclusion match for every 11-digit run ID against the API.
 
+### Milestone E3: Coupons
+- **Start Time:** 2026-11-20 18:00:00 +06:00
+- **What Was Built:**
+  1. **Schema & Shared Types:**
+     - Created `CreateCouponSchema` and `GenerateCouponsSchema` in `packages/shared/src/schemas/promotions.schemas.ts`.
+     - Supports individual coupon code creation with optional `usageLimitTotal`, `usageLimitPerCustomer`, and `expiresAt`.
+     - Supports batch generation of N unique one-time codes with configurable prefix and limits.
+  2. **API Controller & Service:**
+     - Added endpoints in `PromotionsController`:
+       - `POST /promotions/:id/coupons` (`PERMISSIONS.PROMOTION_MANAGE`): Creates an individual coupon.
+       - `POST /promotions/:id/coupons/generate` (`PERMISSIONS.PROMOTION_MANAGE`): Generates batch of N random unique codes.
+       - `GET /promotions/:id/coupons` (`PERMISSIONS.PROMOTION_VIEW`): Lists coupons with usage metrics.
+       - `GET /promotions/:id/coupons/export` (`PERMISSIONS.PROMOTION_VIEW`): Exports coupon list as `text/csv`.
+  3. **Concurrency Locking & Engine Execution:**
+     - In `SalesService.create`:
+       - Applied pessimistic row-level locking via `SELECT ... FROM coupons WHERE tenant_id = $1 AND UPPER(code) = $2 FOR UPDATE;` inside the Prisma transaction.
+       - Verified `is_active`, `expires_at`, `usage_limit_total`, and per-customer limits (`CouponUsage.count`).
+       - Concurrency protection: If usage limit is reached online, immediately throws 422 `COUPON_LIMIT_REACHED`.
+       - Offline policy: If an offline sale syncs with an exceeded coupon limit, it is accepted and flagged `COUPON_LIMIT_EXCEEDED` in `SaleReviewFlag`.
+       - Atomically increments `times_used` and creates an audit entry in `CouponUsage` upon sale persistence.
+       - Idempotent sale retries with matching idempotency key do not increment usage twice.
+  4. **Return Deal Reversal:**
+     - In `ReturnsService.createReturn`:
+       - Evaluated whether the return is a full return of all sold units across all sale items (`isFullReturn`).
+       - On full return: atomically decrements coupon `times_used` and removes `CouponUsage` record, returning the use to the customer/pool.
+       - On partial return: preserves coupon usage intact.
+  5. **POS UI & Offline Safeguard:**
+     - In `apps/admin/src/app/pos/page.tsx`:
+       - Added `isOfflineCouponLimited` guard: if POS is offline and a coupon has a usage limit (`usageLimitTotal` or `usageLimitPerCustomer`), blocks coupon application and displays localized message ("কুপনটিতে ব্যবহারের লিমিট থাকায় এটি অফলাইনে ব্যবহার করা যাবে না").
+       - Cached unlimited coupons on promotions in offline catalog so customers can use general promo coupons offline cleanly.
+       - Wired coupon saving badge (`data-testid="coupon-saving-badge"`) and receipt coupon code line (`data-testid="receipt-coupon-code"`).
+  6. **Automated Tests:**
+     - Integration suite in `apps/api/test/coupons-engine.spec.ts` (all 5 tests pass):
+       1. Batch generation of N codes and CSV export format.
+       2. Parallel concurrent usage of last code: `Promise.all` executes 2 concurrent sales, exactly one succeeds (201), the other receives 422 `COUPON_LIMIT_REACHED`, and DB `times_used` equals 1.
+       3. Idempotent retry of same sale payload with same idempotency key preserves usage count.
+       4. Return usage reversal: partial return preserves coupon usage, full return restores coupon usage.
+       5. Offline sync: unlimited coupon syncs cleanly, limited coupon exceeded syncs and appends `COUPON_LIMIT_EXCEEDED` review flag.
+     - Playwright E2E spec in `apps/admin/e2e/coupons-pos-flow.spec.ts`:
+       - Types invalid coupon code and verifies localized error message.
+       - Types valid coupon code and verifies discount savings badge.
+       - Completes checkout and verifies receipt displays the coupon code.
+
+
 
 
 

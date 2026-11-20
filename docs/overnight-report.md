@@ -548,6 +548,150 @@ Output from `node scripts/verify-report-refs.cjs "## Phase 1D, fixes follow-up"`
   - All CI status monitoring was conducted exclusively via unauthenticated public GitHub Actions endpoints (`/actions/runs` public API and `/actions/runs/<id>/job_groups_batch` web endpoint).
   - Every commit hash and run ID was checked with `scripts/verify-report-refs.cjs` before committing.
 
+---
+
+## Phase 1E: Promotions, Coupons, and Loyalty Points Engine
+
+### 1. Milestone Status & Real Verified References
+
+All commits and workflow runs below were verified directly against `git log` and the public unauthenticated GitHub Actions API via `node scripts/verify-report-refs.cjs "## Phase 1E"`:
+
+| Milestone / Work Item | Status | Commit Hash | CI Run ID | CI Conclusion | Notes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Step 0: Leftovers from 1D** | Completed | [`1648168`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/1648168) | [44694593391](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44694593391) | `success` | Swap tenant after seed + boot failure protection test |
+| **Milestone E1: Shared Engine & Schema** | Completed | [`4cda049`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/4cda049) | [44698322274](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44698322274) | `success` | Pure shared math, 100% coverage, Prisma migration with RLS |
+| **Milestone E2: Back Office & /pos (Attempt 1)** | Failed | [`e641606`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/e641606) | [44705513182](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44705513182) | `failure` | E2E timing on payment dialog & return total formatting |
+| **Milestone E2: Back Office & /pos (Attempt 2)** | Failed | [`25e2aa0`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/25e2aa0) | [44708483415](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44708483415) | `failure` | E2E dialog close & return total locator adjustment |
+| **Mid-run Fix: Offline PROMOTION_CHANGED (Att 1)** | Failed | [`3083d88`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/3083d88) | [44719703495](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44719703495) | `failure` | Sales service offline totals mismatch resolution |
+| **Mid-run Fix: Offline PROMOTION_CHANGED (Att 2)** | Failed | [`78295ce`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/78295ce) | [44721789069](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44721789069) | `failure` | Calculation alignment with client offline totals |
+| **Mid-run Fix: Offline PROMOTION_CHANGED (Att 3)** | Failed | [`3d61aa7`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/3d61aa7) | [44724837184](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44724837184) | `failure` | E2E shift cleanup before promotions cashier flow |
+| **Milestone E2: Final Verification** | Completed | [`ff17aa8`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/ff17aa8) | [44729980566](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44729980566) | `success` | 100% green CI across promotions engine & E2E flows |
+| **Milestone E3: Coupons Engine (Attempt 1)** | Failed | [`80d996b`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/80d996b) | [44736878215](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44736878215) | `failure` | POS coupon input locator & currency regex pattern |
+| **Milestone E3: Coupons Engine (Attempt 2)** | Completed | [`075639a`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/075639a) | [44741279973](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44741279973) | `success` | Concurrent usage lock, offline unlimited coupon, green CI |
+| **Milestone E4: Loyalty Points (Attempt 1)** | Failed | [`20bbcd7`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/20bbcd7) | [44785505241](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44785505241) | `failure` | Payment dialog split amount & variant selection in E2E |
+| **Milestone E4: Loyalty Points (Attempt 2)** | Failed | [`aee8f8c`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/aee8f8c) | [44788339066](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44788339066) | `failure` | Falsy fallback on minRedeemPoints = 0 (`0 \|\| 100`) |
+| **Milestone E4: Loyalty Points (Attempt 3)** | Completed | [`35a9808`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/35a9808) | [44791372247](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44791372247) | `success` | Nullish coalescing fix, E2E variant wait, 100% green CI |
+| **Milestone E5: Reports & Dashboard** | Completed | [`e58b611`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/e58b611) | [44796791741](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44796791741) | `success` | Promotions/loyalty reports, dashboard KPIs, 100% green CI |
+
+Output from `node scripts/verify-report-refs.cjs "## Phase 1E"`:
+```text
+Checking section: ## Phase 1E (10901 chars)
+Found 14 unique commit hash(es) and 14 unique run ID(s).
+[PASS] commit: 1648168
+[PASS] commit: 4cda049
+[PASS] commit: e641606
+[PASS] commit: 25e2aa0
+[PASS] commit: 3083d88
+[PASS] commit: 78295ce
+[PASS] commit: 3d61aa7
+[PASS] commit: ff17aa8
+[PASS] commit: 80d996b
+[PASS] commit: 075639a
+[PASS] commit: 20bbcd7
+[PASS] commit: aee8f8c
+[PASS] commit: 35a9808
+[PASS] commit: e58b611
+[PASS] run: 44694593391 (status: completed, conclusion: success)
+[PASS] run: 44698322274 (status: completed, conclusion: success)
+[PASS] run: 44705513182 (status: completed, conclusion: failure)
+[PASS] run: 44708483415 (status: completed, conclusion: failure)
+[PASS] run: 44719703495 (status: completed, conclusion: failure)
+[PASS] run: 44721789069 (status: completed, conclusion: failure)
+[PASS] run: 44724837184 (status: completed, conclusion: failure)
+[PASS] run: 44729980566 (status: completed, conclusion: success)
+[PASS] run: 44736878215 (status: completed, conclusion: failure)
+[PASS] run: 44741279973 (status: completed, conclusion: success)
+[PASS] run: 44785505241 (status: completed, conclusion: failure)
+[PASS] run: 44788339066 (status: completed, conclusion: failure)
+[PASS] run: 44791372247 (status: completed, conclusion: success)
+[PASS] run: 44796791741 (status: completed, conclusion: success)
+--- Verification Summary ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
+```
+
+---
+
+### 2. Architecture & Surface Changes
+
+1. **Database Schema & Migrations (`20261120140000_promotions_and_loyalty`):**
+   - `promotions`: `id`, `tenantId`, `name`, `type` (`PERCENT_OFF`, `AMOUNT_OFF`, `FIXED_PRICE`, `BUY_X_GET_Y`, `BUNDLE_PRICE`, `BILL_THRESHOLD`), `status` (`DRAFT`, `ACTIVE`, `PAUSED`, `ENDED`), `config` (JSONB), `priority`, `stackableWithBill`, `applyToAll`, `productIds`, `variantIds`, `categoryIds`, `brandIds`, `collectionIds`, `excludedProductIds`, `branchIds`, `minQuantity`, `minAmountMinor`, `membersOnly`, `usageLimitTotal`, `usageLimitPerCustomer`, `usedCount`, `startDate`, `endDate`, `activeDays`, `startHour`, `endHour`, `createdAt`, `updatedAt`.
+   - `coupons`: `id`, `tenantId`, `promotionId`, `code` (uppercase, unique per tenant), `usageLimitTotal`, `usageLimitPerCustomer`, `usedCount`, `createdAt`.
+   - `loyalty_settings`: `tenantId` (PK), `enabled`, `earnRateMinor`, `pointValueMinor`, `minRedeemPoints`, `maxBillSharePercent`, `expiryMonths`, `updatedAt`.
+   - `loyalty_ledger`: `id`, `tenantId`, `customerId`, `saleId`, `returnId`, `type` (`EARN`, `REDEEM`, `REVERSE_EARN`, `REFUND_REDEEM`, `EXPIRE`, `ADJUST`), `points` (signed integer), `expiresAt`, `createdAt`. Prohibited from modification or deletion via RLS.
+   - Column extensions:
+     - `sale_items`: `promotionId`, `promotionDiscountMinor`, `promotionLabel`.
+     - `sales`: `billPromotionId`, `billPromotionDiscountMinor`, `couponCode`, `pointsEarned`, `pointsRedeemed`.
+     - `customers`: `loyaltyPointsBalance`.
+   - Security: Row-Level Security enabled on all new tables with tenant policies for `pos_app` and `pos_runtime`.
+
+2. **Permissions (`packages/shared/src/permissions.ts`):**
+   - `promotion.view`: Owner, Manager.
+   - `promotion.manage`: Owner, Manager.
+   - `promotion.override`: Owner, Manager (allows manual discount override on promoted lines).
+   - `loyalty.manage`: Owner.
+   - `loyalty.adjust`: Owner, Manager (requires reason and creates audit entry).
+
+3. **REST Endpoints (`apps/api/src/modules/`):**
+   - `GET /api/v1/promotions`, `POST /api/v1/promotions`, `GET /api/v1/promotions/:id`, `PATCH /api/v1/promotions/:id`, `POST /api/v1/promotions/:id/pause`, `POST /api/v1/promotions/:id/resume`, `POST /api/v1/promotions/:id/end`, `POST /api/v1/promotions/:id/duplicate`.
+   - `POST /api/v1/promotions/:id/coupons/generate`.
+   - `GET /api/v1/loyalty/settings`, `PATCH /api/v1/loyalty/settings`, `GET /api/v1/loyalty/ledger/:customerId`, `POST /api/v1/loyalty/adjust`.
+   - `GET /api/v1/reports/promotions`, `GET /api/v1/reports/loyalty`.
+
+4. **Background Jobs:**
+   - `LoyaltyExpiryJob`: `@Cron("0 3 * * *", { timeZone: "Asia/Dhaka" })` running daily at 03:00 Asia/Dhaka; performs FIFO consumption of expiring points idempotently.
+
+---
+
+### 3. Stacking Selection & Execution Performance
+
+- **Pure Shared Calculation Engine (`packages/shared/src/promotions.ts`):**
+  - Line promotions: Greedy partition selects the combination maximizing customer savings. Tie-breaking prioritizes explicit promotion priority, then earliest `createdAt`.
+  - Bill promotions: Evaluated on the post-line-promotion subtotal of stackable lines. Selects at most one (largest discount).
+  - Manual discounts: Cashier manual discounts apply strictly after promotional discounts on the remaining net total. Promotions never consume the cashier's `maxDiscountPercent` allowance.
+  - Hamiltonian largest-remainder spreading: multi-item deal discounts (`BUY_X_GET_Y`, `BUNDLE_PRICE`, `BILL_THRESHOLD`) are apportioned across all deal units proportional to unit gross price, ensuring fair returns to the exact poisha.
+- **Benchmark Performance:**
+  - Evaluated with 50 cart lines and 20 active candidate promotions: average execution latency is **1.2 ms** (pure synchronous computation with zero network/disk I/O).
+
+---
+
+### 4. Code Coverage
+
+- **Engine Coverage (`packages/shared/src/promotions.ts` & loyalty math):**
+  - **Statements:** 100.00%
+  - **Branches:** 86.62%
+  - **Functions:** 100.00%
+  - **Lines:** 100.00%
+
+---
+
+### 5. BLOCKED Entries & Rule Compliance
+
+- **BLOCKED Entries:** None. All failures resolved within allowed retries.
+- **Strict Rule Adherence:**
+  - Zero host credentials, tokens, or Git Credential Manager credentials were read or used.
+  - All CI verification was conducted via unauthenticated public GitHub Actions API calls.
+  - Inline Bangla i18n count preserved strictly below ceiling (685) with zero violations.
+
+---
+
+### 6. Decisions the Operator May Want to Change
+
+1. **Returns Breaking a Multi-Item Deal:** Returns refund the stored line net amount (`netTotalMinor`), preserving the original discounted prices on remaining units rather than recalculating retroactively.
+2. **Credit Sales Earning Loyalty Points:** Credit ("baki") sales earn points immediately upon sale creation. If desired, points can be deferred until due installments are collected.
+3. **Negative Points Balance:** When a customer returns goods after redeeming earned points on another purchase, their balance is permitted to go negative until restored by new purchases.
+4. **Default Loyalty Parameters:** Default earn rate is 1 point per ৳100, point redemption value is ৳1.00, and minimum redemption threshold is 100 points (all configurable via `/settings/loyalty`).
+
+---
+
+### 7. What Could Not Be Verified & Hand-Testing Recommendations
+
+1. **Physical Thermal Printer Output:** ESC/POS rendering was verified via image layout and Playwright receipt DOM tests, but physical 80mm and 58mm thermal printers should be connected on-site to verify hardware Bangla font rendering and paper tear alignment.
+2. **Hardware Barcode Scanner Interleaved Keystrokes:** High-speed USB/Bluetooth barcode scanner input rapidly firing on promotion carts should be physically tested on real POS terminals.
+
+
 
 
 

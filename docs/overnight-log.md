@@ -2184,6 +2184,36 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
 - **CI Run 3:** `44791372247` (Status: `completed`, Conclusion: `success`).
   - *Result:* All 17 CI steps passed green (Build, Lint, Unit tests with coverage, Database migrations, Demo seed, Reset & seed E2E database, Run Admin Dashboard E2E tests including Loyalty POS flow, Development database untouched check).
 
+---
+
+### Milestone E5: Reports & Dashboard
+
+- **Scope & Implementation:**
+  1. **Reports Service & Controller (`apps/api/src/modules/reports/`):**
+     - Updated `getSalesSummary`: aggregated `totalPromotionDiscountMinor` across line promotions and bill promotions, and `totalPointsPaidMinor` (`paymentsByMethod["points"]`).
+     - Added `getPromotionsReport`: per-promotion analytics (salesCount, unitsSold, grossMinor, discountGivenMinor, netMinor, returnUnits, returnRefundMinor, netAfterReturnsMinor), daily breakdown, and overall period summary.
+     - Added `getLoyaltyReport`: monthly breakdown (issued, redeemed, expired, reversed, netChange), total outstanding points, shop liability in ৳ (`outstandingPoints * pointValueMinor`), and top 10 customers by balance.
+     - Endpoints `@Get("promotions")` and `@Get("loyalty")` secured by `RequirePermission(PERMISSIONS.REPORT_SALES)`.
+  2. **API Automated Integration Tests (`apps/api/test/promotions-loyalty-reports.spec.ts`):**
+     - Verified profit report exactness with promoted sale (20% off) and partial return (Net Revenue ৳2,400, Net COGS ৳1,200, Gross Profit ৳1,200, Margin 50.00%).
+     - Verified `GET /reports/promotions` metrics and daily aggregation.
+     - Verified `GET /reports/loyalty` monthly aggregation, outstanding balance, liability, and top customers.
+     - Verified `GET /reports/sales-summary` promotion discount and points paid metrics.
+  3. **Admin Frontend Pages & Components (`apps/admin/src/`):**
+     - Added `apps/admin/src/app/(admin)/reports/promotions/page.tsx`: 4 KPI cards, tabular offer performance table, daily breakdown table, DateRangePicker preset filters, and CSV export.
+     - Added `apps/admin/src/app/(admin)/reports/loyalty/page.tsx`: 4 KPI cards, top 10 customers by balance table, monthly breakdown table, DateRangePicker preset filters, and CSV export.
+     - Updated `apps/admin/src/app/(admin)/dashboard/page.tsx`: added 2 KPI cards: "অফারে ছাড়" (`dashboard-promotion-discount`) and "পয়েন্টে বিক্রি" (`dashboard-points-paid`) linking directly to the respective reports.
+     - Added navigation links in sidebar (`sidebar.tsx`) and full Bangla and English localization keys in `bn.ts` and `en.ts`.
+     - Preserved inline i18n count strictly under ceiling (685) with zero violations.
+  4. **Playwright E2E Integration Tests (`apps/admin/e2e/reports-promotions-loyalty.spec.ts`):**
+     - Tested dashboard promotion discount and points paid KPI cards against the backend API figures.
+     - Tested promotions report and loyalty report KPI cards and tables against the API.
+     - Tested CSV export buttons.
+     - Added routes `/reports/promotions` and `/reports/loyalty` to `global-data-integrity-guard.spec.ts`.
+- **Commit 1:** `e58b611` (pushed).
+- **CI Run 1:** `44796791741` (Status: `completed`, Conclusion: `success`).
+  - *Result:* 100% green across all CI steps including Build, Lint, Unit tests with coverage, Database migrations, Demo seed, Reset & seed E2E database, Run Admin Dashboard E2E tests, and Development database untouched verification.
+
 
 
 

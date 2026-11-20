@@ -180,11 +180,10 @@ test.describe("Milestone E4: Loyalty Points POS Flow E2E Test", () => {
     await expect(prodCard).toBeVisible({ timeout: 10000 });
     await prodCard.click();
 
-    const varCell = page.locator('[data-testid^="variant-cell-"]').first();
-    if (await varCell.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await varCell.click();
-      await expect(varCell).toBeHidden({ timeout: 5000 });
-    }
+    const varCells = page.locator('[data-testid^="variant-cell-"]');
+    await expect(varCells.first()).toBeVisible({ timeout: 8000 });
+    await varCells.first().click();
+    await expect(varCells.first()).toBeHidden({ timeout: 5000 });
   }
 
   test("Sale 1 earns points, and Sale 2 redeems points, both verified against API", async ({ page, request }) => {

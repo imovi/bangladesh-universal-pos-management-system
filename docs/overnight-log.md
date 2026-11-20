@@ -2172,7 +2172,14 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
 - **CI Run 1:** `44785505241` (Status: `completed`, Conclusion: `failure`).
   - *Failure analysis:* Step 17 ("Run Admin Dashboard E2E tests") failed. Steps 1-16 (Build, Lint, Unit tests with coverage, Database migrations, Demo seed, E2E reset & seed) all passed green.
   - *Cause:* In `apps/admin/e2e/loyalty-pos-flow.spec.ts`, Sale 2 attempted to add points payment without reducing the initial full-amount cash tender in `PaymentDialog`, leaving the payment unbalanced and the confirm button disabled. Also, the variant picker locator was rigid when products did not have variant options, and `data-testid="add-payment-method-points"` was missing on the payment method buttons.
-  - *Resolution status:* Fixed in next commit. Added `data-testid="add-payment-method-${m.id}"` to `PaymentDialog`, updated `loyalty-pos-flow.spec.ts` to deduct `earnedPts` value from cash input before adding points, added variant picker visibility fallback, explicit 1440x900 viewport, and pre-test shift cleanup.
+  - *Resolution status:* Fixed in commit `aee8f8c`. Added `data-testid="add-payment-method-${m.id}"` to `PaymentDialog`, updated `loyalty-pos-flow.spec.ts` to deduct `earnedPts` value from cash input before adding points, added variant picker visibility fallback, explicit 1440x900 viewport, and pre-test shift cleanup.
+- **Commit 2:** `aee8f8c` (pushed).
+- **CI Run 2:** `44788339066` (Status: `completed`, Conclusion: `failure`).
+  - *Failure analysis:* Step 17 ("Run Admin Dashboard E2E tests") failed. Steps 1-16 all passed green.
+  - *Cause:*
+    1. In `apps/admin/src/app/pos/page.tsx`, `minRedeemPoints` was passed to `PaymentDialog` as `loyaltySettings.minRedeemPoints || 100`. When `minRedeemPoints` was configured as `0`, JavaScript truthiness fallback evaluated `0 || 100` to `100`. As a result, the customer's initial earned balance (e.g. 12-24 pts) was below 100 pts, causing `canUseLoyalty` in `PaymentDialog` to evaluate to `false` and hiding `add-payment-method-points` and `payment-loyalty-banner`.
+    2. In `apps/admin/e2e/loyalty-pos-flow.spec.ts`, `addProductToCart` used `await varCell.isVisible({ timeout: 2000 })` inside an `if` condition; in Playwright `isVisible()` does not wait, so it immediately returned false while the variant modal was mounting, skipping variant selection and leaving the cart empty.
+  - *Resolution status:* Fixed in next commit: Changed `minRedeemPoints` in `pos/page.tsx` to nullish coalescing `?? 0`, and updated `addProductToCart` in `loyalty-pos-flow.spec.ts` to `await expect(varCells.first()).toBeVisible({ timeout: 8000 })` matching the reliable pattern in `promotions-pos-flow.spec.ts`.
 
 
 

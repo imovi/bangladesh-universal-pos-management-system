@@ -2895,10 +2895,10 @@ export default function PosPage() {
         loyalty={
           loyaltySettings?.isEnabled
             ? {
-                balance: Number(selectedCustomer.loyaltyPointsBalance || 0),
-                pointValueMinor: Number(loyaltySettings.pointValueMinor || 100),
-                minRedeemPoints: Number(loyaltySettings.minRedeemPoints || 100),
-                maxBillSharePercent: Number(loyaltySettings.maxBillSharePercent || 50),
+                balance: Number(selectedCustomer.loyaltyPointsBalance ?? 0),
+                pointValueMinor: Number(loyaltySettings.pointValueMinor ?? 100),
+                minRedeemPoints: Number(loyaltySettings.minRedeemPoints ?? 0),
+                maxBillSharePercent: Number(loyaltySettings.maxBillSharePercent ?? 50),
                 isEnabled: Boolean(loyaltySettings.isEnabled),
               }
             : null

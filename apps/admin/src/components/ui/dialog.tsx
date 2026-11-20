@@ -30,10 +30,8 @@ export function Dialog({
 export function DialogContent({
   children,
   className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
   const ctx = useContext(DialogContext);
   if (!ctx || !ctx.open) return null;
 
@@ -56,6 +54,7 @@ export function DialogContent({
         )}
         role="dialog"
         aria-modal="true"
+        {...props}
       >
         <button
           onClick={() => ctx.onOpenChange(false)}

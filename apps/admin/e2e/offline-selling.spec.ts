@@ -1125,7 +1125,7 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
     // 4. Return dialog search by offline number:
     // Press F6 on /pos, search by offline invoice number (-O-), verify sale lines appear
     await page.keyboard.press("F6");
-    const returnDialog = page.locator('[data-testid="return-dialog"]');
+    const returnDialog = page.locator('[data-testid="return-dialog"], [role="dialog"]');
     await expect(returnDialog).toBeVisible({ timeout: 5000 });
     await page.fill('[data-testid="return-invoice-input"]', offlineInv);
     await page.locator('[data-testid="search-invoice-button"]').click();

@@ -1879,6 +1879,19 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
       1. Added `Run Prisma migrations as owner (E2E DB)` step in `.github/workflows/ci.yml` before unit tests.
       2. Added explicit `npx prisma migrate deploy` in `apps/api/test/db-protection-guard.spec.ts` prior to seeding on `universal_pos_e2e`.
 
+  - **CI Iteration 2:** Commit `2d0e8ee`, CI Run [44686632496](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44686632496) — **Status: completed, Conclusion: failure (Red)**
+    - *Diagnosis from Local Reproduction & Playwright Error Context:* Failing step `Run Admin Dashboard E2E tests` in `apps/admin/e2e/offline-selling.spec.ts` (Scenario 12). Error: `expect(locator).toBeVisible() failed: locator('[data-testid="return-dialog"]')`.
+    - *Cause:* In `apps/admin/src/components/ui/dialog.tsx`, `DialogContent` only accepted `children` and `className`, failing to accept or spread `...props`. When `ReturnModal` passed `data-testid="return-dialog"`, it was omitted from the rendered DOM node, causing Playwright to timeout waiting for `[data-testid="return-dialog"]` even though the modal successfully opened upon pressing `F6`.
+    - *Fix:*
+      1. Updated `DialogContent` in `apps/admin/src/components/ui/dialog.tsx` to extend `React.HTMLAttributes<HTMLDivElement>` and spread `{...props}` on the modal container, matching `DialogHeader`, `DialogFooter`, and `DialogTitle`.
+      2. Updated `apps/admin/e2e/offline-selling.spec.ts` to locate `page.locator('[data-testid="return-dialog"], [role="dialog"]')` for additional selector resilience.
+    - *Local Verification:*
+      - All 12 scenarios in `apps/admin/e2e/offline-selling.spec.ts` passed (1.0m).
+      - All 56 admin unit tests passed.
+      - All 314 API integration tests passed.
+      - Next.js production build succeeded with 0 errors.
+
+
 
 
 

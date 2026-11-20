@@ -35,29 +35,14 @@ function getTargetDbInfo() {
   return { adminUrl, dbName };
 }
 
-async function clearExistingTenant(adminUrl: string, dbName: string) {
-  const isAllowedTestDb = dbName.endsWith("_e2e") || dbName.endsWith("_test");
-  const hasYesFlag = process.argv.includes("--yes");
-
-  if (!isAllowedTestDb && !hasYesFlag) {
-    throw new Error(
-      `[seed:demo] Refusing destructive tenant clear without explicit --yes flag on non-test database '${dbName}'. Pass --yes to confirm.`,
-    );
-  }
-
-  const adminClient = new PrismaClient({ datasources: { db: { url: adminUrl } } });
-  await adminClient.$executeRaw`DELETE FROM tenants WHERE slug = 'artisan-apparel';`;
-  await adminClient.$disconnect();
-}
-
-async function seedTenantAndUsers(app: any) {
+async function seedTenantAndUsers(app: any, slug: string = "artisan-apparel") {
   const tenantsService = app.get(TenantsService);
   const usersService = app.get(UsersService);
   const rolesService = app.get(RolesService);
 
   const signup = await tenantsService.signup({
     companyName: "Artisan Apparel Ltd",
-    slug: "artisan-apparel",
+    slug,
     businessType: "fashion",
     owner: { name: "Tariqul Islam", email: "owner@artisan.com", phone: "+8801700000010", password: "Password123!" },
     branch: { name: "Gulshan Flagship Store", code: "GFS-01", address: "Road 11, Block D, Banani / Gulshan, Dhaka" },
@@ -210,20 +195,46 @@ async function runSeeder() {
     throw new Error("[seed:demo] Simulated application boot failure before tenant clearing");
   }
 
-  // 1. Boot Nest app context and verify it works BEFORE deleting anything!
+  // 1. Boot Nest app context and verify it works BEFORE modifying any database data
   const app = await NestFactory.createApplicationContext(AppModule, { logger: false });
 
-  try {
-    // 2. Clear existing tenant ONLY after app context is booted and ready
-    await clearExistingTenant(adminUrl, dbName);
+  // 2. Seed under a temporary tenant slug so the existing tenant remains 100% untouched during seeding
+  const tempSlug = `artisan-apparel-tmp-${Date.now()}`;
+  let newTenantId: string | null = null;
 
-    // 3. Seed tenant and dependencies
-    const { tenantId, branchId, ownerId, cashierId, keeperId } = await seedTenantAndUsers(app);
+  try {
+    const { tenantId, branchId, ownerId, cashierId, keeperId } = await seedTenantAndUsers(app, tempSlug);
+    newTenantId = tenantId;
+
+    // Check if simulated mid-seed failure is requested by tests (after app boot and initial tenant creation)
+    if (process.env.FAIL_SEED_HALFWAY === "true") {
+      throw new Error("[seed:demo] Simulated failure halfway through seed after app boot");
+    }
+
     const variants = await seedCatalog(app, tenantId, branchId, ownerId, keeperId);
     await seedPurchasing(app, tenantId, branchId, keeperId, variants);
     const { customerIds, reg1Id } = await seedCustomersAndRegisters(app, tenantId, branchId, ownerId);
     await seedShiftsAndSales(app, tenantId, branchId, ownerId, cashierId, variants, customerIds, reg1Id);
+
+    // 3. Atomically swap: delete old tenant and rename temporary slug ONLY after whole seed succeeded!
+    const adminClient = new PrismaClient({ datasources: { db: { url: adminUrl } } });
+    await adminClient.$transaction(async (tx) => {
+      await tx.$executeRaw`DELETE FROM tenants WHERE slug = 'artisan-apparel';`;
+      await tx.$executeRaw`UPDATE tenants SET slug = 'artisan-apparel' WHERE id = ${tenantId}::uuid;`;
+    });
+    await adminClient.$disconnect();
+
     return { tenantId, branchId, ownerEmail: "owner@artisan.com" };
+  } catch (err) {
+    // If seeding failed before completion, discard the temporary tenant so no partial tenant remains
+    if (newTenantId) {
+      try {
+        const adminClient = new PrismaClient({ datasources: { db: { url: adminUrl } } });
+        await adminClient.$executeRaw`DELETE FROM tenants WHERE id = ${newTenantId}::uuid;`;
+        await adminClient.$disconnect();
+      } catch {}
+    }
+    throw err;
   } finally {
     await app.close();
   }

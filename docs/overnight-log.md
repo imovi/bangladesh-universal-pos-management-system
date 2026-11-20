@@ -1891,6 +1891,31 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
       - All 314 API integration tests passed.
       - Next.js production build succeeded with 0 errors.
 
+---
+
+## Phase 1E
+
+- **Start Time:** 2026-11-20T13:20:00+06:00
+- **Scope:** Promotions, Coupons, and Loyalty Points Engine.
+- **Unattended Rules:** Continuous CI verification on exact `head_sha` from public unauthenticated GitHub API/runs without local credentials or tokens; commit hashes and run IDs verified via `scripts/verify-report-refs.cjs`.
+
+### Step 0: Phase 1D Leftovers (Atomic Tenant Swap & Mid-Seed Failure Guard)
+- **Saved Prompt:** `docs/prompts/antigravity-pos-phase1e-promotions-loyalty-prompt.md`.
+- **Atomic Tenant Swap in `scripts/seed-demo.ts`:**
+  - Removed early `clearExistingTenant` invocation.
+  - Seeder now boots the NestJS application context first, then seeds all demo records (tenant, users, catalog, inventory, purchasing, shifts, sales) under a unique temporary slug (`artisan-apparel-tmp-<timestamp>`).
+  - Only after the ENTIRE dataset has seeded without any errors does an atomic transaction execute via admin client:
+    - `DELETE FROM tenants WHERE slug = 'artisan-apparel';`
+    - `UPDATE tenants SET slug = 'artisan-apparel' WHERE id = newTenantId;`
+  - If any failure occurs during seeding, the temporary tenant is discarded and the existing `artisan-apparel` tenant remains 100% untouched.
+- **Hardened Mid-Seed Failure Test (`apps/api/test/db-protection-guard.spec.ts`):**
+  - Updated test to simulate a failure *inside* the seed after the app boots and the temporary tenant is created (`FAIL_SEED_HALFWAY="true"`).
+  - Asserts that `seed:demo` exits non-zero, the existing `artisan-apparel` tenant retains its exact ID and all users, and no temporary tenant records linger.
+- **Local Verification:**
+  - `apps/api/test/db-protection-guard.spec.ts`: all 5 tests passed (13.2s).
+  - `apps/api/test/seed-demo-and-permissions.spec.ts`: all 3 tests passed.
+
+
 
 
 

@@ -72,7 +72,7 @@ describe("Database Protection Guard", () => {
     expect(output).toContain("Pass --yes to confirm");
   }, 20000);
 
-  it("leaves existing tenant in place when seed fails during app boot on _e2e database", async () => {
+  it("leaves existing tenant in place when seed fails halfway inside the seed after app boot on _e2e database", async () => {
     // 0. Ensure e2e database is migrated
     execSync("npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma", {
       cwd: path.resolve(__dirname, "../../.."),
@@ -99,10 +99,12 @@ describe("Database Protection Guard", () => {
     const prisma = new PrismaClient({
       datasources: { db: { url: "postgresql://pos_admin:pos_secret@localhost:5432/universal_pos_e2e?schema=public" } },
     });
-    const beforeCount = await prisma.tenant.count({ where: { slug: "artisan-apparel" } });
-    expect(beforeCount).toBeGreaterThan(0);
+    const beforeTenant = await prisma.tenant.findUnique({ where: { slug: "artisan-apparel" } });
+    expect(beforeTenant).not.toBeNull();
+    const beforeUserCount = await prisma.user.count({ where: { tenantId: beforeTenant!.id } });
+    expect(beforeUserCount).toBeGreaterThan(0);
 
-    // 2. Now simulate boot failure during seed
+    // 2. Now simulate failure inside the seed AFTER app has booted and temporary tenant created
     let error: any;
     try {
       execSync("npx tsx scripts/seed-demo.ts", {
@@ -111,7 +113,7 @@ describe("Database Protection Guard", () => {
         env: {
           ...process.env,
           NODE_ENV: "test",
-          FAIL_SEED_BOOT: "true",
+          FAIL_SEED_HALFWAY: "true",
           DATABASE_URL: "postgresql://pos_admin:pos_secret@localhost:5432/universal_pos_e2e?schema=public",
           MIGRATION_DATABASE_URL: "postgresql://pos_admin:pos_secret@localhost:5432/universal_pos_e2e?schema=public",
         },
@@ -122,11 +124,21 @@ describe("Database Protection Guard", () => {
 
     expect(error).toBeDefined();
     const output = (error.stderr || error.stdout || "").toString();
-    expect(output).toContain("Simulated application boot failure before tenant clearing");
+    expect(output).toContain("Simulated failure halfway through seed after app boot");
 
-    // 3. Verify tenant was NOT cleared and is still intact in universal_pos_e2e
-    const afterCount = await prisma.tenant.count({ where: { slug: "artisan-apparel" } });
+    // 3. Verify original tenant was NOT cleared, has the exact same ID, and still has all users
+    const afterTenant = await prisma.tenant.findUnique({ where: { slug: "artisan-apparel" } });
+    expect(afterTenant).not.toBeNull();
+    expect(afterTenant!.id).toBe(beforeTenant!.id);
+    const afterUserCount = await prisma.user.count({ where: { tenantId: afterTenant!.id } });
+    expect(afterUserCount).toBe(beforeUserCount);
+
+    // 4. Verify no partial temporary tenants remain
+    const tempTenants = await prisma.tenant.findMany({
+      where: { slug: { startsWith: "artisan-apparel-tmp-" } },
+    });
+    expect(tempTenants.length).toBe(0);
+
     await prisma.$disconnect();
-    expect(afterCount).toBe(beforeCount);
-  }, 30000);
+  }, 45000);
 });

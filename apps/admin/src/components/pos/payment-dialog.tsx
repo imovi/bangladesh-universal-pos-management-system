@@ -466,6 +466,7 @@ export function PaymentDialog({
                   size="sm"
                   onClick={() => handleAddMethod(m.id as any)}
                   className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground border border-dashed border-border"
+                  data-testid={`add-payment-method-${m.id}`}
                 >
                   <Plus className="h-3 w-3 mr-1" />
                   {formatPaymentMethod(m.id, strings)}

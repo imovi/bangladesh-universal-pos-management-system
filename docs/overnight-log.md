@@ -2168,6 +2168,12 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
      - Playwright E2E spec in `apps/admin/e2e/loyalty-pos-flow.spec.ts`:
        - Sale 1: customer attached, cash purchase, points earned and displayed on receipt, verified against API.
        - Sale 2: customer attached, points redeemed in payment dialog, points decremented, verified against API.
+- **Commit 1:** `20bbcd7` (pushed).
+- **CI Run 1:** `44785505241` (Status: `completed`, Conclusion: `failure`).
+  - *Failure analysis:* Step 17 ("Run Admin Dashboard E2E tests") failed. Steps 1-16 (Build, Lint, Unit tests with coverage, Database migrations, Demo seed, E2E reset & seed) all passed green.
+  - *Cause:* In `apps/admin/e2e/loyalty-pos-flow.spec.ts`, Sale 2 attempted to add points payment without reducing the initial full-amount cash tender in `PaymentDialog`, leaving the payment unbalanced and the confirm button disabled. Also, the variant picker locator was rigid when products did not have variant options, and `data-testid="add-payment-method-points"` was missing on the payment method buttons.
+  - *Resolution status:* Fixed in next commit. Added `data-testid="add-payment-method-${m.id}"` to `PaymentDialog`, updated `loyalty-pos-flow.spec.ts` to deduct `earnedPts` value from cash input before adding points, added variant picker visibility fallback, explicit 1440x900 viewport, and pre-test shift cleanup.
+
 
 
 

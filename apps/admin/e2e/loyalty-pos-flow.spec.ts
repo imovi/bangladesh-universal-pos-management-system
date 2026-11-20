@@ -20,7 +20,67 @@ test.describe("Milestone E4: Loyalty Points POS Flow E2E Test", () => {
     const loginData = await loginRes.json();
     token = loginData.data.accessToken;
 
-    // 2. Enable loyalty program: earn 1 pt per ৳100 (10000 minor), point value ৳1.00 (100 minor), minRedeem 0
+    // 2. Clean up lingering shifts and promotions
+    try {
+      const existingPromosRes = await request.get("http://localhost:4000/api/v1/promotions?status=active", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (existingPromosRes.ok()) {
+        const existingData = await existingPromosRes.json();
+        const activeList = existingData.data?.items || existingData.data?.data || existingData.data || [];
+        for (const p of activeList) {
+          await request.post(`http://localhost:4000/api/v1/promotions/${p.id}/end`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }).catch(() => {});
+        }
+      }
+
+      const shiftsRes = await request.get("http://localhost:4000/api/v1/shifts?status=open", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (shiftsRes.ok()) {
+        const shiftsData = await shiftsRes.json();
+        const openShifts = shiftsData.data?.items || shiftsData.data || [];
+        for (const s of openShifts) {
+          await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
+            headers: { Authorization: `Bearer ${token}` },
+            data: { closingCashMinor: Number(s.openingCashMinor || 50000) },
+          }).catch(() => {});
+        }
+      }
+
+      const branchesRes = await request.get("http://localhost:4000/api/v1/branches", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const branch = (await branchesRes.json()).data?.[0];
+      const regRes = await request.get(`http://localhost:4000/api/v1/registers?branchId=${branch.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const registers = (await regRes.json()).data || [];
+      const reg = registers[0];
+      for (const r of registers) {
+        if (!r.allowOffline) {
+          await request.patch(`http://localhost:4000/api/v1/registers/${r.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            data: { allowOffline: true },
+          }).catch(() => {});
+        }
+      }
+
+      if (reg && branch) {
+        await request.post("http://localhost:4000/api/v1/shifts/open", {
+          headers: { Authorization: `Bearer ${token}` },
+          data: {
+            branchId: branch.id,
+            registerId: reg.id,
+            openingCashMinor: 50000,
+            notes: "E2E Loyalty Test Shift",
+          },
+        }).catch(() => {});
+      }
+    } catch {}
+
+    // 3. Enable loyalty program: earn 1 pt per ৳100 (10000 minor), point value ৳1.00 (100 minor), minRedeem 0
     await request.patch("http://localhost:4000/api/v1/settings/loyalty", {
       headers: { Authorization: `Bearer ${token}` },
       data: {
@@ -33,7 +93,7 @@ test.describe("Milestone E4: Loyalty Points POS Flow E2E Test", () => {
       },
     });
 
-    // 3. Ensure test customer exists
+    // 4. Ensure test customer exists and points balance is clean (0)
     const searchRes = await request.get(`http://localhost:4000/api/v1/customers?search=${encodeURIComponent(customerPhone)}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -42,7 +102,6 @@ test.describe("Milestone E4: Loyalty Points POS Flow E2E Test", () => {
 
     if (existing) {
       customerId = existing.id;
-      // Reset points balance to 0 for a predictable test run
       const balance = existing.loyaltyPointsBalance || 0;
       if (balance !== 0) {
         await request.post(`http://localhost:4000/api/v1/customers/${customerId}/loyalty/adjust`, {
@@ -64,47 +123,10 @@ test.describe("Milestone E4: Loyalty Points POS Flow E2E Test", () => {
       const createData = await createRes.json();
       customerId = (createData.data || createData).id;
     }
-
-    // 4. Ensure an active shift exists
-    try {
-      const branchesRes = await request.get("http://localhost:4000/api/v1/branches", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const branch = (await branchesRes.json()).data?.[0];
-      const regRes = await request.get(`http://localhost:4000/api/v1/registers?branchId=${branch.id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const registers = (await regRes.json()).data || [];
-      const reg = registers[0];
-      for (const r of registers) {
-        if (!r.allowOffline) {
-          await request.patch(`http://localhost:4000/api/v1/registers/${r.id}`, {
-            headers: { Authorization: `Bearer ${token}` },
-            data: { allowOffline: true },
-          }).catch(() => {});
-        }
-      }
-
-      const shiftsRes = await request.get("http://localhost:4000/api/v1/shifts?status=open", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const shiftsData = await shiftsRes.json();
-      const openShifts = shiftsData.data?.items || shiftsData.data || [];
-      if (openShifts.length === 0 && reg && branch) {
-        await request.post("http://localhost:4000/api/v1/shifts/open", {
-          headers: { Authorization: `Bearer ${token}` },
-          data: {
-            branchId: branch.id,
-            registerId: reg.id,
-            openingCashMinor: 50000,
-            notes: "E2E Loyalty Test Shift",
-          },
-        }).catch(() => {});
-      }
-    } catch {}
   });
 
   async function loginAndGoToPos(page: any) {
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/login");
     await page.fill("#tenantSlug", "artisan-apparel");
     await page.fill("#email", "owner@artisan.com");
@@ -145,12 +167,24 @@ test.describe("Milestone E4: Loyalty Points POS Flow E2E Test", () => {
     await searchInput.fill(customerPhone);
     await page.waitForTimeout(500);
 
-    const custRow = page.locator(`button:has-text("${customerName}")`);
-    await expect(custRow.first()).toBeVisible({ timeout: 5000 });
-    await custRow.first().click();
+    const custRow = page.locator(`button:has-text("${customerPhone}")`).first();
+    await expect(custRow).toBeVisible({ timeout: 5000 });
+    await custRow.click();
 
     // Verify attached on button
     await expect(custBtn).toContainText(customerName);
+  }
+
+  async function addProductToCart(page: any) {
+    const prodCard = page.locator('[data-testid^="product-card-"]').first();
+    await expect(prodCard).toBeVisible({ timeout: 10000 });
+    await prodCard.click();
+
+    const varCell = page.locator('[data-testid^="variant-cell-"]').first();
+    if (await varCell.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await varCell.click();
+      await expect(varCell).toBeHidden({ timeout: 5000 });
+    }
   }
 
   test("Sale 1 earns points, and Sale 2 redeems points, both verified against API", async ({ page, request }) => {
@@ -161,16 +195,7 @@ test.describe("Milestone E4: Loyalty Points POS Flow E2E Test", () => {
     // SALE 1: Earn points with Customer
     // ==========================================
     await attachCustomer(page);
-
-    // Add a product to cart
-    const prodCard = page.locator('[data-testid^="product-card-"]').first();
-    await expect(prodCard).toBeVisible({ timeout: 10000 });
-    await prodCard.click();
-
-    const varCells = page.locator('[data-testid^="variant-cell-"]');
-    await expect(varCells.first()).toBeVisible({ timeout: 8000 });
-    await varCells.first().click();
-    await expect(varCells.first()).toBeHidden({ timeout: 5000 });
+    await addProductToCart(page);
 
     // Checkout
     const checkoutBtn = page.locator('[data-testid="pos-checkout-button"], [data-testid="checkout-button"]');
@@ -216,10 +241,7 @@ test.describe("Milestone E4: Loyalty Points POS Flow E2E Test", () => {
     await expect(loyaltyPill).toContainText(String(earnedPts));
 
     // Add product to cart again
-    await prodCard.click();
-    await expect(varCells.first()).toBeVisible({ timeout: 8000 });
-    await varCells.first().click();
-    await expect(varCells.first()).toBeHidden({ timeout: 5000 });
+    await addProductToCart(page);
 
     // Checkout
     await expect(checkoutBtn).toBeEnabled({ timeout: 5000 });
@@ -230,23 +252,31 @@ test.describe("Milestone E4: Loyalty Points POS Flow E2E Test", () => {
     await expect(loyaltyBanner).toBeVisible({ timeout: 5000 });
     await expect(loyaltyBanner).toContainText(String(earnedPts));
 
-    // Add Points payment method
-    const addPointsBtn = page.locator('button:has-text("পয়েন্ট"), button:has-text("Points")');
-    if (await addPointsBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await addPointsBtn.click();
-    } else {
-      // If method select exists, switch to points
-      const methodSelect = page.locator('[data-testid="payment-method-select-0"]');
-      await methodSelect.click();
-      await page.click('div[role="option"]:has-text("পয়েন্ট"), div[role="option"]:has-text("Points")');
-    }
+    // Split payment: Deduct earned points value in taka from cash input
+    const cashInput = page.locator('[data-testid="payment-amount-input-0"]');
+    await expect(cashInput).toBeVisible({ timeout: 5000 });
+    const totalTaka = parseFloat(await cashInput.inputValue());
+
+    // Reduce cash amount by earnedPts (since 1 pt = ৳1.00)
+    const cashPortion = Math.max(0, totalTaka - earnedPts);
+    await cashInput.fill(String(cashPortion));
+    await page.waitForTimeout(300);
+
+    // Add Points payment method for remainder
+    const addPointsBtn = page.locator('[data-testid="add-payment-method-points"]');
+    await expect(addPointsBtn).toBeVisible({ timeout: 5000 });
+    await addPointsBtn.click();
+    await page.waitForTimeout(300);
 
     // Confirm Payment
-    await expect(confirmPaymentBtn).toBeVisible({ timeout: 5000 });
+    await expect(confirmPaymentBtn).toBeEnabled({ timeout: 5000 });
     await confirmPaymentBtn.click();
 
     // Verify Receipt for Sale 2
     await expect(receiptContainer).toBeVisible({ timeout: 10000 });
+
+    const pointsRedeemedReceipt = page.locator('[data-testid="receipt-points-redeemed"]');
+    await expect(pointsRedeemedReceipt).toBeVisible({ timeout: 5000 });
 
     // API check: points should now be decremented
     const custApiRes2 = await request.get(`http://localhost:4000/api/v1/customers/${customerId}`, {
@@ -255,7 +285,6 @@ test.describe("Milestone E4: Loyalty Points POS Flow E2E Test", () => {
     expect(custApiRes2.ok()).toBeTruthy();
     const custData2 = await custApiRes2.json();
     const apiBalance2 = (custData2.data || custData2).loyaltyPointsBalance;
-    // Balance after redemption must be strictly less than before redemption
     expect(apiBalance2).toBeLessThan(apiBalance1);
 
     // Close receipt

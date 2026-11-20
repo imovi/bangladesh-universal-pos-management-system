@@ -1872,6 +1872,13 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - **Return Modal Search by Offline Number:** In `apps/admin/src/components/pos/return-modal.tsx`, updated `handleSearchInvoice` to match `s.offlineInvoiceNumber` as well as `s.invoiceNumber`.
   - **Table Identification:** Added `data-testid="return-lines-table"` in `apps/admin/src/components/pos/return-lines-table.tsx`.
   - **Playwright E2E Assertion:** In `apps/admin/e2e/offline-selling.spec.ts` Scenario 12, pressed `F6`, filled `return-invoice-input` with the offline `-O-` invoice number, clicked search, and asserted `return-lines-table` is visible.
+  - **CI Iteration 1:** Commit `d60cc0a`, CI Run [44685929204](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44685929204) — **Status: completed, Conclusion: failure (Red)**
+    - *Diagnosis from Check Runs Annotations:* Failing step `Run tests with coverage as non-superuser pos_runtime` in `test/db-protection-guard.spec.ts`. Error: `42P01: relation "tenants" does not exist`.
+    - *Cause:* In CI, `universal_pos_e2e` was created during PostgreSQL bootstrap but its Prisma schema was not migrated until after unit tests during `Reset and seed E2E database`. When unit tests ran against `universal_pos_e2e`, the database had no tables.
+    - *Fix:*
+      1. Added `Run Prisma migrations as owner (E2E DB)` step in `.github/workflows/ci.yml` before unit tests.
+      2. Added explicit `npx prisma migrate deploy` in `apps/api/test/db-protection-guard.spec.ts` prior to seeding on `universal_pos_e2e`.
+
 
 
 

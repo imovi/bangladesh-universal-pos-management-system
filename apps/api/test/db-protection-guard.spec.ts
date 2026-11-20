@@ -73,6 +73,17 @@ describe("Database Protection Guard", () => {
   }, 20000);
 
   it("leaves existing tenant in place when seed fails during app boot on _e2e database", async () => {
+    // 0. Ensure e2e database is migrated
+    execSync("npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma", {
+      cwd: path.resolve(__dirname, "../../.."),
+      stdio: "pipe",
+      env: {
+        ...process.env,
+        DATABASE_URL: "postgresql://pos_admin:pos_secret@localhost:5432/universal_pos_e2e?schema=public",
+        MIGRATION_DATABASE_URL: "postgresql://pos_admin:pos_secret@localhost:5432/universal_pos_e2e?schema=public",
+      },
+    });
+
     // 1. Run seed cleanly first on e2e to guarantee tenant exists
     execSync("npx tsx scripts/seed-demo.ts", {
       cwd: path.resolve(__dirname, "../../.."),

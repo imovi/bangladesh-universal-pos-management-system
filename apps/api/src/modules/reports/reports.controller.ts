@@ -88,4 +88,16 @@ export class ReportsController {
   async getDamagedStockReport(@Request() req: any, @Query() query: ReportDateFilter) {
     return this.reportsService.getDamagedStockReport(req.user.tenantId, query);
   }
+
+  @Get("promotions")
+  @RequirePermission(PERMISSIONS.REPORT_SALES)
+  async getPromotionsReport(@Request() req: any, @Query() query: ReportDateFilter) {
+    return this.reportsService.getPromotionsReport(req.user.tenantId, query);
+  }
+
+  @Get("loyalty")
+  @RequirePermission(PERMISSIONS.REPORT_SALES)
+  async getLoyaltyReport(@Request() req: any, @Query() query: ReportDateFilter) {
+    return this.reportsService.getLoyaltyReport(req.user.tenantId, query);
+  }
 }

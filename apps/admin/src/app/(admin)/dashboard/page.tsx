@@ -20,6 +20,8 @@ import {
   ArrowRight,
   RefreshCw,
   RotateCcw,
+  Tag,
+  Award,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -34,6 +36,7 @@ interface SalesSummaryResponse {
   totalRefundMinor?: number;
   totalCreditGivenMinor?: number;
   totalCreditCollectedMinor?: number;
+  totalPromotionDiscountMinor?: number;
   paymentsByMethod: Record<string, number>;
 }
 
@@ -321,8 +324,8 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* Due / Credit / Returns / Offline Review Metrics for Today */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      {/* Due / Credit / Returns / Offline Review / Promotion / Loyalty Metrics for Today */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5">
         <Link href="/reports/due" className="block focus:outline-none">
           <Card className="shadow-sm hover:border-amber-400/50 transition-colors bg-amber-500/5 border-amber-500/20">
             <CardHeader className="flex flex-row items-center justify-between pb-1.5 space-y-0">
@@ -422,6 +425,56 @@ export default function DashboardPage() {
                 {openReviewFlagsCount > 0
                   ? `${openReviewFlagsCount} ${strings.offlineReview.openFlags}`
                   : strings.offlineReview.noFlagsFound}
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        {/* Today's Promotion Discount Given */}
+        <Link href="/reports/promotions" className="block focus:outline-none">
+          <Card className="shadow-sm hover:border-emerald-400/50 transition-colors bg-emerald-500/5 border-emerald-500/20 h-full">
+            <CardHeader className="flex flex-row items-center justify-between pb-1.5 space-y-0">
+              <CardTitle className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">
+                {strings.reports.todayPromotionDiscount}
+              </CardTitle>
+              <div className="h-7 w-7 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                <Tag className="h-3.5 w-3.5" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div
+                className="text-2xl font-bold font-mono tracking-tight text-emerald-900 dark:text-emerald-200 tabular-nums"
+                data-testid="dashboard-promotion-discount"
+              >
+                {formatMoney(salesSummary?.totalPromotionDiscountMinor || 0)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {strings.reports.todayPromotionDiscountDesc}
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        {/* Today's Points Paid */}
+        <Link href="/reports/loyalty" className="block focus:outline-none">
+          <Card className="shadow-sm hover:border-blue-400/50 transition-colors bg-blue-500/5 border-blue-500/20 h-full">
+            <CardHeader className="flex flex-row items-center justify-between pb-1.5 space-y-0">
+              <CardTitle className="text-xs font-semibold text-blue-800 dark:text-blue-300 uppercase tracking-wider">
+                {strings.reports.todayPointsPaid}
+              </CardTitle>
+              <div className="h-7 w-7 rounded-full bg-blue-500/10 text-blue-600 flex items-center justify-center">
+                <Award className="h-3.5 w-3.5" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div
+                className="text-2xl font-bold font-mono tracking-tight text-blue-900 dark:text-blue-200 tabular-nums"
+                data-testid="dashboard-points-paid"
+              >
+                {formatMoney(salesSummary?.paymentsByMethod?.["points"] || 0)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {strings.reports.todayPointsPaidDesc}
               </p>
             </CardContent>
           </Card>

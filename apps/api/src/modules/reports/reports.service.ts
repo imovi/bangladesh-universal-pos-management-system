@@ -92,7 +92,7 @@ export class ReportsService {
       const [sales, returns, customerPayments] = await Promise.all([
         tx.sale.findMany({
           where: { tenantId, ...this.buildDateFilter(filter, tz) },
-          include: { payments: true },
+          include: { payments: true, items: { select: { promotionDiscountMinor: true } } },
         }),
         tx.saleReturn.findMany({
           where: { tenantId, ...this.buildReturnDateFilter(filter, tz) },
@@ -107,6 +107,7 @@ export class ReportsService {
       let totalTaxMinor = 0n;
       let totalNetMinor = 0n;
       let totalCreditGivenMinor = 0n;
+      let totalPromotionDiscountMinor = 0n;
       const paymentsByMethod: Record<string, number> = {};
 
       for (const s of sales) {
@@ -119,6 +120,10 @@ export class ReportsService {
         }
         for (const p of s.payments) {
           paymentsByMethod[p.paymentMethod] = (paymentsByMethod[p.paymentMethod] || 0) + Number(p.amountMinor);
+        }
+        totalPromotionDiscountMinor += s.billPromotionDiscountMinor || 0n;
+        for (const it of s.items) {
+          totalPromotionDiscountMinor += it.promotionDiscountMinor || 0n;
         }
       }
 
@@ -145,6 +150,8 @@ export class ReportsService {
         totalRefundMinor: Number(totalRefundMinor),
         totalCreditGivenMinor: Number(totalCreditGivenMinor),
         totalCreditCollectedMinor: Number(totalCreditCollectedMinor),
+        totalPromotionDiscountMinor: Number(totalPromotionDiscountMinor),
+        totalPointsPaidMinor: Number(paymentsByMethod["points"] || 0),
         paymentsByMethod,
       };
     });
@@ -827,6 +834,369 @@ export class ReportsService {
           },
         },
         items,
+      };
+    });
+  }
+
+  async getPromotionsReport(tenantId: string, filter: ReportDateFilter) {
+    const tz = await this.getTimeZone(tenantId);
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const dateFilter = this.buildDateFilter(filter, tz);
+      const returnDateFilter = this.buildReturnDateFilter(filter, tz);
+
+      const [promotions, sales, returnItems] = await Promise.all([
+        tx.promotion.findMany({
+          where: { tenantId },
+          orderBy: { name: "asc" },
+        }),
+        tx.sale.findMany({
+          where: { tenantId, ...dateFilter },
+          include: {
+            items: {
+              include: { promotion: true },
+            },
+            billPromotion: true,
+          },
+          orderBy: { occurredAt: "asc" },
+        }),
+        tx.saleReturnItem.findMany({
+          where: {
+            tenantId,
+            saleReturn: { tenantId, ...returnDateFilter },
+          },
+          include: {
+            saleItem: true,
+            saleReturn: {
+              include: { sale: true },
+            },
+          },
+        }),
+      ]);
+
+      const promoMap = new Map<
+        string,
+        {
+          id: string;
+          name: string;
+          type: string;
+          salesSet: Set<string>;
+          unitsSold: number;
+          grossMinor: bigint;
+          discountGivenMinor: bigint;
+          returnUnits: number;
+          returnRefundMinor: bigint;
+        }
+      >();
+
+      for (const p of promotions) {
+        promoMap.set(p.id, {
+          id: p.id,
+          name: p.name,
+          type: p.type,
+          salesSet: new Set<string>(),
+          unitsSold: 0,
+          grossMinor: 0n,
+          discountGivenMinor: 0n,
+          returnUnits: 0,
+          returnRefundMinor: 0n,
+        });
+      }
+
+      const dailyMap = new Map<
+        string,
+        {
+          date: string;
+          salesSet: Set<string>;
+          unitsSold: number;
+          discountGivenMinor: bigint;
+          grossMinor: bigint;
+        }
+      >();
+
+      for (const s of sales) {
+        let saleHasPromotion = false;
+        const dateKey = formatBusinessDate(s.occurredAt || s.createdAt, tz);
+
+        if (s.billPromotionId) {
+          saleHasPromotion = true;
+          let entry = promoMap.get(s.billPromotionId);
+          if (!entry) {
+            entry = {
+              id: s.billPromotionId,
+              name: s.billPromotion?.name || "Bill Promotion",
+              type: s.billPromotion?.type || "BILL_THRESHOLD",
+              salesSet: new Set<string>(),
+              unitsSold: 0,
+              grossMinor: 0n,
+              discountGivenMinor: 0n,
+              returnUnits: 0,
+              returnRefundMinor: 0n,
+            };
+            promoMap.set(s.billPromotionId, entry);
+          }
+          entry.salesSet.add(s.id);
+          entry.discountGivenMinor += s.billPromotionDiscountMinor;
+          for (const it of s.items) {
+            entry.unitsSold += Number(it.quantity);
+            entry.grossMinor += it.subtotalMinor;
+          }
+        }
+
+        for (const it of s.items) {
+          if (it.promotionId) {
+            saleHasPromotion = true;
+            let entry = promoMap.get(it.promotionId);
+            if (!entry) {
+              entry = {
+                id: it.promotionId,
+                name: it.promotionLabel || it.promotion?.name || "Promotion",
+                type: it.promotion?.type || "UNKNOWN",
+                salesSet: new Set<string>(),
+                unitsSold: 0,
+                grossMinor: 0n,
+                discountGivenMinor: 0n,
+                returnUnits: 0,
+                returnRefundMinor: 0n,
+              };
+              promoMap.set(it.promotionId, entry);
+            }
+            entry.salesSet.add(s.id);
+            entry.unitsSold += Number(it.quantity);
+            entry.grossMinor += it.subtotalMinor;
+            entry.discountGivenMinor += it.promotionDiscountMinor;
+          }
+        }
+
+        if (saleHasPromotion) {
+          if (!dailyMap.has(dateKey)) {
+            dailyMap.set(dateKey, {
+              date: dateKey,
+              salesSet: new Set<string>(),
+              unitsSold: 0,
+              discountGivenMinor: 0n,
+              grossMinor: 0n,
+            });
+          }
+          const daily = dailyMap.get(dateKey)!;
+          daily.salesSet.add(s.id);
+          daily.discountGivenMinor += s.billPromotionDiscountMinor;
+          for (const it of s.items) {
+            if (it.promotionId || s.billPromotionId) {
+              daily.unitsSold += Number(it.quantity);
+              daily.grossMinor += it.subtotalMinor;
+            }
+            if (it.promotionId) {
+              daily.discountGivenMinor += it.promotionDiscountMinor;
+            }
+          }
+        }
+      }
+
+      for (const ri of returnItems) {
+        const promoId = ri.saleItem.promotionId || ri.saleReturn.sale?.billPromotionId;
+        if (promoId && promoMap.has(promoId)) {
+          const entry = promoMap.get(promoId)!;
+          entry.returnUnits += Number(ri.quantity);
+          entry.returnRefundMinor += ri.totalRefundMinor;
+        }
+      }
+
+      const items = Array.from(promoMap.values())
+        .filter((p) => p.salesSet.size > 0 || p.returnUnits > 0 || p.discountGivenMinor > 0n)
+        .map((p) => {
+          const netMinor = p.grossMinor - p.discountGivenMinor;
+          const netAfterReturnsMinor = netMinor - p.returnRefundMinor;
+          return {
+            promotionId: p.id,
+            name: p.name,
+            type: p.type,
+            salesCount: p.salesSet.size,
+            unitsSold: p.unitsSold,
+            grossMinor: Number(p.grossMinor),
+            discountGivenMinor: Number(p.discountGivenMinor),
+            netMinor: Number(netMinor),
+            returnUnits: p.returnUnits,
+            returnRefundMinor: Number(p.returnRefundMinor),
+            netAfterReturnsMinor: Number(netAfterReturnsMinor),
+          };
+        });
+
+      const totalSalesSet = new Set<string>();
+      let totalUnitsSold = 0;
+      let totalGrossMinor = 0n;
+      let totalDiscountGivenMinor = 0n;
+      let totalNetMinor = 0n;
+      let totalReturnUnits = 0;
+      let totalReturnRefundMinor = 0n;
+
+      for (const item of items) {
+        totalUnitsSold += item.unitsSold;
+        totalGrossMinor += BigInt(item.grossMinor);
+        totalDiscountGivenMinor += BigInt(item.discountGivenMinor);
+        totalNetMinor += BigInt(item.netMinor);
+        totalReturnUnits += item.returnUnits;
+        totalReturnRefundMinor += BigInt(item.returnRefundMinor);
+      }
+
+      for (const s of sales) {
+        if (s.billPromotionId || s.items.some((i) => i.promotionId)) {
+          totalSalesSet.add(s.id);
+        }
+      }
+
+      const daily = Array.from(dailyMap.values())
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((d) => ({
+          date: d.date,
+          salesCount: d.salesSet.size,
+          unitsSold: d.unitsSold,
+          grossMinor: Number(d.grossMinor),
+          discountGivenMinor: Number(d.discountGivenMinor),
+          netMinor: Number(d.grossMinor - d.discountGivenMinor),
+        }));
+
+      return {
+        summary: {
+          totalSalesCount: totalSalesSet.size,
+          totalUnitsSold,
+          totalGrossMinor: Number(totalGrossMinor),
+          totalDiscountGivenMinor: Number(totalDiscountGivenMinor),
+          totalNetMinor: Number(totalNetMinor),
+          totalReturnUnits,
+          totalReturnRefundMinor: Number(totalReturnRefundMinor),
+          netAfterReturnsMinor: Number(totalNetMinor - totalReturnRefundMinor),
+        },
+        items,
+        daily,
+      };
+    });
+  }
+
+  async getLoyaltyReport(tenantId: string, filter: ReportDateFilter) {
+    const tz = await this.getTimeZone(tenantId);
+    return this.tenantContext.runWithTenant(tenantId, async (tx) => {
+      const [setting, ledgers, customers] = await Promise.all([
+        tx.loyaltySetting.findUnique({ where: { tenantId } }),
+        tx.loyaltyLedger.findMany({
+          where: { tenantId },
+          orderBy: { createdAt: "asc" },
+        }),
+        tx.customer.findMany({
+          where: { tenantId, loyaltyPointsBalance: { gt: 0 } },
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            loyaltyPointsBalance: true,
+          },
+          orderBy: { loyaltyPointsBalance: "desc" },
+          take: 10,
+        }),
+      ]);
+
+      const pointValueMinor = Number(setting?.pointValueMinor ?? 100);
+      const earnRateMinor = Number(setting?.earnRateMinor ?? 10000);
+
+      const monthlyMap = new Map<
+        string,
+        {
+          month: string;
+          issued: number;
+          redeemed: number;
+          expired: number;
+          reversed: number;
+        }
+      >();
+
+      let totalPointsIssued = 0;
+      let totalPointsRedeemed = 0;
+      let totalPointsExpired = 0;
+      let totalPointsReversed = 0;
+
+      for (const entry of ledgers) {
+        const d = entry.createdAt;
+        const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+        if (!monthlyMap.has(monthKey)) {
+          monthlyMap.set(monthKey, {
+            month: monthKey,
+            issued: 0,
+            redeemed: 0,
+            expired: 0,
+            reversed: 0,
+          });
+        }
+        const m = monthlyMap.get(monthKey)!;
+
+        switch (entry.type) {
+          case "EARN":
+          case "REFUND_REDEEM":
+            m.issued += entry.points;
+            totalPointsIssued += entry.points;
+            break;
+          case "REDEEM":
+            m.redeemed += Math.abs(entry.points);
+            totalPointsRedeemed += Math.abs(entry.points);
+            break;
+          case "EXPIRE":
+            m.expired += Math.abs(entry.points);
+            totalPointsExpired += Math.abs(entry.points);
+            break;
+          case "REVERSE_EARN":
+            m.reversed += Math.abs(entry.points);
+            totalPointsReversed += Math.abs(entry.points);
+            break;
+          case "ADJUST":
+            if (entry.points > 0) {
+              m.issued += entry.points;
+              totalPointsIssued += entry.points;
+            } else {
+              m.reversed += Math.abs(entry.points);
+              totalPointsReversed += Math.abs(entry.points);
+            }
+            break;
+        }
+      }
+
+      const monthly = Array.from(monthlyMap.values())
+        .sort((a, b) => b.month.localeCompare(a.month))
+        .map((m) => ({
+          month: m.month,
+          issued: m.issued,
+          redeemed: m.redeemed,
+          expired: m.expired,
+          reversed: m.reversed,
+          netChange: m.issued - m.redeemed - m.expired - m.reversed,
+        }));
+
+      const allActiveCustomers = await tx.customer.aggregate({
+        where: { tenantId, loyaltyPointsBalance: { gt: 0 } },
+        _sum: { loyaltyPointsBalance: true },
+      });
+      const totalOutstandingPoints = allActiveCustomers._sum.loyaltyPointsBalance || 0;
+      const liabilityMinor = totalOutstandingPoints * pointValueMinor;
+
+      const topCustomers = customers.map((c) => ({
+        id: c.id,
+        name: c.name,
+        phone: c.phone,
+        pointsBalance: c.loyaltyPointsBalance,
+        liabilityMinor: c.loyaltyPointsBalance * pointValueMinor,
+      }));
+
+      return {
+        summary: {
+          totalPointsIssued,
+          totalPointsRedeemed,
+          totalPointsExpired,
+          totalPointsReversed,
+          totalOutstandingPoints,
+          liabilityMinor,
+          pointValueMinor,
+          earnRateMinor,
+        },
+        monthly,
+        topCustomers,
       };
     });
   }

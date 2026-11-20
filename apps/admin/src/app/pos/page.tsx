@@ -693,7 +693,11 @@ export default function PosPage() {
         const promoRes = await apiFetch("/promotions?status=active");
         if (promoRes.ok) {
           const promoJson = await promoRes.json();
-          const pList = promoJson.data || [];
+          const pList = Array.isArray(promoJson.data)
+            ? promoJson.data
+            : Array.isArray(promoJson.data?.data)
+            ? promoJson.data.data
+            : [];
           setActivePromotions(pList);
           await db.settings.put({ key: "cachedPromotions", value: pList });
         }

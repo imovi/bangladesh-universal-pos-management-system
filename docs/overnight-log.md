@@ -2036,6 +2036,12 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - *Failure analysis:* Step 17 ("Run Admin Dashboard E2E tests") failed. Steps 1-16 (build, lint, unit tests with coverage, database migrations, demo seeding) were all green.
   - *Cause:* In `apps/admin/e2e/promotions-pos-flow.spec.ts`, the new test scenario (`offline sale with promotion ended before sync`) navigated to `/pos` directly without logging in first. Because Playwright creates an isolated browser context for each test, `/pos` redirected to `/login`, where POS elements were not found and the test timed out.
   - *Fix:* Extracted `loginAndGoToPos(page)` helper and invoked it in both test cases.
+- **Fix Commit 1:** `3d61aa7` (pushed).
+- **CI Run 2:** `44721789069` (Status: `completed`, Conclusion: `failure`).
+  - *Failure analysis:* Step 17 ("Run Admin Dashboard E2E tests") failed. Steps 1-16 passed.
+  - *Root Cause 1:* In `apps/admin/src/app/pos/page.tsx` line 696, `promoRes = await apiFetch('/promotions?status=active')` returned `{ data: [...], meta: ... }` wrapped by `TransformInterceptor`. Setting `pList = promoJson.data || []` set `activePromotions` to an object instead of an array, breaking client-side promotion calculations and preventing `cachedPromotions` array verification in IndexedDB, so promotion badges never appeared in POS.
+  - *Root Cause 2:* In `apps/admin/e2e/promotions-pos-flow.spec.ts`, the checkout locator targeted `[data-testid="checkout-button"]`, but the actual button attribute in `pos/page.tsx` is `pos-checkout-button`.
+  - *Root Cause 3:* Selecting a variant cell in `VariantPickerModal` closes the modal immediately upon item selection. Clicking subsequent variant cells failed because the modal was closed; updated test to increment quantity using the cart's `qty-plus-0` control.
 
 
 

@@ -114,26 +114,19 @@ test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
     await expect(prodCard).toBeVisible({ timeout: 10000 });
     await prodCard.click();
 
-    // Select variant cells to add 3 units
+    // Select variant cell to add 1st unit (modal closes on select)
     const varCells = page.locator('[data-testid^="variant-cell-"]');
     await expect(varCells.first()).toBeVisible({ timeout: 8000 });
+    await varCells.first().click();
+    await expect(varCells.first()).toBeHidden({ timeout: 5000 });
 
-    const cellCount = await varCells.count();
-    if (cellCount >= 3) {
-      // Add 3 different variants
-      await varCells.nth(0).click();
-      await page.waitForTimeout(200);
-      await varCells.nth(1).click();
-      await page.waitForTimeout(200);
-      await varCells.nth(2).click();
-    } else {
-      // Click first cell 3 times
-      await varCells.first().click();
-      await page.waitForTimeout(200);
-      await varCells.first().click();
-      await page.waitForTimeout(200);
-      await varCells.first().click();
-    }
+    // Use cart qty-plus button twice to reach 3 units for Buy 2 Get 1
+    const qtyPlus = page.locator('[data-testid="qty-plus-0"]');
+    await expect(qtyPlus).toBeVisible({ timeout: 5000 });
+    await qtyPlus.click();
+    await page.waitForTimeout(300);
+    await qtyPlus.click();
+    await page.waitForTimeout(300);
 
     // Verify promo badge is displayed under promotional line
     const promoBadge = page.locator('[data-testid^="line-promo-badge-"]').first();
@@ -144,7 +137,7 @@ test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
     await expect(savingsRow).toBeVisible({ timeout: 5000 });
 
     // Click checkout (F4)
-    const checkoutBtn = page.locator('[data-testid="checkout-button"]');
+    const checkoutBtn = page.locator('[data-testid="pos-checkout-button"], [data-testid="checkout-button"]');
     await expect(checkoutBtn).toBeEnabled({ timeout: 5000 });
     await checkoutBtn.click();
 
@@ -280,7 +273,7 @@ test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
     const promoBadge = page.locator('[data-testid^="line-promo-badge-"]').first();
     await expect(promoBadge).toBeVisible({ timeout: 5000 });
 
-    const checkoutBtn = page.locator('[data-testid="checkout-button"]');
+    const checkoutBtn = page.locator('[data-testid="pos-checkout-button"], [data-testid="checkout-button"]');
     await expect(checkoutBtn).toBeEnabled({ timeout: 5000 });
     await checkoutBtn.click();
 

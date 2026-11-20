@@ -2122,6 +2122,54 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
 - **CI Run 2:** `44741279973` (Status: `completed`, Conclusion: `success`).
   - *Result:* All 17 CI steps passed green (Build, Lint, Unit tests with coverage, Database migrations, Demo seed, Reset & seed E2E database, Run Admin Dashboard E2E tests including POS coupon flow, Development database untouched check).
 
+### Milestone E4: Loyalty points
+
+- **Start Time:** 2026-11-20 22:30 +06:00
+- **What Was Built:**
+  1. **Shared Schemas & Types:**
+     - Created `packages/shared/src/schemas/loyalty.schemas.ts` defining `UpdateLoyaltySettingsSchema`, `AdjustLoyaltyPointsSchema`, and `LoyaltyLedgerQuerySchema`.
+     - Added `"points"` to `SALE_PAYMENT_METHODS` in `packages/shared/src/schemas/sales.schemas.ts`.
+     - Built `@universal-pos/shared`.
+  2. **API Backend Modules:**
+     - Created `apps/api/src/modules/loyalty/loyalty.service.ts` with tenant isolation (`runWithTenant`), settings management (`findSettings`, `updateSettings`), customer ledger pagination (`findCustomerLedger`), manual adjustments (`adjustPoints`), and daily FIFO expiry (`expirePointsDaily`) scheduled at 03:00 Asia/Dhaka.
+     - Created `apps/api/src/modules/loyalty/loyalty.controller.ts` with endpoints:
+       - `GET /settings/loyalty` (`PERMISSIONS.TENANT_READ`)
+       - `PATCH /settings/loyalty` (`PERMISSIONS.LOYALTY_MANAGE`)
+       - `GET /customers/:id/loyalty/ledger` (`PERMISSIONS.CUSTOMER_READ`)
+       - `POST /customers/:id/loyalty/adjust` (`PERMISSIONS.LOYALTY_ADJUST`)
+     - Integrated `LoyaltyModule` and registered `ScheduleModule.forRoot()` in `AppModule`.
+     - In `SalesService.create`:
+       - Validated points redemption eligibility, minimum balance, and maximum bill share.
+       - Row-level customer locking inside Prisma transaction to prevent double redemption.
+       - Deferred `tx.loyaltyLedger.create` for `REDEEM` until after sale persistence to guarantee `loyalty_ledger_sale_id_fkey` integrity.
+       - Applied post-sale point accrual on non-points net bill with expiry date calculation.
+       - Idempotent offline sync check prevents duplicate point accrual on re-sync.
+     - In `ReturnsService.createReturn`:
+       - Proportional reversal of points earned on sale (`REVERSE_EARN`).
+       - Proportional refund of points redeemed on sale (`REFUND_REDEEM`).
+  3. **Admin UI & POS Integration:**
+     - Created Loyalty Settings Page: `apps/admin/src/app/(admin)/settings/loyalty/page.tsx` with toggle, earn rate, point value, minimum redeem points, maximum bill share, and expiry months.
+     - Added sidebar link in `apps/admin/src/components/layout/sidebar.tsx` and i18n dictionaries in `bn.ts` and `en.ts`.
+     - Updated Customer Detail Page: `apps/admin/src/app/(admin)/customers/[id]/page.tsx` with Loyalty Points KPI card, ledger tab with type filter, and manual adjustment modal.
+     - Updated POS Page: `apps/admin/src/app/pos/page.tsx` with customer points pill, points payment support, and points earned/used/balance summary on receipt.
+     - Updated `PaymentDialog`: added points payment method, maximum usable calculation, points conversion label, and offline redemption blocker.
+     - Updated `ReceiptView`: added `receipt-loyalty-section` displaying points earned, used, and new balance.
+     - Cleaned all inline `locale === 'bn'` strings into dictionary entries to comply with the inline i18n count ceiling (685) and pure Bangla formatting rules.
+  4. **Automated Tests:**
+     - Integration suite in `apps/api/test/loyalty-engine.spec.ts` (all 8 scenarios pass):
+       1. Earn points on sale.
+       2. Negative balance blocks redemption.
+       3. Earn more points crossing threshold.
+       4. Parallel redemption of the same points: exactly one succeeds.
+       5. Return with reverse of earned points and refund of redeemed points.
+       6. Expiry FIFO with mixed earn dates, run twice on the same day is idempotent.
+       7. Offline sale with customer earns points when it syncs, exactly once.
+       8. Shift figures: points payment method appears in method totals and NOT in expected cash.
+     - Playwright E2E spec in `apps/admin/e2e/loyalty-pos-flow.spec.ts`:
+       - Sale 1: customer attached, cash purchase, points earned and displayed on receipt, verified against API.
+       - Sale 2: customer attached, points redeemed in payment dialog, points decremented, verified against API.
+
+
 
 
 

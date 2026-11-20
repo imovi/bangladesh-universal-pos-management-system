@@ -20,6 +20,8 @@ import {
   roundHalfUp,
   PromotionRule,
   PromotionEvaluationLineItem,
+  earnPoints,
+  maxRedeemablePoints,
 } from "@universal-pos/shared";
 import { validateDiscountsNonNegative, enforceDiscountAndOverrideLimits } from "./sales-discount.helper.js";
 import { computeSalePayloadHash, matchesSalePayload } from "./sales-hash.helper.js";
@@ -1080,11 +1082,163 @@ export class SalesService {
         const saleId = dto.id;
         const costMap = new Map(variants.map((v) => [v.id, v.costMinor]));
 
+        let pointsDiscountMinor = 0n;
+        if (dto.pointsRedeemed && dto.pointsRedeemed > 0) {
+          if (!dto.customerId) {
+            throw new BadRequestException({
+              code: "CUSTOMER_REQUIRED_FOR_LOYALTY",
+              message: "Customer is required to redeem loyalty points",
+            });
+          }
+
+          if (dto.isOffline) {
+            throw new UnprocessableEntityException({
+              code: "OFFLINE_POINTS_REDEMPTION_NOT_ALLOWED",
+              message: "Points redemption is not allowed offline",
+            });
+          }
+
+          const loyaltySetting = await tx.loyaltySetting.findUnique({
+            where: { tenantId },
+          });
+
+          if (!loyaltySetting || !loyaltySetting.isEnabled) {
+            throw new UnprocessableEntityException({
+              code: "LOYALTY_NOT_ENABLED",
+              message: "Loyalty program is not enabled for this tenant",
+            });
+          }
+
+          const [lockedCust] = (await tx.$queryRaw`
+            SELECT id, loyalty_points_balance FROM customers
+            WHERE id = ${dto.customerId}::uuid AND tenant_id = ${tenantId}::uuid
+            FOR UPDATE;
+          `) as Array<{ id: string; loyalty_points_balance: number }>;
+
+          if (!lockedCust) {
+            throw new NotFoundException({
+              code: "CUSTOMER_NOT_FOUND",
+              message: "Customer not found",
+            });
+          }
+
+          if (lockedCust.loyalty_points_balance < 0) {
+            throw new UnprocessableEntityException({
+              code: "NEGATIVE_BALANCE_BLOCKED",
+              message: "Cannot redeem points with negative points balance",
+            });
+          }
+
+          if (lockedCust.loyalty_points_balance < dto.pointsRedeemed) {
+            throw new UnprocessableEntityException({
+              code: "INSUFFICIENT_LOYALTY_POINTS",
+              message: `Insufficient loyalty points: requested ${dto.pointsRedeemed}, available ${lockedCust.loyalty_points_balance}`,
+            });
+          }
+
+          const maxRedeem = maxRedeemablePoints(
+            calculated.totalMinor,
+            lockedCust.loyalty_points_balance,
+            {
+              enabled: loyaltySetting.isEnabled,
+              minRedeemPoints: loyaltySetting.minRedeemPoints,
+              maxBillSharePercent: loyaltySetting.maxBillSharePercent,
+              pointValueMinor: Number(loyaltySetting.pointValueMinor),
+            },
+          );
+
+          if (dto.pointsRedeemed > maxRedeem.maxPoints) {
+            throw new UnprocessableEntityException({
+              code: "EXCEEDS_MAX_REDEEMABLE_POINTS",
+              message: `Points redeemed (${dto.pointsRedeemed}) exceeds maximum allowed (${maxRedeem.maxPoints})`,
+            });
+          }
+
+          pointsDiscountMinor = BigInt(dto.pointsRedeemed) * BigInt(loyaltySetting.pointValueMinor);
+          const pointsPayment = dto.payments.find((p) => p.paymentMethod === "points");
+          if (!pointsPayment || BigInt(pointsPayment.amountMinor) !== pointsDiscountMinor) {
+            throw new BadRequestException({
+              code: "POINTS_PAYMENT_AMOUNT_MISMATCH",
+              message: `Points payment amount must equal points value (expected ${pointsDiscountMinor})`,
+            });
+          }
+
+          await tx.customer.update({
+            where: { id: dto.customerId },
+            data: {
+              loyaltyPointsBalance: {
+                decrement: dto.pointsRedeemed,
+              },
+            },
+          });
+        }
+
         const sale = await this.executeSaleInsert(tx, tenantId, dto, {
           saleId, inv, calc: calculated, paid: paidMinor, change: changeMinor, due: dueMinor,
           userId, costMap, originalPrices, payloadHash, occurredAt, syncedAt, isOffline, catalogVersion,
           billPromotionId, billPromotionDiscountMinor, couponCode: dto.couponCode || null,
         });
+
+        if (dto.pointsRedeemed && dto.pointsRedeemed > 0 && dto.customerId) {
+          await tx.loyaltyLedger.create({
+            data: {
+              id: uuidv7(),
+              tenantId,
+              customerId: dto.customerId,
+              saleId,
+              type: "REDEEM",
+              points: -dto.pointsRedeemed,
+              reason: `Redeemed on sale ${inv}`,
+            },
+          });
+        }
+
+        if (dto.customerId) {
+          const loyaltySetting = await tx.loyaltySetting.findUnique({
+            where: { tenantId },
+          });
+
+          if (loyaltySetting && loyaltySetting.isEnabled) {
+            const existingEarn = await tx.loyaltyLedger.findFirst({
+              where: { tenantId, saleId, type: "EARN" },
+            });
+
+            if (!existingEarn) {
+              const earned = earnPoints(
+                calculated.totalMinor,
+                pointsDiscountMinor,
+                loyaltySetting.earnRateMinor,
+              );
+
+              if (earned > 0) {
+                const expiresAt = new Date(occurredAt);
+                expiresAt.setMonth(expiresAt.getMonth() + loyaltySetting.expiryMonths);
+
+                await tx.loyaltyLedger.create({
+                  data: {
+                    id: uuidv7(),
+                    tenantId,
+                    customerId: dto.customerId,
+                    saleId,
+                    type: "EARN",
+                    points: earned,
+                    expiresAt,
+                    reason: `Earned on sale ${inv}`,
+                  },
+                });
+
+                await tx.customer.update({
+                  where: { id: dto.customerId },
+                  data: {
+                    loyaltyPointsBalance: {
+                      increment: earned,
+                    },
+                  },
+                });
+              }
+            }
+          }
+        }
 
         if (appliedPromoSummary.length > 0) {
           for (const ap of appliedPromoSummary) {

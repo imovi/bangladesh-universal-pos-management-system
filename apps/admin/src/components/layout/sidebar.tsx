@@ -107,6 +107,7 @@ export function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
       permission: "tenant.read",
       subItems: [
         { titleKey: "shopSettings", href: "/settings/shop", permission: "tenant.read" },
+        { titleKey: "loyaltySettings", href: "/settings/loyalty", permission: "tenant.read" },
         { titleKey: "branches", href: "/settings/branches", permission: "branch.read" },
         { titleKey: "usersAndRoles", href: "/settings/users", permission: "user.read" },
         { titleKey: "roles", href: "/settings/roles", permission: "role.read" },

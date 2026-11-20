@@ -28,6 +28,7 @@ import {
   Trash2,
   AlertCircle,
   Loader2,
+  Award,
 } from "lucide-react";
 
 interface PaymentDialogProps {
@@ -41,6 +42,13 @@ interface PaymentDialogProps {
   customer?: { id: string; name: string; phone: string; creditLimitMinor?: number } | null;
   canSellCredit?: boolean;
   customerDueMinor?: number;
+  loyalty?: {
+    balance: number;
+    pointValueMinor: number;
+    minRedeemPoints: number;
+    maxBillSharePercent: number;
+    isEnabled: boolean;
+  } | null;
 }
 
 const PAYMENT_METHODS = [
@@ -50,6 +58,7 @@ const PAYMENT_METHODS = [
   { id: "rocket", labelBn: "রকেট", labelEn: "Rocket", icon: Smartphone },
   { id: "card", labelBn: "কার্ড", labelEn: "Card", icon: CreditCard },
   { id: "bank_transfer", labelBn: "ব্যাংক", labelEn: "Bank", icon: Building },
+  { id: "points", labelBn: "পয়েন্ট", labelEn: "Points", icon: Award },
 ] as const;
 
 export function PaymentDialog({
@@ -63,6 +72,7 @@ export function PaymentDialog({
   customer,
   canSellCredit,
   customerDueMinor,
+  loyalty,
 }: PaymentDialogProps) {
   const { strings } = useTranslation();
   const [exchangeRefundMethod, setExchangeRefundMethod] = useState<string>("cash");
@@ -77,6 +87,25 @@ export function PaymentDialog({
       setPayments([{ paymentMethod: "cash", amountMinor: Math.max(0, totalPayableMinor) }]);
     }
   }, [isOpen, totalPayableMinor]);
+
+  const canUseLoyalty = Boolean(
+    isOnline !== false &&
+    loyalty?.isEnabled &&
+    customer?.id &&
+    ((loyalty.balance || 0) >= (loyalty.minRedeemPoints || 0))
+  );
+
+  const maxPointsBillMinor = Math.floor(totalPayableMinor * ((loyalty?.maxBillSharePercent ?? 50) / 100));
+  const maxPointsBalanceMinor = Math.max(0, (loyalty?.balance ?? 0) * (loyalty?.pointValueMinor ?? 100));
+  const maxRedeemAmountMinor = canUseLoyalty ? Math.min(maxPointsBillMinor, maxPointsBalanceMinor) : 0;
+  const maxRedeemPoints = Math.floor(maxRedeemAmountMinor / (loyalty?.pointValueMinor || 100));
+
+  const availableMethods = PAYMENT_METHODS.filter((m) => {
+    if (m.id === "points") {
+      return canUseLoyalty && maxRedeemAmountMinor > 0;
+    }
+    return true;
+  });
 
   if (!isOpen) return null;
 
@@ -97,9 +126,19 @@ export function PaymentDialog({
         }
       : calculatePaymentChange(totalPayableMinor, payments);
 
+  const hasPointsPayment = payments.some((p) => p.paymentMethod === "points");
+  if (isOnline === false && hasPointsPayment) {
+    calculation.isValid = false;
+    calculation.errorMessage = strings.loyalty.offlinePointsNotAllowed;
+  }
+
   const handleUpdatePayment = (index: number, updates: Partial<PaymentItemInput>) => {
     setPayments((prev) => {
       const next = [...prev];
+      const targetMethod = updates.paymentMethod || next[index].paymentMethod;
+      if (targetMethod === "points" && updates.amountMinor !== undefined) {
+        updates.amountMinor = Math.min(updates.amountMinor, maxRedeemAmountMinor);
+      }
       next[index] = { ...next[index], ...updates };
       return next;
     });
@@ -107,9 +146,13 @@ export function PaymentDialog({
 
   const handleAddMethod = (method: PaymentItemInput["paymentMethod"]) => {
     const remainingDue = calculation.balanceDueMinor;
+    let initialAmount = remainingDue > 0 ? remainingDue : 0;
+    if (method === "points") {
+      initialAmount = Math.min(initialAmount, maxRedeemAmountMinor);
+    }
     setPayments((prev) => [
       ...prev,
-      { paymentMethod: method, amountMinor: remainingDue > 0 ? remainingDue : 0 },
+      { paymentMethod: method, amountMinor: initialAmount },
     ]);
   };
 
@@ -265,6 +308,34 @@ export function PaymentDialog({
 
           {!isExchangeRefund && !isExchangeEven && (
             <>
+              {/* Customer Loyalty Banner */}
+              {customer?.id && loyalty?.isEnabled && (
+                <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2" data-testid="payment-loyalty-banner">
+                  <div className="flex items-center gap-2">
+                    <Award className="h-4 w-4 text-primary shrink-0" />
+                    <div>
+                      <span className="font-semibold text-foreground">
+                        {strings.loyalty.posBalance}
+                      </span>
+                      <span className="font-mono font-bold text-primary" data-testid="payment-loyalty-balance">
+                        {loyalty.balance} {strings.loyalty.pts}
+                      </span>
+                      <span className="text-muted-foreground ml-1.5 font-mono">
+                        ({formatMoney(loyalty.balance * (loyalty.pointValueMinor || 100))})
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-muted-foreground">
+                      {strings.loyalty.posMaxUsable}
+                    </span>
+                    <span className="font-mono font-bold text-foreground" data-testid="payment-max-redeemable-points">
+                      {maxRedeemPoints} {strings.loyalty.pts} ({formatMoney(maxRedeemAmountMinor)})
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Quick Cash Buttons */}
               <div>
                 <Label className="text-xs text-muted-foreground mb-2 block font-medium">
@@ -316,7 +387,7 @@ export function PaymentDialog({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {PAYMENT_METHODS.map((m) => (
+                        {availableMethods.map((m) => (
                           <SelectItem key={m.id} value={m.id} className="text-xs">
                             {formatPaymentMethod(m.id, strings)}
                           </SelectItem>
@@ -347,7 +418,16 @@ export function PaymentDialog({
                       />
                     </div>
 
-                    {!isCash && (
+                    {p.paymentMethod === "points" && (
+                      <span
+                        className="text-[11px] text-primary font-semibold font-mono self-center px-1 shrink-0"
+                        data-testid={`points-converted-label-${idx}`}
+                      >
+                        ({Math.floor(p.amountMinor / (loyalty?.pointValueMinor || 100))} {strings.loyalty.pts})
+                      </span>
+                    )}
+
+                    {!isCash && p.paymentMethod !== "points" && (
                       <Input
                         type="text"
                         value={p.reference || ""}
@@ -378,7 +458,7 @@ export function PaymentDialog({
 
             {/* Add Payment Method Button */}
             <div className="flex flex-wrap gap-1.5 pt-1">
-              {PAYMENT_METHODS.map((m) => (
+              {availableMethods.map((m) => (
                 <Button
                   key={m.id}
                   type="button"

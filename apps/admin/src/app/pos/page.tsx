@@ -201,6 +201,19 @@ export default function PosPage() {
     creditLimitMinor: number;
     availableCreditMinor: number;
   } | null>(null);
+  const [loyaltySettings, setLoyaltySettings] = useState<any>(null);
+
+  useEffect(() => {
+    apiFetch("/settings/loyalty")
+      .then((r) => r.json())
+      .then((data) => {
+        const s = data.data || data;
+        if (s && s.isEnabled !== undefined) {
+          setLoyaltySettings(s);
+        }
+      })
+      .catch(() => {});
+  }, [apiFetch]);
 
   useEffect(() => {
     if (!selectedCustomer.id) {
@@ -220,6 +233,20 @@ export default function PosPage() {
         }
       })
       .catch(() => {});
+
+    apiFetch(`/customers/${selectedCustomer.id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const c = data.data || data;
+        if (active && c && c.loyaltyPointsBalance !== undefined) {
+          setSelectedCustomer((prev) => ({
+            ...prev,
+            loyaltyPointsBalance: c.loyaltyPointsBalance,
+          }));
+        }
+      })
+      .catch(() => {});
+
     return () => {
       active = false;
     };
@@ -1313,6 +1340,11 @@ export default function PosPage() {
       }
     } catch {}
 
+    const pointsPayment = payments.find((p) => p.paymentMethod === "points");
+    const pointsRedeemed = (pointsPayment && loyaltySettings?.pointValueMinor)
+      ? Math.floor(pointsPayment.amountMinor / (loyaltySettings.pointValueMinor || 100))
+      : undefined;
+
     const salePayload = {
       id: saleId,
       shiftId: activeShift.id,
@@ -1323,6 +1355,7 @@ export default function PosPage() {
       isOffline: isActuallyOffline,
       catalogVersion: currentCatalogVersion,
       customerId: selectedCustomer.id || undefined,
+      pointsRedeemed,
       billDiscount: billDiscount
         ? {
             type: billDiscount.type,
@@ -1467,6 +1500,28 @@ export default function PosPage() {
 
       // 3. Format receipt data
       const totalPaid = payments.reduce((sum, p) => sum + p.amountMinor, 0);
+
+      const redeemedPts = (pointsPayment && loyaltySettings?.pointValueMinor)
+        ? Math.floor(pointsPayment.amountMinor / (loyaltySettings.pointValueMinor || 100))
+        : undefined;
+
+      const nonPointsTotal = cartTotals.totalMinor - (pointsPayment?.amountMinor || 0);
+      const earnedPts = (selectedCustomer.id && loyaltySettings?.isEnabled && !isActuallyOffline && nonPointsTotal > 0)
+        ? Math.floor(nonPointsTotal / (loyaltySettings.earnRateMinor || 10000))
+        : undefined;
+
+      const currentCustPts = Number(selectedCustomer.loyaltyPointsBalance || 0);
+      const newCustPts = selectedCustomer.id && loyaltySettings?.isEnabled
+        ? currentCustPts - (redeemedPts || 0) + (earnedPts || 0)
+        : undefined;
+
+      if (newCustPts !== undefined) {
+        setSelectedCustomer((prev) => ({
+          ...prev,
+          loyaltyPointsBalance: newCustPts,
+        }));
+      }
+
       const receiptData: ReceiptData = {
         saleId,
         invoiceNumber: displayInvoiceNumber,
@@ -1481,6 +1536,9 @@ export default function PosPage() {
         shopName: posConfig.shopName,
         receiptHeader: posConfig.receiptHeader,
         receiptFooter: posConfig.receiptFooter,
+        pointsEarned: earnedPts,
+        pointsRedeemed: redeemedPts,
+        newPointsBalance: newCustPts,
         items: cartItems.map((it, idx) => {
           const calcLine = cartTotals.lines[idx];
           return {
@@ -2381,6 +2439,14 @@ export default function PosPage() {
                   {formatMoney(customerBalance?.currentDueMinor ?? Number(selectedCustomer.currentDueMinor || 0))}
                 </span>
               )}
+              {Boolean(selectedCustomer.id) && (
+                <span
+                  className="ml-1.5 px-1.5 py-0.5 bg-primary/15 text-primary text-[10px] rounded font-mono font-semibold shrink-0"
+                  data-testid="pos-customer-loyalty-pill"
+                >
+                  {selectedCustomer.loyaltyPointsBalance ?? 0} {strings.loyalty.pts}
+                </span>
+              )}
             </Button>
 
             {/* Hold, Return & Clear Cart Actions */}
@@ -2825,6 +2891,17 @@ export default function PosPage() {
         canSellCredit={hasPermission("sale.credit")}
         customerDueMinor={
           customerBalance?.currentDueMinor ?? Number(selectedCustomer.currentDueMinor || 0)
+        }
+        loyalty={
+          loyaltySettings?.isEnabled
+            ? {
+                balance: Number(selectedCustomer.loyaltyPointsBalance || 0),
+                pointValueMinor: Number(loyaltySettings.pointValueMinor || 100),
+                minRedeemPoints: Number(loyaltySettings.minRedeemPoints || 100),
+                maxBillSharePercent: Number(loyaltySettings.maxBillSharePercent || 50),
+                isEnabled: Boolean(loyaltySettings.isEnabled),
+              }
+            : null
         }
       />
 

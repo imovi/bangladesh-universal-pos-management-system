@@ -23,6 +23,7 @@ import {
   calculateShiftCashTotals,
   roundHalfUp,
   parseDateFilterRange,
+  reversePoints,
 } from "@universal-pos/shared";
 import {
   lockSaleItems,
@@ -374,6 +375,102 @@ export class ReturnsService {
             data: { timesUsed: { decrement: 1 } },
           });
           await tx.couponUsage.delete({ where: { id: usage.id } });
+        }
+      }
+
+      // 13c. Loyalty points reversal & refund on return
+      if (sale.customerId) {
+        const saleLoyaltyLedgers = await tx.loyaltyLedger.findMany({
+          where: { tenantId, saleId: sale.id },
+        });
+
+        // 1. Reversal of points earned on sale
+        const earnEntry = saleLoyaltyLedgers.find((l) => l.type === "EARN");
+        if (earnEntry && earnEntry.points > 0) {
+          const pastReversed = saleLoyaltyLedgers
+            .filter((l) => l.type === "REVERSE_EARN")
+            .reduce((sum, l) => sum + Math.abs(l.points), 0);
+          const maxRemainingToReverse = Math.max(0, earnEntry.points - pastReversed);
+
+          if (maxRemainingToReverse > 0) {
+            let pointsToReverse = reversePoints(
+              earnEntry.points,
+              totalRefundMinor,
+              sale.totalMinor,
+            );
+            if (pointsToReverse > maxRemainingToReverse) {
+              pointsToReverse = maxRemainingToReverse;
+            }
+
+            if (pointsToReverse > 0) {
+              await tx.loyaltyLedger.create({
+                data: {
+                  id: uuidv7(),
+                  tenantId,
+                  customerId: sale.customerId,
+                  saleId: sale.id,
+                  returnId: saleReturn.id,
+                  type: "REVERSE_EARN",
+                  points: -pointsToReverse,
+                  reason: `Reversed on return ${returnNumber}`,
+                },
+              });
+
+              await tx.customer.update({
+                where: { id: sale.customerId },
+                data: {
+                  loyaltyPointsBalance: {
+                    decrement: pointsToReverse,
+                  },
+                },
+              });
+            }
+          }
+        }
+
+        // 2. Refund of points redeemed on sale
+        const redeemEntry = saleLoyaltyLedgers.find((l) => l.type === "REDEEM");
+        if (redeemEntry && Math.abs(redeemEntry.points) > 0) {
+          const redeemedPoints = Math.abs(redeemEntry.points);
+          const pastRefunded = saleLoyaltyLedgers
+            .filter((l) => l.type === "REFUND_REDEEM")
+            .reduce((sum, l) => sum + l.points, 0);
+          const maxRemainingToRefund = Math.max(0, redeemedPoints - pastRefunded);
+
+          if (maxRemainingToRefund > 0) {
+            let pointsToRefund = reversePoints(
+              redeemedPoints,
+              totalRefundMinor,
+              sale.totalMinor,
+            );
+            if (pointsToRefund > maxRemainingToRefund) {
+              pointsToRefund = maxRemainingToRefund;
+            }
+
+            if (pointsToRefund > 0) {
+              await tx.loyaltyLedger.create({
+                data: {
+                  id: uuidv7(),
+                  tenantId,
+                  customerId: sale.customerId,
+                  saleId: sale.id,
+                  returnId: saleReturn.id,
+                  type: "REFUND_REDEEM",
+                  points: pointsToRefund,
+                  reason: `Refunded points on return ${returnNumber}`,
+                },
+              });
+
+              await tx.customer.update({
+                where: { id: sale.customerId },
+                data: {
+                  loyaltyPointsBalance: {
+                    increment: pointsToRefund,
+                  },
+                },
+              });
+            }
+          }
         }
       }
 

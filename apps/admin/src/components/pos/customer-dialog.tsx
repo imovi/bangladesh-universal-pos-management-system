@@ -15,6 +15,7 @@ export interface SelectedCustomer {
   phone?: string;
   creditLimitMinor?: number;
   currentDueMinor?: number;
+  loyaltyPointsBalance?: number;
 }
 
 interface CustomerDialogProps {
@@ -295,6 +296,7 @@ export function CustomerDialog({
                           phone: c.phone,
                           creditLimitMinor: Number(c.creditLimitMinor || 0),
                           currentDueMinor: Number(c.currentDueMinor || 0),
+                          loyaltyPointsBalance: Number(c.loyaltyPointsBalance || 0),
                         });
                         onClose();
                       }}

@@ -298,7 +298,7 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
           {receipt.discountMinor > 0 && (
             <div className="flex justify-between font-bold text-emerald-700">
               <span>{strings.promotions.pos.totalSavings}:</span>
-              <span className="tabular-nums whitespace-nowrap">৳{formatMoney(receipt.discountMinor)}</span>
+              <span className="tabular-nums whitespace-nowrap">{formatMoney(receipt.discountMinor)}</span>
             </div>
           )}
           {receipt.taxMinor > 0 && (
@@ -361,6 +361,33 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
             </div>
           )}
         </div>
+
+        {/* Loyalty Points Summary */}
+        {(Boolean(receipt.pointsEarned) || Boolean(receipt.pointsRedeemed) || receipt.newPointsBalance !== undefined) && (
+          <div className="space-y-1 pb-2 mb-2 border-b border-dashed border-gray-400 text-[11px] font-sans" data-testid="receipt-loyalty-section">
+            <div className="font-semibold text-gray-800">
+              {strings.loyalty.receiptSectionTitle}
+            </div>
+            {Boolean(receipt.pointsEarned && receipt.pointsEarned > 0) && (
+              <div className="flex justify-between text-emerald-700">
+                <span>{strings.loyalty.receiptEarned}</span>
+                <span className="font-mono font-bold" data-testid="receipt-points-earned">+{receipt.pointsEarned}</span>
+              </div>
+            )}
+            {Boolean(receipt.pointsRedeemed && receipt.pointsRedeemed > 0) && (
+              <div className="flex justify-between text-blue-700">
+                <span>{strings.loyalty.receiptUsed}</span>
+                <span className="font-mono font-bold" data-testid="receipt-points-redeemed">-{receipt.pointsRedeemed}</span>
+              </div>
+            )}
+            {receipt.newPointsBalance !== undefined && (
+              <div className="flex justify-between font-semibold text-gray-900 pt-0.5 border-t border-gray-200">
+                <span>{strings.loyalty.receiptNewBalance}</span>
+                <span className="font-mono font-bold" data-testid="receipt-points-balance">{receipt.newPointsBalance}</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Footer */}
         <div className="text-center pt-1 text-[10px] text-gray-600 space-y-1 font-sans">

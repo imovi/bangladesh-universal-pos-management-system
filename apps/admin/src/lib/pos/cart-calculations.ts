@@ -298,7 +298,7 @@ export function computeCartTotals(
 }
 
 export interface PaymentItemInput {
-  paymentMethod: "cash" | "card" | "bkash" | "nagad" | "rocket" | "bank_transfer";
+  paymentMethod: "cash" | "card" | "bkash" | "nagad" | "rocket" | "bank_transfer" | "credit" | "points";
   amountMinor: number;
   reference?: string;
 }

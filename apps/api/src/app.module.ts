@@ -20,6 +20,7 @@ import { SalesModule } from "./modules/sales/sales.module.js";
 import { ReportsModule } from "./modules/reports/reports.module.js";
 import { TransfersModule } from "./modules/transfers/transfers.module.js";
 import { PromotionsModule } from "./modules/promotions/promotions.module.js";
+import { LoyaltyModule } from "./modules/loyalty/loyalty.module.js";
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { PromotionsModule } from "./modules/promotions/promotions.module.js";
     ReportsModule,
     TransfersModule,
     PromotionsModule,
+    LoyaltyModule,
   ],
   controllers: [HealthController],
   providers: [

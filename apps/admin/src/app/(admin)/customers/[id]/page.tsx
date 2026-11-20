@@ -36,6 +36,7 @@ import {
   AlertCircle,
   ArrowDownLeft,
   ArrowUpRight,
+  Award,
 } from "lucide-react";
 import { formatMoney, formatDateTime } from "@/lib/utils";
 import { formatSaleStatus } from "@/i18n/formatters";
@@ -59,6 +60,7 @@ interface CustomerDetail {
   creditLimitMinor: number;
   totalSpentMinor: number;
   totalVisits: number;
+  loyaltyPointsBalance?: number;
   createdAt: string;
   sales?: CustomerSale[];
 }
@@ -109,13 +111,28 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const { apiFetch, hasPermission } = useAuth();
   const { strings, locale } = useTranslation();
 
-  const [activeTab, setActiveTab] = useState<"statement" | "purchases">("statement");
+  const [activeTab, setActiveTab] = useState<"statement" | "purchases" | "loyalty">("statement");
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [balance, setBalance] = useState<CustomerBalance | null>(null);
   const [statement, setStatement] = useState<CustomerStatement | null>(null);
   const [loading, setLoading] = useState(true);
   const [statementLoading, setStatementLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Loyalty
+  const [loyaltySettings, setLoyaltySettings] = useState<any>(null);
+  const [loyaltyLedger, setLoyaltyLedger] = useState<any[]>([]);
+  const [_loyaltyTotal, setLoyaltyTotal] = useState(0);
+  const [loyaltyPage, setLoyaltyPage] = useState(1);
+  const [loyaltyTypeFilter, setLoyaltyTypeFilter] = useState("ALL");
+  const [loyaltyLoading, setLoyaltyLoading] = useState(false);
+
+  // Adjust Modal
+  const [showAdjustModal, setShowAdjustModal] = useState(false);
+  const [adjustPoints, setAdjustPoints] = useState("");
+  const [adjustReason, setAdjustReason] = useState("");
+  const [adjustLoading, setAdjustLoading] = useState(false);
+  const [adjustError, setAdjustError] = useState<string | null>(null);
 
   // Statement date filter
   const [startDate, setStartDate] = useState("");
@@ -194,15 +211,90 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     }
   }, [apiFetch, customerId, startDate, endDate]);
 
+  const fetchLoyaltySettings = useCallback(async () => {
+    try {
+      const res = await apiFetch("/settings/loyalty");
+      if (res.ok) {
+        const json = await res.json();
+        setLoyaltySettings(json.data || json);
+      }
+    } catch {}
+  }, [apiFetch]);
+
+  const fetchLoyaltyLedger = useCallback(async () => {
+    try {
+      setLoyaltyLoading(true);
+      const params = new URLSearchParams();
+      params.set("page", loyaltyPage.toString());
+      params.set("limit", "20");
+      if (loyaltyTypeFilter !== "ALL") {
+        params.set("type", loyaltyTypeFilter);
+      }
+      const res = await apiFetch(`/customers/${customerId}/loyalty/ledger?${params.toString()}`);
+      if (res.ok) {
+        const json = await res.json();
+        const data = json.data || json;
+        setLoyaltyLedger(data.items || []);
+        setLoyaltyTotal(data.meta?.total || 0);
+      }
+    } catch {
+    } finally {
+      setLoyaltyLoading(false);
+    }
+  }, [apiFetch, customerId, loyaltyPage, loyaltyTypeFilter]);
+
   useEffect(() => {
     fetchCustomer();
-  }, [fetchCustomer]);
+    fetchLoyaltySettings();
+  }, [fetchCustomer, fetchLoyaltySettings]);
 
   useEffect(() => {
     if (activeTab === "statement") {
       fetchStatement();
+    } else if (activeTab === "loyalty") {
+      fetchLoyaltyLedger();
     }
-  }, [activeTab, fetchStatement]);
+  }, [activeTab, fetchStatement, fetchLoyaltyLedger]);
+
+  const handleAdjustSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdjustError(null);
+    const pts = parseInt(adjustPoints, 10);
+    if (isNaN(pts) || pts === 0) {
+      setAdjustError(strings.loyalty.pointsErrorValid);
+      return;
+    }
+    if (!adjustReason.trim()) {
+      setAdjustError(strings.loyalty.pointsErrorReason);
+      return;
+    }
+
+    try {
+      setAdjustLoading(true);
+      const res = await apiFetch(`/customers/${customerId}/loyalty/adjust`, {
+        method: "POST",
+        body: JSON.stringify({
+          points: pts,
+          reason: adjustReason.trim(),
+        }),
+      });
+
+      if (res.ok) {
+        setShowAdjustModal(false);
+        fetchCustomer();
+        if (activeTab === "loyalty") {
+          fetchLoyaltyLedger();
+        }
+      } else {
+        const json = await res.json().catch(() => ({}));
+        setAdjustError(json.message || "Failed to adjust points");
+      }
+    } catch (err: any) {
+      setAdjustError(err.message || "Error adjusting points");
+    } finally {
+      setAdjustLoading(false);
+    }
+  };
 
   // Load active shift for payment collection
   const openCollectPayment = async () => {
@@ -436,7 +528,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       </div>
 
       {/* Metrics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 no-print">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 no-print">
         {/* Current Due */}
         <div className={`p-5 rounded-xl border shadow-xs ${
           currentDue > 0
@@ -471,6 +563,39 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           <p className="text-[11px] text-muted-foreground mt-1">
             {locale === "bn" ? `অবশিষ্ট: ${formatMoney(availableCredit)}` : `Available: ${formatMoney(availableCredit)}`}
           </p>
+        </div>
+
+        {/* Loyalty Points */}
+        <div className="bg-card border border-border p-5 rounded-xl shadow-xs">
+          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+            <span className="font-semibold text-primary">
+              {strings.loyalty.customerLoyalty}
+            </span>
+            <Award className="h-4 w-4 text-primary" />
+          </div>
+          <span className="text-2xl font-bold font-mono tabular-nums text-foreground" data-testid="customer-loyalty-balance">
+            {customer.loyaltyPointsBalance || 0}
+          </span>
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-1">
+            <span>
+              {formatMoney(((customer.loyaltyPointsBalance || 0) * (loyaltySettings?.pointValueMinor || 100)))}
+            </span>
+            {hasPermission("loyalty.adjust") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAdjustPoints("");
+                  setAdjustReason("");
+                  setAdjustError(null);
+                  setShowAdjustModal(true);
+                }}
+                className="text-primary hover:underline font-semibold ml-2"
+                data-testid="open-adjust-points-btn"
+              >
+                {strings.loyalty.adjust}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Total Purchases */}
@@ -526,7 +651,20 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
             }`}
           >
             <ShoppingBag className="h-4 w-4" />
-            <span>{strings.customers.purchaseHistory}</span>
+            <span>{strings.loyalty.purchaseHistory}</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("loyalty")}
+            data-testid="loyalty-tab-btn"
+            className={`pb-3 px-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${
+              activeTab === "loyalty"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Award className="h-4 w-4" />
+            <span>{strings.loyalty.loyaltyLedger}</span>
           </button>
         </div>
 
@@ -776,6 +914,136 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
         </div>
       )}
 
+      {/* Tab 3: Loyalty Points Ledger */}
+      {activeTab === "loyalty" && (
+        <div className="bg-card border border-border rounded-xl shadow-xs overflow-hidden no-print">
+          <div className="p-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
+                <Award className="h-4 w-4 text-primary" />
+                <span>{strings.loyalty.loyaltyLedgerTitle}</span>
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {strings.loyalty.loyaltyLedgerSubtitle}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Select value={loyaltyTypeFilter} onValueChange={(val) => { setLoyaltyTypeFilter(val); setLoyaltyPage(1); }}>
+                <SelectTrigger className="w-[160px] h-8 text-xs" data-testid="loyalty-type-filter">
+                  <SelectValue placeholder={strings.loyalty.allTypes} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">{strings.loyalty.allTypes}</SelectItem>
+                  <SelectItem value="EARN">{strings.loyalty.typeEarn}</SelectItem>
+                  <SelectItem value="REDEEM">{strings.loyalty.typeRedeem}</SelectItem>
+                  <SelectItem value="REVERSE_EARN">{strings.loyalty.typeReverseEarn}</SelectItem>
+                  <SelectItem value="REFUND_REDEEM">{strings.loyalty.typeRefundRedeem}</SelectItem>
+                  <SelectItem value="EXPIRE">{strings.loyalty.typeExpire}</SelectItem>
+                  <SelectItem value="ADJUST">{strings.loyalty.typeAdjust}</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {hasPermission("loyalty.adjust") && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs gap-1.5"
+                  onClick={() => {
+                    setAdjustPoints("");
+                    setAdjustReason("");
+                    setAdjustError(null);
+                    setShowAdjustModal(true);
+                  }}
+                  data-testid="adjust-points-action-btn"
+                >
+                  <Award className="h-3.5 w-3.5" />
+                  <span>{strings.loyalty.adjust}</span>
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-muted/50 text-muted-foreground font-medium border-b border-border text-xs">
+                <tr>
+                  <th className="py-2.5 px-4">{strings.sales.dateTime}</th>
+                  <th className="py-2.5 px-4">{strings.loyalty.typeHeader}</th>
+                  <th className="py-2.5 px-4 text-right">{strings.loyalty.pointsHeader}</th>
+                  <th className="py-2.5 px-4">{strings.loyalty.reasonHeader}</th>
+                  <th className="py-2.5 px-4">{strings.loyalty.referenceHeader}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {loyaltyLoading ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                      <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-primary" />
+                      {strings.common.loading}
+                    </td>
+                  </tr>
+                ) : loyaltyLedger.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                      {strings.loyalty.emptyLedger}
+                    </td>
+                  </tr>
+                ) : (
+                  loyaltyLedger.map((entry) => {
+                    const isPositive = entry.points > 0;
+                    return (
+                      <tr key={entry.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="py-3 px-4 text-muted-foreground text-xs font-mono tabular-nums whitespace-nowrap">
+                          {formatDateTime(entry.createdAt)}
+                        </td>
+                        <td className="py-3 px-4">
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] ${
+                              entry.type === "EARN"
+                                ? "text-emerald-700 border-emerald-300 dark:border-emerald-800"
+                                : entry.type === "REDEEM"
+                                ? "text-blue-700 border-blue-300 dark:border-blue-800"
+                                : entry.type === "EXPIRE"
+                                ? "text-rose-700 border-rose-300 dark:border-rose-800"
+                                : entry.type === "ADJUST"
+                                ? "text-purple-700 border-purple-300 dark:border-purple-800"
+                                : "text-amber-700 border-amber-300 dark:border-amber-800"
+                            }`}
+                          >
+                            {entry.type}
+                          </Badge>
+                        </td>
+                        <td className={`py-3 px-4 text-right font-mono font-bold tabular-nums ${isPositive ? "text-emerald-600" : "text-rose-600"}`}>
+                          {isPositive ? `+${entry.points}` : entry.points}
+                        </td>
+                        <td className="py-3 px-4 text-xs text-foreground max-w-xs truncate">
+                          {entry.reason || "-"}
+                        </td>
+                        <td className="py-3 px-4 font-mono text-xs">
+                          {entry.saleId ? (
+                            <Link href={`/sales/${entry.saleId}`} className="text-primary hover:underline">
+                              {entry.sale?.invoiceNumber || entry.saleId.slice(0, 8)}
+                            </Link>
+                          ) : entry.returnId ? (
+                            <Link href={`/sales/returns/${entry.returnId}`} className="text-primary hover:underline">
+                              {entry.return?.returnNumber || entry.returnId.slice(0, 8)}
+                            </Link>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Collect Due Payment Modal */}
       <Dialog open={showPaymentModal} onOpenChange={setShowPaymentModal}>
         <DialogContent className="max-w-md">
@@ -1006,6 +1274,73 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
               </Button>
               <Button type="submit" disabled={editLoading}>
                 {editLoading ? strings.common.loading : strings.common.save}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Adjust Loyalty Points Modal */}
+      <Dialog open={showAdjustModal} onOpenChange={setShowAdjustModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold flex items-center gap-2">
+              <Award className="h-5 w-5 text-primary" />
+              <span>{strings.loyalty.adjustModalTitle}</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleAdjustSubmit} className="space-y-4 py-2">
+            {adjustError && (
+              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs">
+                {adjustError}
+              </div>
+            )}
+
+            <div className="p-3 rounded-lg bg-muted/50 border border-border text-xs flex justify-between items-center">
+              <span className="text-muted-foreground">{strings.loyalty.currentBalance}</span>
+              <span className="font-mono font-bold text-foreground text-sm">{customer.loyaltyPointsBalance || 0} {strings.loyalty.pts}</span>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="adjust-points-input" className="text-xs font-semibold">
+                {strings.loyalty.pointsAmountLabel}
+              </Label>
+              <Input
+                id="adjust-points-input"
+                type="number"
+                step="1"
+                required
+                value={adjustPoints}
+                onChange={(e) => setAdjustPoints(e.target.value)}
+                placeholder="+50 or -50"
+                className="h-9 text-sm font-mono"
+                data-testid="adjust-points-input"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="adjust-reason-input" className="text-xs font-semibold">
+                {strings.loyalty.adjustReasonLabel}
+              </Label>
+              <Input
+                id="adjust-reason-input"
+                type="text"
+                required
+                value={adjustReason}
+                onChange={(e) => setAdjustReason(e.target.value)}
+                placeholder={strings.loyalty.adjustReasonPlaceholder}
+                className="h-9 text-sm"
+                data-testid="adjust-reason-input"
+              />
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="ghost" onClick={() => setShowAdjustModal(false)}>
+                {strings.common.cancel}
+              </Button>
+              <Button type="submit" disabled={adjustLoading} data-testid="submit-adjust-points-btn">
+                {adjustLoading ? strings.common.loading : strings.loyalty.applyAdjustment}
               </Button>
             </DialogFooter>
           </form>

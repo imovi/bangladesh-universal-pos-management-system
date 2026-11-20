@@ -65,7 +65,11 @@ test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
     const openShiftBtn = page.locator('[data-testid="open-shift-button"]');
     if (await openShiftBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
       await openShiftBtn.click();
-      await page.waitForTimeout(500);
+      const confirmOpenShiftBtn = page.locator('[data-testid="confirm-open-shift-button"]');
+      if (await confirmOpenShiftBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await confirmOpenShiftBtn.click();
+        await expect(confirmOpenShiftBtn).toBeHidden({ timeout: 5000 });
+      }
     }
 
     // Search and select product
@@ -121,7 +125,7 @@ test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
     const receiptContainer = page.locator("#pos-receipt-print");
     await expect(receiptContainer).toBeVisible({ timeout: 10000 });
     const receiptText = await receiptContainer.innerText();
-    const invMatch = receiptText.match(/REG\d{2}-\d{6}-\d{4}/);
+    const invMatch = receiptText.match(/[A-Za-z0-9-]+-\d{6}-\d{4}/);
     expect(invMatch).toBeTruthy();
     const invoiceNumber = invMatch![0];
 

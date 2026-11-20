@@ -94,7 +94,7 @@ export function PromotionForm({ initialData, isEdit }: PromotionFormProps) {
       const res = await apiFetch("/products?limit=100");
       if (!res.ok) return [];
       const json = await res.json();
-      return json.data || [];
+      return json.data?.items || json.data?.data || json.data || [];
     },
   });
 
@@ -104,12 +104,12 @@ export function PromotionForm({ initialData, isEdit }: PromotionFormProps) {
       const res = await apiFetch("/categories");
       if (!res.ok) return [];
       const json = await res.json();
-      return json.data || [];
+      return json.data?.items || json.data?.data || json.data || [];
     },
   });
 
-  const products = productsData || [];
-  const categories = categoriesData || [];
+  const products = Array.isArray(productsData) ? productsData : [];
+  const categories = Array.isArray(categoriesData) ? categoriesData : [];
 
   const buildConfig = () => {
     switch (type) {

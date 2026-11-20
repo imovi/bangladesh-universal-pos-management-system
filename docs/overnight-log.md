@@ -1987,6 +1987,15 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - 12 integration tests in `apps/api/test/promotions.spec.ts` (CRUD, tenant isolation, preview calculator, DB accuracy to poisha).
   - E2E Playwright test in `apps/admin/e2e/promotions-pos-flow.spec.ts` (Buy 2 Get 1, receipt verification, F6 return).
   - Full test suite: 27 shared tests, 56 admin unit tests, 326 API integration tests, 0 lint warnings/errors across all workspaces.
+- **Commit:** `e641606` (pushed).
+- **CI Run 1:** `44705513182` (Status: `completed`, Conclusion: `failure`).
+  - *Failure analysis:* Step 17 ("Run Admin Dashboard E2E tests") failed. Steps 1-16 (build, lint, unit tests with coverage, database migrations, demo seeding) were all green.
+  - *Cause 1:* In `apps/admin/src/app/(admin)/promotions/page.tsx`, `promotionsData.data` was assumed to be an array, but `TransformInterceptor` wrapped the paginated response in `{ data: [...], meta: ... }`. When `global-data-integrity-guard.spec.ts` visited `/promotions`, `promotions.map is not a function` caused a React crash.
+  - *Cause 2:* In `apps/admin/e2e/promotions-pos-flow.spec.ts`, opening the shift clicked `[data-testid="open-shift-button"]` but did not click `[data-testid="confirm-open-shift-button"]`, leaving the modal backdrop open and blocking product card selection.
+  - *Fix:*
+    - Safely unwrap paginated response arrays in `promotions/page.tsx`, `promotions/[id]/page.tsx`, and `promotion-form.tsx`.
+    - Added `[data-testid="confirm-open-shift-button"]` click and flexible regex in `promotions-pos-flow.spec.ts`.
+- **Fix:** Unwrapped paginated responses in `promotions/page.tsx`, `promotions/[id]/page.tsx`, and `promotion-form.tsx`; added modal confirm in `promotions-pos-flow.spec.ts`.
 
 
 

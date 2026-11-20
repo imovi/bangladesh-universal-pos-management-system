@@ -42,7 +42,7 @@ export default function EditPromotionPage() {
 
   return (
     <PermissionGate permission="promotion.view">
-      <PromotionForm initialData={promo} isEdit />
+      <PromotionForm initialData={promo?.data || promo} isEdit />
     </PermissionGate>
   );
 }

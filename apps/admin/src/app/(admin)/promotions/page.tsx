@@ -137,8 +137,12 @@ export default function PromotionsPage() {
     onError: (err: any) => setActionError(err.message),
   });
 
-  const promotions = promotionsData?.data || [];
-  const meta = promotionsData?.meta || { total: 0, totalPages: 1 };
+  const promotions = Array.isArray(promotionsData?.data)
+    ? promotionsData.data
+    : Array.isArray(promotionsData?.data?.data)
+    ? promotionsData.data.data
+    : [];
+  const meta = promotionsData?.data?.meta || promotionsData?.meta || { total: promotions.length, totalPages: 1 };
 
   const getStatusBadge = (status: string) => {
     switch (status) {

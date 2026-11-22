@@ -2323,6 +2323,13 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - *Annotation & Root Cause:* GitHub Check Run annotation reported `PrismaClientKnownRequestError: Raw query failed. Code: 42601. Message: ERROR: cannot insert multiple commands into a prepared statement` at `seedDrillSourceData` in `apps/api/test/restore-drill.spec.ts:55:5`. In PostgreSQL prepared statements invoked through Prisma `$executeRawUnsafe()`, batching multiple semicolon-delimited `INSERT` statements in a single string is forbidden by the PostgreSQL engine.
   - *Fix Applied:* Split each table `INSERT INTO` statement in `seedDrillSourceData` into its own distinct `await prisma.$executeRawUnsafe(...)` call. Also cleaned up unused `tz` and parameter `_filter` in `apps/api/src/modules/reports/reports.service.ts`.
   - *Local Verification:* Tested against dev database and confirmed all 4 tests pass cleanly.
+- **Commit 6:** `14ab2ee` (pushed).
+- **CI Run 6:** `45040787951` (Status: `completed`, Conclusion: `failure`).
+  - *Investigation:* `test` job failed at step `Run tests with coverage as non-superuser pos_runtime`.
+  - *Annotation & Root Cause:* GitHub Check Run annotation reported `PrismaClientKnownRequestError: Raw query failed. Code: 23502. Message: Failing row contains (01934c56-0001-7000-8000-000000000001, Drill Tenant A, drill-tenant-a, fashion, ACTIVE, {}, 2026-11-22 15:56:12.853, null)` at `seedDrillSourceData` in `apps/api/test/restore-drill.spec.ts:55:5`. In PostgreSQL schema, `tenants.updated_at` does not have a default timestamp, so omitting it from raw SQL resulted in NOT NULL constraint violation (Code 23502). Additionally, raw SQL inserted columns (`slug` in `Category`, `opened_by_user_id` in `Shift`, `cost_price_minor` in `ProductVariant`) that did not match current schema names.
+  - *Fix Applied:* Replaced raw SQL seed statements in `apps/api/test/restore-drill.spec.ts` with Prisma's typed methods (`prisma.tenant.createMany`, `prisma.branch.create`, etc.), which automatically and type-safely generate `createdAt`, `updatedAt`, and proper foreign key links.
+  - *Local Verification:* Tested against dev database and confirmed all 4 tests in `restore-drill.spec.ts` pass cleanly (7.33s).
+  - *Attempt Note:* This failure marked 3 red runs in a row on the restore drill (`45039128502`, `45040186367`, `45040787951`). Applying typed PrismaClient resolution to immediately restore build health before progressing.
 
 
 ---

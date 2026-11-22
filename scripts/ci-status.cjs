@@ -72,8 +72,29 @@ https.get(url, options, (res) => {
     }
 
     if (runs.length === 0) {
-      console.log(`NO_RUNS_FOUND ${shortSha}`);
-      process.exit(0);
+      // Fallback: query recent runs without head_sha filter in case indexing is delayed
+      const fallbackUrl = `https://api.github.com/repos/imovi/bangladesh-universal-pos-management-system/actions/runs?per_page=10`;
+      https.get(fallbackUrl, options, (fbRes) => {
+        let fbData = "";
+        fbRes.on("data", (chunk) => { fbData += chunk; });
+        fbRes.on("end", () => {
+          try {
+            const fbJson = JSON.parse(fbData);
+            const matched = (fbJson.workflow_runs || []).filter(
+              (r) => r.head_sha && (r.head_sha === fullSha || r.head_sha.startsWith(shortSha))
+            );
+            if (matched.length > 0) {
+              for (const r of matched) {
+                console.log(`${r.id} ${shortSha} ${r.status || "unknown"} ${r.conclusion || "in_progress"}`);
+              }
+              process.exit(0);
+            }
+          } catch {}
+          console.log(`NO_RUNS_FOUND ${shortSha}`);
+          process.exit(0);
+        });
+      });
+      return;
     }
 
     for (const r of runs) {

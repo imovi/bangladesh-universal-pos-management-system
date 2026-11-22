@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import path from "path";
 import fs from "fs";
 import { PrismaClient } from "@prisma/client";
+import { Decimal } from "@prisma/client/runtime/library";
 import { runBackup } from "../../../scripts/backup.js";
 import { runRestore } from "../../../scripts/restore.js";
 
@@ -49,79 +50,108 @@ describe("Milestone F2: PostgreSQL Backup & Restore Drill with RLS and Immutabil
     const prodId = "01934c56-0008-7000-8000-000000000008";
     const varId = "01934c56-0009-7000-8000-000000000009";
     const saleId = "01934c56-0010-7000-8000-000000000010";
-    const saleItemId = "01934c56-0011-7000-8000-000000000011";
     const custId = "01934c56-0012-7000-8000-000000000012";
 
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "tenants" (id, name, slug, business_type, status)
-      VALUES ('${tAId}', 'Drill Tenant A', 'drill-tenant-a', 'fashion', 'ACTIVE'),
-             ('${tBId}', 'Drill Tenant B', 'drill-tenant-b', 'fashion', 'ACTIVE');
-    `);
+    await prisma.tenant.createMany({
+      data: [
+        { id: tAId, name: "Drill Tenant A", slug: "drill-tenant-a", businessType: "fashion", status: "ACTIVE" },
+        { id: tBId, name: "Drill Tenant B", slug: "drill-tenant-b", businessType: "fashion", status: "ACTIVE" },
+      ],
+    });
 
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "branches" (id, tenant_id, name, code, address)
-      VALUES ('${branchId}', '${tAId}', 'Flagship Branch', 'BR01', 'Dhaka');
-    `);
+    await prisma.branch.create({
+      data: { id: branchId, tenantId: tAId, name: "Flagship Branch", code: "BR01", address: "Dhaka" },
+    });
 
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "users" (id, tenant_id, name, email, phone, password_hash, status)
-      VALUES ('${userId}', '${tAId}', 'Cashier A', 'cashier@drilla.com', '+8801700000099', 'hash', 'ACTIVE');
-    `);
+    await prisma.user.create({
+      data: { id: userId, tenantId: tAId, name: "Cashier A", email: "cashier@drilla.com", phone: "+8801700000099", passwordHash: "hash", status: "ACTIVE" },
+    });
 
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "registers" (id, tenant_id, branch_id, name, code)
-      VALUES ('${regId}', '${tAId}', '${branchId}', 'Register 01', 'REG01');
-    `);
+    await prisma.register.create({
+      data: { id: regId, tenantId: tAId, branchId, name: "Register 01", code: "REG01" },
+    });
 
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "shifts" (id, tenant_id, branch_id, register_id, opened_by_user_id, status, opened_at, starting_cash_minor)
-      VALUES ('${shiftId}', '${tAId}', '${branchId}', '${regId}', '${userId}', 'OPEN', NOW(), 100000);
-    `);
+    await prisma.shift.create({
+      data: {
+        id: shiftId,
+        tenantId: tAId,
+        branchId,
+        registerId: regId,
+        cashierUserId: userId,
+        status: "closed",
+        openedAt: new Date(0),
+        closedAt: new Date(0),
+        openingCashMinor: 100000n,
+        notes: "Drill Shift",
+      },
+    });
 
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "categories" (id, tenant_id, name, slug)
-      VALUES ('${catId}', '${tAId}', 'Clothing', 'clothing');
-    `);
+    await prisma.category.create({
+      data: { id: catId, tenantId: tAId, name: "Clothing" },
+    });
 
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "products" (id, tenant_id, category_id, name, slug, type, status, pricing_type)
-      VALUES ('${prodId}', '${tAId}', '${catId}', 'Panjabi', 'panjabi', 'STANDARD', 'ACTIVE', 'FIXED');
-    `);
+    await prisma.product.create({
+      data: { id: prodId, tenantId: tAId, categoryId: catId, name: "Panjabi", isActive: true },
+    });
 
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "product_variants" (id, tenant_id, product_id, sku, price_minor, cost_price_minor, status)
-      VALUES ('${varId}', '${tAId}', '${prodId}', 'PAN-01', 250000, 150000, 'ACTIVE');
-    `);
+    await prisma.productVariant.create({
+      data: { id: varId, tenantId: tAId, productId: prodId, sku: "PAN-01", priceMinor: 250000n, costMinor: 150000n, isActive: true },
+    });
 
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "stock_movements" (tenant_id, branch_id, variant_id, qty_delta, type, unit_cost_minor, actor_user_id)
-      VALUES ('${tAId}', '${branchId}', '${varId}', 50, 'OPENING', 150000, '${userId}');
-    `);
+    await prisma.stockMovement.create({
+      data: {
+        tenantId: tAId,
+        branchId,
+        variantId: varId,
+        qtyDelta: new Decimal(50),
+        type: "OPENING",
+        unitCostMinor: 150000n,
+        actorUserId: userId,
+      },
+    });
 
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "customers" (id, tenant_id, name, phone)
-      VALUES ('${custId}', '${tAId}', 'Drill Customer', '+8801711998877');
-    `);
+    await prisma.customer.create({
+      data: { id: custId, tenantId: tAId, name: "Drill Customer", phone: "+8801711998877" },
+    });
 
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "sales" (id, tenant_id, invoice_number, shift_id, branch_id, cashier_user_id, customer_id, status, subtotal_minor, total_minor, paid_minor)
-      VALUES ('${saleId}', '${tAId}', 'INV-DRILL-001', '${shiftId}', '${branchId}', '${userId}', '${custId}', 'completed', 250000, 250000, 250000);
-    `);
+    await prisma.sale.create({
+      data: {
+        id: saleId,
+        tenantId: tAId,
+        invoiceNumber: "INV-DRILL-001",
+        shiftId,
+        branchId,
+        cashierUserId: userId,
+        customerId: custId,
+        status: "completed",
+        subtotalMinor: 250000n,
+        totalMinor: 250000n,
+        paidMinor: 250000n,
+        dueMinor: 0n,
+        changeMinor: 0n,
+        items: {
+          create: [
+            {
+              tenantId: tAId,
+              variantId: varId,
+              unitPriceMinor: 250000n,
+              unitCostMinor: 150000n,
+              quantity: new Decimal(1),
+              subtotalMinor: 250000n,
+              totalMinor: 250000n,
+            },
+          ],
+        },
+      },
+    });
 
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "sale_items" (id, tenant_id, sale_id, variant_id, product_name, variant_sku, quantity, unit_price_minor, total_minor)
-      VALUES ('${saleItemId}', '${tAId}', '${saleId}', '${varId}', 'Panjabi', 'PAN-01', 1, 250000, 250000);
-    `);
+    await prisma.loyaltyLedger.create({
+      data: { tenantId: tAId, customerId: custId, type: "EARN", points: 25, reason: "Drill purchase" },
+    });
 
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "loyalty_ledger" (tenant_id, customer_id, type, points, reason)
-      VALUES ('${tAId}', '${custId}', 'EARN', 25, 'Drill purchase');
-    `);
-
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "audit_logs" (tenant_id, actor_user_id, action, entity_type, entity_id)
-      VALUES ('${tAId}', '${userId}', 'DRILL_INIT', 'DATABASE', '${prodId}');
-    `);
+    await prisma.auditLog.create({
+      data: { tenantId: tAId, actorUserId: userId, action: "DRILL_INIT", entityType: "DATABASE", entityId: prodId },
+    });
   }
 
   beforeAll(async () => {

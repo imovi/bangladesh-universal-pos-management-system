@@ -2451,21 +2451,9 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
      - Added extra container check in `smoke-prod` verifying superuser connection refusal with `FATAL: Database connection user is a PostgreSQL superuser`.
   5. **Phase 1E report Section 8 fix:**
      - Corrected `PROMOTION_CHANGED` bug entry in `docs/overnight-report.md` Section 8: noted code fix in `78295ce` and first green CI at `ff17aa8` (run `44729980566` `success`).
-
-
-
-
-
-
-
-
-
-
-
+- **Commit 17:** `efe3f6f` (pushed).
+- CI: efe3f6f → run 45064820984 → completed failure
+  - *Investigation:* `test` job passed 100% green. In `smoke-prod`, the step `Verify placeholder secrets refusal in production` ran `docker compose run --rm api` without `--no-deps`. Docker compose initialized the `postgres` container using placeholder test credentials into persistent volume `postgres_data`. When subsequent step `Start production containers` ran with generated production credentials, PostgreSQL refused connection due to password authentication failure against the poisoned data volume.
+  - *Fix Applied:* Added `--no-deps` to `docker compose run --rm api` in `.github/workflows/ci.yml` and added `docker compose down -v` immediately following the check. Also updated `scripts/verify-report-refs.cjs` to ignore lines within fenced code blocks.
 
 ---
-
-
-
-
-

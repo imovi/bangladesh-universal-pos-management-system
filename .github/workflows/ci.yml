@@ -192,12 +192,13 @@ jobs:
       - name: Verify placeholder secrets refusal in production
         run: |
           cp deploy/.env.production.example deploy/.env.placeholder.test
-          if docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.placeholder.test run --rm api > /dev/null 2>&1; then
+          if docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.placeholder.test run --rm --no-deps api > /dev/null 2>&1; then
             echo "FAILED: API container should have refused placeholder secrets"
             exit 1
           fi
           echo "placeholder env refused: OK"
           rm -f deploy/.env.placeholder.test
+          docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production down -v
 
       - name: Start production containers
         run: |

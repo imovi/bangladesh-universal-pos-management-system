@@ -53,7 +53,16 @@ while ((m = inlineHashRegex.exec(sectionContent)) !== null) {
 const rawLines = sectionContent.split('\n');
 const lines = []; // { text, lineNum }
 
+let inCodeBlock = false;
 rawLines.forEach((lineText, idx) => {
+  if (lineText.trim().startsWith('```')) {
+    inCodeBlock = !inCodeBlock;
+    return;
+  }
+  if (inCodeBlock) {
+    return;
+  }
+
   // If this is a markdown table row with <br> separating attempts in columns, expand into sub-rows
   if (lineText.trim().startsWith('|') && lineText.trim().endsWith('|') && lineText.includes('<br>')) {
     const cols = lineText.split('|');

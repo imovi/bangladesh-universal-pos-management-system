@@ -2362,6 +2362,32 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - *Investigation:* `test` job failed at step 11 `Build packages`. Unauthenticated GitHub API log returned 403; reproduced locally.
   - *Local Reproduction & Root Cause:* In commit `a9b5379`, `apps/admin/src/app/(admin)/settings/printer/page.tsx` referenced translation keys (`strings.settings.printerTitle`, `printerConnected`, etc.) while `apps/admin/src/i18n/bn.ts` and `apps/admin/src/i18n/en.ts` had not been committed with it. During CI `npm run build`, `next build` failed TypeScript type checking due to property existence errors on `strings.settings`.
   - *Fix Applied:* Added printer translation keys to `bn.ts` and `en.ts`, updated `sw.js`, and adjusted dashboard and first-day strings to stay within the strict inline `locale === 'bn'` ceiling (684 <= 685). All 9 test files (56 tests) in admin workspace passed.
+- **Commit 10:** `576f6f5` (pushed).
+- **CI Run 10:** `45050187088` (Status: `completed`, Conclusion: `success`).
+  - *Result:* Green across both `test` and `smoke-prod` jobs. Milestone F3 complete.
+
+---
+
+### Milestone F4: Day-One CSV Import for Products, Opening Stock and Customers
+- **Import Engine & Parser:**
+  - Built pure CSV parser `apps/api/src/modules/import/csv-parser.ts` supporting RFC 4180 parsing, UTF-8 BOM stripping, Bangladeshi phone normalization (`+88017...`, `017...`, `88017...`), and comma-separated numeric formatting (`1,200`, `1200`, `1200.00`).
+  - Implemented transactional import engine `apps/api/src/modules/import/import.service.ts`:
+    - Products with variants: groups rows by product name, sets size/colour options, and creates variants with barcodes in nested creates to maximize throughput.
+    - Opening stock: creates `OPENING` stock movements and atomically updates `stock_levels`. Refuses duplicate opening stock imports for same SKU and branch with a clear error.
+    - Customers: creates customer records with opening due as a ledger transaction and opening points as an `ADJUST` ledger entry.
+    - Preview / commit lifecycle: commit runs strictly if preview has 0 errors and executes within a single database transaction per file.
+    - Strict 20,000 rows ceiling with 50MB body limit configured in `apps/api/src/main.ts`.
+    - Protected by new permission `data.import` (Owner only).
+    - Audit log entry created on every commit with imported row counts.
+    - UTF-8 BOM download endpoints for sample CSV templates (`/import/templates/:type`) with 3 Bangla rows each.
+- **Admin UI & E2E:**
+  - Built `/settings/import` page in `apps/admin/src/app/(admin)/settings/import/page.tsx` with tabs for Products, Opening Stock, and Customers, file uploader, preview error table with download button, and commit button.
+  - Linked from Settings overview (`/settings`) and left navigation menu.
+  - Added E2E test `apps/admin/e2e/data-import-flow.spec.ts` testing template upload, preview, commit, and product visibility on POS.
+- **Unit & Performance Tests:**
+  - `apps/api/test/csv-parser.spec.ts`: 10/10 tests passed.
+  - `apps/api/test/import-engine.spec.ts`: 12/12 tests passed, including 5,000-row synthetic benchmark completing in 49.97s (< 60s limit).
+
 
 
 

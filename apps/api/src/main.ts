@@ -1,5 +1,6 @@
 import { NestFactory } from "@nestjs/core";
 import helmet from "helmet";
+import { json, urlencoded } from "express";
 import { AppModule } from "./app.module.js";
 import { ConfigService } from "./common/config/config.service.js";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor.js";
@@ -15,6 +16,10 @@ async function bootstrap() {
 
   // Prefix: /api/v1
   app.setGlobalPrefix("api/v1");
+
+  // Body parser limits for large CSV imports (up to 20,000 rows)
+  app.use(json({ limit: "50mb" }));
+  app.use(urlencoded({ limit: "50mb", extended: true }));
 
   // Security headers with helmet
   app.use(helmet());

@@ -15,6 +15,7 @@ export class TenantContextService {
   async runWithTenant<T>(
     tenantId: string,
     operation: (tx: Prisma.TransactionClient) => Promise<T>,
+    options?: { maxWait?: number; timeout?: number },
   ): Promise<T> {
     if (!tenantId || !UUID_REGEX.test(tenantId)) {
       throw new BadRequestException('Invalid tenantId: must be a valid UUID');
@@ -32,8 +33,8 @@ export class TenantContextService {
         return operation(tx);
       },
       {
-        maxWait: 10000,
-        timeout: 15000,
+        maxWait: options?.maxWait ?? 10000,
+        timeout: options?.timeout ?? 15000,
       },
     );
   }

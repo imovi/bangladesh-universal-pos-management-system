@@ -15,6 +15,7 @@ import {
   BarChart3,
   Settings,
   Store,
+  HelpCircle,
 } from "lucide-react";
 
 interface NavItem {
@@ -210,6 +211,18 @@ export function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
             </div>
           );
         })}
+
+        {/* First-Day Checklist Link */}
+        <div className="pt-2 border-t border-border mt-3">
+          <Link
+            href="/help/first-day"
+            onClick={onCloseMobile}
+            className="flex items-center gap-3 px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg transition-colors"
+          >
+            <HelpCircle className="h-4 w-4 shrink-0" />
+            <span className="truncate">{locale === "bn" ? "প্রথম দিনের চেকলিস্ট" : "First-Day Checklist"}</span>
+          </Link>
+        </div>
       </nav>
     </aside>
   );

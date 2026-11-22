@@ -21,6 +21,7 @@ import { ReportsModule } from "./modules/reports/reports.module.js";
 import { TransfersModule } from "./modules/transfers/transfers.module.js";
 import { PromotionsModule } from "./modules/promotions/promotions.module.js";
 import { LoyaltyModule } from "./modules/loyalty/loyalty.module.js";
+import { ImportModule } from "./modules/import/import.module.js";
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { LoyaltyModule } from "./modules/loyalty/loyalty.module.js";
     TransfersModule,
     PromotionsModule,
     LoyaltyModule,
+    ImportModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -6,7 +6,7 @@ import { PermissionGate } from "@/components/common/permission-gate";
 import { useTranslation } from "@/i18n/context";
 import { BackupsCard } from "@/components/settings/backups-card";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Store, GitBranch, Users, Shield, Award, ArrowRight } from "lucide-react";
+import { Store, GitBranch, Users, Shield, Award, ArrowRight, Printer, UploadCloud } from "lucide-react";
 
 export default function SettingsIndexPage() {
   const { strings } = useTranslation();
@@ -46,6 +46,20 @@ export default function SettingsIndexPage() {
       href: "/settings/roles",
       icon: Shield,
       permission: "role.read",
+    },
+    {
+      title: strings.nav.printerSettings,
+      desc: strings.settings.printerDesc,
+      href: "/settings/printer",
+      icon: Printer,
+      permission: "tenant.read",
+    },
+    {
+      title: strings.nav.dataImport,
+      desc: strings.importData.subtitle,
+      href: "/settings/import",
+      icon: UploadCloud,
+      permission: "data.import",
     },
   ];
 

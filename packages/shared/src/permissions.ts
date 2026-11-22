@@ -73,6 +73,9 @@ export const PERMISSIONS = {
   // Loyalty
   LOYALTY_MANAGE: "loyalty.manage",
   LOYALTY_ADJUST: "loyalty.adjust",
+
+  // Data Import
+  DATA_IMPORT: "data.import",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

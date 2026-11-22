@@ -90,18 +90,25 @@ test.describe("Milestone F4: Day-One CSV Import E2E Flow", () => {
 
     // 6. Navigate to /pos and verify the imported product and stock level
     await page.goto("/pos");
-    await page.waitForSelector('[data-testid="pos-header-actions"]', { timeout: 15000 });
+    await page.waitForLoadState("domcontentloaded");
 
-    // If shift is closed, open it
-    const openShiftBtn = page.locator('[data-testid="confirm-open-shift-button"]');
+    // Handle shift opening if shift is not open
+    const openShiftBtn = page.locator('[data-testid="open-shift-button"]');
     if (await openShiftBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await page.fill('[data-testid="opening-cash-input"]', "1000");
       await openShiftBtn.click();
-      await expect(openShiftBtn).toBeHidden({ timeout: 5000 });
+    }
+    const confirmOpenBtn = page.locator('[data-testid="confirm-open-shift-button"]');
+    if (await confirmOpenBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await page.fill('[data-testid="opening-cash-input"]', "1000");
+      await confirmOpenBtn.click();
+      await expect(confirmOpenBtn).toBeHidden({ timeout: 5000 });
     }
 
+    // Wait for POS search input to be ready
+    const searchInput = page.locator('[data-testid="pos-search-input"]');
+    await expect(searchInput).toBeVisible({ timeout: 15000 });
+
     // Search for the newly imported SKU
-    const searchInput = page.locator('[data-testid="product-search-input"]');
     await searchInput.fill(sku);
     await page.waitForTimeout(500);
 
@@ -114,5 +121,6 @@ test.describe("Milestone F4: Day-One CSV Import E2E Flow", () => {
 
     // Verify stock is displayed (88) or item added to cart
     await expect(page.locator(`text=${productName}`)).toBeVisible();
+    await expect(page.locator("text=88")).toBeVisible();
   });
 });

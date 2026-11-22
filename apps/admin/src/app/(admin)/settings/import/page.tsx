@@ -334,7 +334,7 @@ export default function ImportPage() {
 
               <Button
                 onClick={handlePreview}
-                disabled={!selectedFile || loading}
+                disabled={!selectedFile || !fileContent || loading}
                 className="gap-2"
               >
                 {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}

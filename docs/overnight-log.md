@@ -2406,6 +2406,12 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
     2. Attempt 2 (`0b34245`): https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45052965668
     3. Attempt 3 (`69b2117`): https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45054668676
 
+### Resume & Unblock Milestone F4 (Attempt 4)
+- *Investigation:* Step 17 `Run Admin Dashboard E2E tests` in `apps/admin/e2e/data-import-flow.spec.ts` timed out waiting for `[data-testid="pos-header-actions"]` which was not defined in `/pos/page.tsx`. Additionally, `data-import-flow.spec.ts` referenced `[data-testid="product-search-input"]` (actual is `pos-search-input`) and bypassed clicking `open-shift-button` when shift was closed.
+- *Fix Applied:* Updated `apps/admin/e2e/data-import-flow.spec.ts` to wait for POS DOM content load, handle the `open-shift-button` -> `confirm-open-shift-button` flow, search via `pos-search-input`, and assert both product name and stock quantity `88`. Also added `!fileContent` to the preview button disabled state in `settings/import/page.tsx` to prevent FileReader race conditions during upload.
+
+
+
 
 
 

@@ -52,19 +52,19 @@ describe("Milestone F2: PostgreSQL Backup & Restore Drill with RLS and Immutabil
     const saleId = "01934c56-0010-7000-8000-000000000010";
     const custId = "01934c56-0012-7000-8000-000000000012";
 
-    await prisma.tenant.createMany({
-      data: [
-        { id: tAId, name: "Drill Tenant A", slug: "drill-tenant-a", businessType: "fashion", status: "ACTIVE" },
-        { id: tBId, name: "Drill Tenant B", slug: "drill-tenant-b", businessType: "fashion", status: "ACTIVE" },
-      ],
+    await prisma.tenant.create({
+      data: { id: tAId, name: "Drill Tenant A", slug: "drill-tenant-a", businessType: "fashion", status: "active", updatedAt: new Date() },
+    });
+    await prisma.tenant.create({
+      data: { id: tBId, name: "Drill Tenant B", slug: "drill-tenant-b", businessType: "fashion", status: "active", updatedAt: new Date() },
     });
 
     await prisma.branch.create({
-      data: { id: branchId, tenantId: tAId, name: "Flagship Branch", code: "BR01", address: "Dhaka" },
+      data: { id: branchId, tenantId: tAId, name: "Flagship Branch", code: "BR01", address: "Dhaka", updatedAt: new Date() },
     });
 
     await prisma.user.create({
-      data: { id: userId, tenantId: tAId, name: "Cashier A", email: "cashier@drilla.com", phone: "+8801700000099", passwordHash: "hash", status: "ACTIVE" },
+      data: { id: userId, tenantId: tAId, name: "Cashier A", email: "cashier@drilla.com", phone: "+8801700000099", passwordHash: "hash", isActive: true, updatedAt: new Date() },
     });
 
     await prisma.register.create({

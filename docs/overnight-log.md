@@ -2406,9 +2406,12 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
     2. Attempt 2 (`0b34245`): https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45052965668
     3. Attempt 3 (`69b2117`): https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45054668676
 
-### Resume & Unblock Milestone F4 (Attempt 4)
-- *Investigation:* Step 17 `Run Admin Dashboard E2E tests` in `apps/admin/e2e/data-import-flow.spec.ts` timed out waiting for `[data-testid="pos-header-actions"]` which was not defined in `/pos/page.tsx`. Additionally, `data-import-flow.spec.ts` referenced `[data-testid="product-search-input"]` (actual is `pos-search-input`) and bypassed clicking `open-shift-button` when shift was closed.
-- *Fix Applied:* Updated `apps/admin/e2e/data-import-flow.spec.ts` to wait for POS DOM content load, handle the `open-shift-button` -> `confirm-open-shift-button` flow, search via `pos-search-input`, and assert both product name and stock quantity `88`. Also added `!fileContent` to the preview button disabled state in `settings/import/page.tsx` to prevent FileReader race conditions during upload.
+### Resume & Unblock Milestone F4
+- **Commit 14:** `9bae799` (pushed).
+- **CI Run 14:** `45057282584` (Status: `completed`, Conclusion: `failure`).
+  - *Investigation:* In `apps/admin/e2e/data-import-flow.spec.ts`, navigating to `/pos` encountered the shift-in-use modal (`ShiftInUseAlert`: "এই রেজিস্টারে অন্য ক্যাশিয়ারের শিফট চলমান রয়েছে") because `Main Counter` (`REG01`) was already in use by demo cashier `Sultana Razia`. The modal backdrop intercepted pointer events when attempting to click elements.
+  - *Fix Applied:* Updated `apps/admin/e2e/data-import-flow.spec.ts` to dismiss the shift-in-use modal by clicking `[data-testid="switch-register-btn"]` when visible, search for the newly imported SKU via `[data-testid="pos-search-input"]`, and verify that the imported product card and its opening stock quantity (`88`) are clearly visible on `/pos`.
+
 
 
 

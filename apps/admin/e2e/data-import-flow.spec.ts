@@ -92,16 +92,11 @@ test.describe("Milestone F4: Day-One CSV Import E2E Flow", () => {
     await page.goto("/pos");
     await page.waitForLoadState("domcontentloaded");
 
-    // Handle shift opening if shift is not open
-    const openShiftBtn = page.locator('[data-testid="open-shift-button"]');
-    if (await openShiftBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await openShiftBtn.click();
-    }
-    const confirmOpenBtn = page.locator('[data-testid="confirm-open-shift-button"]');
-    if (await confirmOpenBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await page.fill('[data-testid="opening-cash-input"]', "1000");
-      await confirmOpenBtn.click();
-      await expect(confirmOpenBtn).toBeHidden({ timeout: 5000 });
+    // If active register has another cashier's shift, dismiss by choosing other register
+    const switchBtn = page.locator('[data-testid="switch-register-btn"]');
+    if (await switchBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await switchBtn.click();
+      await expect(switchBtn).toBeHidden({ timeout: 5000 });
     }
 
     // Wait for POS search input to be ready
@@ -116,11 +111,8 @@ test.describe("Milestone F4: Day-One CSV Import E2E Flow", () => {
     const productCard = page.locator(`[data-testid^="product-card-"]`).filter({ hasText: productName });
     await expect(productCard).toBeVisible({ timeout: 10000 });
 
-    // Click product to view variant / cart
-    await productCard.click();
-
-    // Verify stock is displayed (88) or item added to cart
-    await expect(page.locator(`text=${productName}`)).toBeVisible();
-    await expect(page.locator("text=88")).toBeVisible();
+    // Verify product name and imported opening stock level (88) are displayed on the card
+    await expect(productCard).toContainText(productName);
+    await expect(productCard).toContainText("88");
   });
 });

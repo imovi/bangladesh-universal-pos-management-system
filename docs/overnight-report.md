@@ -876,7 +876,7 @@ ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
 
 ### 8. Problems Found During the Run
 
-1. **Offline PROMOTION_CHANGED rejection bug:** When an offline sale's promotion totals differed from server promotion evaluation, `sales.service.ts` pushed `PROMOTION_CHANGED` but then invoked `computeAndValidateTotals` which recomputed the bill without promotions and threw `TOTALS_MISMATCH`; resolved in commit [`78295ce`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/78295ce) by accepting client values and properly flagging for review.
+1. **Offline PROMOTION_CHANGED rejection bug:** When an offline sale's promotion totals differed from server promotion evaluation, `sales.service.ts` pushed `PROMOTION_CHANGED` but then invoked `computeAndValidateTotals` which recomputed the bill without promotions and threw `TOTALS_MISMATCH`. The code fix was implemented in commit [`78295ce`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/78295ce); CI went green first at commit [`ff17aa8`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/ff17aa8) (run [44729980566](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44729980566) `success`).
 2. **False success logged for [`25e2aa0`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/25e2aa0):** Run [44708483415](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44708483415) (`failure`) was prematurely documented as green; now strictly prevented by requiring raw CLI output from `scripts/ci-status.cjs` and automated verification of conclusion words and head SHA pairings in `scripts/verify-report-refs.cjs`.
 
 ---

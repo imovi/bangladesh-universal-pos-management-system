@@ -6,10 +6,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-pos_admin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pos_secret}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env.production}
       POSTGRES_DB: ${POSTGRES_DB:-universal_pos}
       POSTGRES_RUNTIME_USER: ${POSTGRES_RUNTIME_USER:-pos_runtime}
-      POSTGRES_RUNTIME_PASSWORD: ${POSTGRES_RUNTIME_PASSWORD:-pos_runtime_secret}
+      POSTGRES_RUNTIME_PASSWORD: ${POSTGRES_RUNTIME_PASSWORD:?set POSTGRES_RUNTIME_PASSWORD in deploy/.env.production}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-db.sh:/docker-entrypoint-initdb.d/01-init-db.sh:ro
@@ -40,8 +40,8 @@ services:
       dockerfile: apps/api/Dockerfile
       target: migrator
     environment:
-      DATABASE_URL: ${MIGRATION_DATABASE_URL:-postgresql://${POSTGRES_USER:-pos_admin}:${POSTGRES_PASSWORD:-pos_secret}@postgres:5432/${POSTGRES_DB:-universal_pos}?schema=public}
-      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:-postgresql://${POSTGRES_USER:-pos_admin}:${POSTGRES_PASSWORD:-pos_secret}@postgres:5432/${POSTGRES_DB:-universal_pos}?schema=public}
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:-postgresql://${POSTGRES_USER:-pos_admin}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env.production}@postgres:5432/${POSTGRES_DB:-universal_pos}?schema=public}
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:-postgresql://${POSTGRES_USER:-pos_admin}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env.production}@postgres:5432/${POSTGRES_DB:-universal_pos}?schema=public}
     depends_on:
       postgres:
         condition: service_healthy
@@ -56,12 +56,12 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
-      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_RUNTIME_USER:-pos_runtime}:${POSTGRES_RUNTIME_PASSWORD:-pos_runtime_secret}@postgres:5432/${POSTGRES_DB:-universal_pos}?schema=public&connection_limit=30}
-      MIGRATION_DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_RUNTIME_USER:-pos_runtime}:${POSTGRES_RUNTIME_PASSWORD:-pos_runtime_secret}@postgres:5432/${POSTGRES_DB:-universal_pos}?schema=public&connection_limit=30}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_RUNTIME_USER:-pos_runtime}:${POSTGRES_RUNTIME_PASSWORD:?set POSTGRES_RUNTIME_PASSWORD in deploy/.env.production}@postgres:5432/${POSTGRES_DB:-universal_pos}?schema=public&connection_limit=30}
+      MIGRATION_DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_RUNTIME_USER:-pos_runtime}:${POSTGRES_RUNTIME_PASSWORD:?set POSTGRES_RUNTIME_PASSWORD in deploy/.env.production}@postgres:5432/${POSTGRES_DB:-universal_pos}?schema=public&connection_limit=30}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in deploy/.env.production}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in deploy/.env.production}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-30d}
       RATE_LIMIT_TTL: ${RATE_LIMIT_TTL:-60}
       RATE_LIMIT_LIMIT: ${RATE_LIMIT_LIMIT:-100}
@@ -75,12 +75,6 @@ services:
         condition: service_completed_successfully
     expose:
       - "4000"
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/api/v1/health/ready').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
 
   admin:
     build:
@@ -96,8 +90,7 @@ services:
       HOSTNAME: "0.0.0.0"
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://${DOMAIN:-localhost}/api/v1}
     depends_on:
-      api:
-        condition: service_healthy
+      - api
     expose:
       - "3000"
 
@@ -114,10 +107,8 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      admin:
-        condition: service_healthy
-      api:
-        condition: service_healthy
+      - admin
+      - api
 
 volumes:
   postgres_data:

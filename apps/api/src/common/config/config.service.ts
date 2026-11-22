@@ -4,10 +4,32 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-export const EXAMPLE_JWT_ACCESS_SECRET =
-  "super-secret-access-key-change-me-in-production-min-32-chars";
-export const EXAMPLE_JWT_REFRESH_SECRET =
-  "super-secret-refresh-key-change-me-in-production-min-32-chars";
+export const FORBIDDEN_JWT_SECRETS: readonly string[] = [
+  "super-secret-access-key-change-me-in-production-min-32-chars",
+  "super-secret-refresh-key-change-me-in-production-min-32-chars",
+  "replace-with-generated-jwt-access-secret-min-32-chars",
+  "replace-with-generated-jwt-refresh-secret-min-32-chars",
+] as const;
+
+export const EXAMPLE_JWT_ACCESS_SECRET = FORBIDDEN_JWT_SECRETS[0];
+export const EXAMPLE_JWT_REFRESH_SECRET = FORBIDDEN_JWT_SECRETS[1];
+
+function containsPlaceholderPattern(val: string): boolean {
+  if (!val || typeof val !== "string") return false;
+  const lower = val.toLowerCase();
+  return lower.includes("replace-with") || lower.includes("change-me") || lower.includes("example");
+}
+
+function extractDatabasePassword(urlStr: string): string {
+  if (!urlStr || typeof urlStr !== "string") return "";
+  try {
+    const parsed = new URL(urlStr);
+    return parsed.password ? decodeURIComponent(parsed.password) : "";
+  } catch {
+    const match = urlStr.match(/:([^@/:]+)@/);
+    return match ? match[1] : "";
+  }
+}
 
 export const envSchema = z
   .object({
@@ -35,6 +57,7 @@ export const envSchema = z
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === "production") {
+      // 1. JWT Access Secret checks
       if (!data.JWT_ACCESS_SECRET || Buffer.byteLength(data.JWT_ACCESS_SECRET, "utf8") < 32) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -42,13 +65,22 @@ export const envSchema = z
           message: "JWT_ACCESS_SECRET must be at least 32 bytes in production",
         });
       }
-      if (data.JWT_ACCESS_SECRET === EXAMPLE_JWT_ACCESS_SECRET) {
+      if (containsPlaceholderPattern(data.JWT_ACCESS_SECRET)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["JWT_ACCESS_SECRET"],
-          message: "JWT_ACCESS_SECRET cannot equal default .env.example value in production",
+          message: "JWT_ACCESS_SECRET cannot contain placeholder patterns (replace-with, change-me, example) in production",
         });
       }
+      if (FORBIDDEN_JWT_SECRETS.includes(data.JWT_ACCESS_SECRET)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["JWT_ACCESS_SECRET"],
+          message: "JWT_ACCESS_SECRET cannot equal default example placeholder values in production",
+        });
+      }
+
+      // 2. JWT Refresh Secret checks
       if (!data.JWT_REFRESH_SECRET || Buffer.byteLength(data.JWT_REFRESH_SECRET, "utf8") < 32) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -56,13 +88,50 @@ export const envSchema = z
           message: "JWT_REFRESH_SECRET must be at least 32 bytes in production",
         });
       }
-      if (data.JWT_REFRESH_SECRET === EXAMPLE_JWT_REFRESH_SECRET) {
+      if (containsPlaceholderPattern(data.JWT_REFRESH_SECRET)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["JWT_REFRESH_SECRET"],
-          message: "JWT_REFRESH_SECRET cannot equal default .env.example value in production",
+          message: "JWT_REFRESH_SECRET cannot contain placeholder patterns (replace-with, change-me, example) in production",
         });
       }
+      if (FORBIDDEN_JWT_SECRETS.includes(data.JWT_REFRESH_SECRET)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["JWT_REFRESH_SECRET"],
+          message: "JWT_REFRESH_SECRET cannot equal default example placeholder values in production",
+        });
+      }
+
+      // 3. Reject equal access and refresh secrets
+      if (
+        data.JWT_ACCESS_SECRET &&
+        data.JWT_REFRESH_SECRET &&
+        data.JWT_ACCESS_SECRET === data.JWT_REFRESH_SECRET
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["JWT_REFRESH_SECRET"],
+          message: "JWT_ACCESS_SECRET and JWT_REFRESH_SECRET cannot be identical in production",
+        });
+      }
+
+      // 4. Reject weak or placeholder database password
+      const dbPassword = extractDatabasePassword(data.DATABASE_URL);
+      const lowerPw = dbPassword.toLowerCase();
+      if (
+        lowerPw === "pos_secret" ||
+        lowerPw === "pos_runtime_secret" ||
+        lowerPw.includes("replace-with")
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["DATABASE_URL"],
+          message: "DATABASE_URL cannot use weak or placeholder passwords (pos_secret, pos_runtime_secret, replace-with) in production",
+        });
+      }
+
+      // 5. CORS checks
       const trimmed = data.CORS_ORIGINS?.trim() || "";
       if (
         !trimmed ||

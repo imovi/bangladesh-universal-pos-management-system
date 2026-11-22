@@ -185,9 +185,23 @@ jobs:
             fs.writeFileSync('deploy/.env.production', env);
           "
 
-      - name: Build and start production containers
+      - name: Build production images
         run: |
-          docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production up -d --build
+          docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production build
+
+      - name: Verify placeholder secrets refusal in production
+        run: |
+          cp deploy/.env.production.example deploy/.env.placeholder.test
+          if docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.placeholder.test run --rm api > /dev/null 2>&1; then
+            echo "FAILED: API container should have refused placeholder secrets"
+            exit 1
+          fi
+          echo "placeholder env refused: OK"
+          rm -f deploy/.env.placeholder.test
+
+      - name: Start production containers
+        run: |
+          docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production up -d
 
       - name: Wait for API and Admin health
         run: |
@@ -205,6 +219,61 @@ jobs:
       - name: Run production smoke test
         run: |
           API_URL=https://localhost/api/v1 node scripts/smoke-prod.mjs
+
+      - name: Verify database runtime role hardening
+        run: |
+          echo "=== 1. Active database connections query ==="
+          docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production exec -T postgres psql -U pos_admin -d universal_pos -c "
+            SELECT pid, usename, application_name, client_addr FROM pg_stat_activity WHERE datname = 'universal_pos';
+          "
+          NON_RUNTIME_CONNS=$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production exec -T postgres psql -U pos_admin -d universal_pos -t -A -c "
+            SELECT count(*) FROM pg_stat_activity WHERE datname = 'universal_pos' AND (application_name ILIKE '%prisma%' OR usename != 'pos_admin') AND usename != 'pos_runtime';
+          ")
+          if [ "$NON_RUNTIME_CONNS" -ne 0 ]; then
+            echo "FAILED: Non-pos_runtime API connection detected!"
+            exit 1
+          fi
+          echo "All API connections are pos_runtime: OK"
+
+          echo "=== 2. pos_runtime privileges check ==="
+          docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production exec -T postgres psql -U pos_admin -d universal_pos -c "
+            SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'pos_runtime';
+          "
+          BAD_ROLE=$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production exec -T postgres psql -U pos_admin -d universal_pos -t -A -c "
+            SELECT count(*) FROM pg_roles WHERE rolname = 'pos_runtime' AND (rolsuper = true OR rolbypassrls = true);
+          ")
+          if [ "$BAD_ROLE" -ne 0 ]; then
+            echo "FAILED: pos_runtime has rolsuper=true or rolbypassrls=true!"
+            exit 1
+          fi
+          echo "pos_runtime rolsuper=false and rolbypassrls=false: OK"
+
+          echo "=== 3. Table ownership check ==="
+          docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production exec -T postgres psql -U pos_admin -d universal_pos -c "
+            SELECT tablename, tableowner FROM pg_tables WHERE schemaname = 'public' AND tableowner = 'pos_runtime';
+          "
+          OWNED_TABLES=$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production exec -T postgres psql -U pos_admin -d universal_pos -t -A -c "
+            SELECT count(*) FROM pg_tables WHERE schemaname = 'public' AND tableowner = 'pos_runtime';
+          ")
+          if [ "$OWNED_TABLES" -ne 0 ]; then
+            echo "FAILED: pos_runtime owns tables in public schema!"
+            exit 1
+          fi
+          echo "pos_runtime owns 0 tables in public schema: OK"
+
+      - name: Verify superuser database connection refusal
+        run: |
+          echo "Testing extra API container with superuser pos_admin DATABASE_URL..."
+          POSTGRES_PASS=$(grep '^POSTGRES_PASSWORD=' deploy/.env.production | cut -d= -f2)
+          OUTPUT=$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production run --rm \
+            -e DATABASE_URL="postgresql://pos_admin:${POSTGRES_PASS}@postgres:5432/universal_pos?schema=public" \
+            api 2>&1 || true)
+          echo "$OUTPUT"
+          if ! echo "$OUTPUT" | grep -q "FATAL: Database connection user is a PostgreSQL superuser"; then
+            echo "FAILED: API container did not output FATAL superuser error!"
+            exit 1
+          fi
+          echo "Superuser refusal verified: OK"
 
       - name: Tear down production containers
         if: always()

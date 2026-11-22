@@ -130,6 +130,9 @@ Check container statuses:
 docker compose -f docker-compose.prod.yml ps
 ```
 
+### HSTS and Subdomain Preload Policy
+By default, the Caddy reverse proxy sends the HTTP header `Strict-Transport-Security: max-age=31536000` (1 year). Notice that `includeSubDomains` and `preload` directives are deliberately omitted. HSTS Preload submits your domain to a hardcoded browser list that permanently enforces HTTPS across the root domain and all existing and future subdomains (e.g. `*.yourbrand.com`). If a business owner later hosts an internal service, mail server, or third-party portal on a subdomain that does not support HTTPS or uses temporary certificates, browsers will completely block user access without an override option. Removal from browser preload lists takes months; keeping preload off by default protects future domain flexibility while fully securing POS traffic.
+
 ---
 
 ## 7. Creating the First Owner Account

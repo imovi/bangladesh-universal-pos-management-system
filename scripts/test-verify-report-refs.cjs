@@ -120,6 +120,105 @@ if (!shaFailedAsExpected) {
   process.exit(1);
 }
 
+// 4. Section with 45... run ID and wrong conclusion must exit 1
+const mock45Runs = JSON.stringify({
+  "45030935054": { id: 45030935054, head_sha: "d4da0191234567890abcdef", status: "completed", conclusion: "success" },
+});
+const run45MismatchFixture = `
+## Test Section 45 Run Conclusion Mismatch
+- CI: \`d4da019\` → run \`45030935054\` → completed failure
+`;
+fs.writeFileSync(fixtureFile, run45MismatchFixture, "utf8");
+
+let run45FailedAsExpected = false;
+try {
+  execSync(
+    `node "${path.join(__dirname, "verify-report-refs.cjs")}" "## Test Section 45 Run Conclusion Mismatch" "${fixtureFile}"`,
+    {
+      env: { ...process.env, VERIFY_MOCK_RUNS: mock45Runs },
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    }
+  );
+} catch (err) {
+  run45FailedAsExpected = true;
+  const output = (err.stdout ? err.stdout.toString() : "") + (err.stderr ? err.stderr.toString() : "");
+  if (output.includes("Conclusion mismatch for run 45030935054: written 'failure' vs actual 'success'")) {
+    console.log("[PASS] 45... run ID with wrong conclusion failed with exit 1 as expected.");
+  } else {
+    console.error("[FAIL] 45... run fixture failed with unexpected output:", output);
+    process.exit(1);
+  }
+}
+if (!run45FailedAsExpected) {
+  console.error("[FAIL] 45... run mismatch fixture did not exit with error!");
+  process.exit(1);
+}
+
+// 5. Run line with no commit hash must exit 1
+const noCommitFixture = `
+## Test Section Run Line No Commit
+- CI run 45030935054 completed success
+`;
+fs.writeFileSync(fixtureFile, noCommitFixture, "utf8");
+
+let noCommitFailedAsExpected = false;
+try {
+  execSync(
+    `node "${path.join(__dirname, "verify-report-refs.cjs")}" "## Test Section Run Line No Commit" "${fixtureFile}"`,
+    {
+      env: { ...process.env, VERIFY_MOCK_RUNS: mock45Runs },
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    }
+  );
+} catch (err) {
+  noCommitFailedAsExpected = true;
+  const output = (err.stdout ? err.stdout.toString() : "") + (err.stderr ? err.stderr.toString() : "");
+  if (output.includes("has no commit hash on the same line")) {
+    console.log("[PASS] Run line with no commit hash failed with exit 1 as expected.");
+  } else {
+    console.error("[FAIL] Run line with no commit failed with unexpected output:", output);
+    process.exit(1);
+  }
+}
+if (!noCommitFailedAsExpected) {
+  console.error("[FAIL] Run line with no commit did not exit with error!");
+  process.exit(1);
+}
+
+// 6. Section that mentions "CI Run" but has no run ID must exit 1
+const noIdFixture = `
+## Test Section CI Run No ID
+- We observed CI Run failures during initial testing without logging IDs.
+`;
+fs.writeFileSync(fixtureFile, noIdFixture, "utf8");
+
+let noIdFailedAsExpected = false;
+try {
+  execSync(
+    `node "${path.join(__dirname, "verify-report-refs.cjs")}" "## Test Section CI Run No ID" "${fixtureFile}"`,
+    {
+      env: { ...process.env, VERIFY_MOCK_RUNS: mock45Runs },
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    }
+  );
+} catch (err) {
+  noIdFailedAsExpected = true;
+  const output = (err.stdout ? err.stdout.toString() : "") + (err.stderr ? err.stderr.toString() : "");
+  if (output.includes("Section contains 'CI Run' or 'Run <number>' but no run ID was found!")) {
+    console.log("[PASS] Section mentioning 'CI Run' without ID failed with exit 1 as expected.");
+  } else {
+    console.error("[FAIL] Section with no run ID failed with unexpected output:", output);
+    process.exit(1);
+  }
+}
+if (!noIdFailedAsExpected) {
+  console.error("[FAIL] Section mentioning CI Run without ID did not exit with error!");
+  process.exit(1);
+}
+
 // Cleanup fixture file
 try {
   fs.unlinkSync(fixtureFile);

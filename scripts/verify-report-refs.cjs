@@ -71,9 +71,40 @@ rawLines.forEach((lineText, idx) => {
 const runEntries = []; // Array of { runId, pairedCommit, lineText, writtenConclusion, lineNumber }
 const runIds = new Set();
 
-const lineRunRegex = /\[(4\d{10})\]|(?<![\/\w])(4\d{10})(?![\w\/])/g;
 const conclusionRegex = /\b(success|failure|cancelled|green|red|in_progress)\b/gi;
 const lineHashRegex = /\[`([0-9a-f]{7,40})`\]|(?<!\[)`([0-9a-f]{7,40})`(?!\])/gi;
+
+function extractRunIdsFromLine(lineText) {
+  const matches = [];
+
+  // 1. URLs: actions/runs/<id>
+  const urlRegex = /actions\/runs\/(\d{10,12})/gi;
+  let m;
+  while ((m = urlRegex.exec(lineText)) !== null) {
+    if (!matches.some((e) => e.id === m[1])) {
+      matches.push({ id: m[1], index: m.index });
+    }
+  }
+
+  // 2. Labelled as a run, e.g. "run 45060429437", "run `45060429437`", "CI Run 1: 450...", "run: 450..."
+  const labelRegex = /\b(?:CI\s+)?runs?(?:\s+id|\s+number)?[:\s#→>]+[`\[]?(\d{10,12})[`\]]?/gi;
+  while ((m = labelRegex.exec(lineText)) !== null) {
+    if (!matches.some((e) => e.id === m[1])) {
+      matches.push({ id: m[1], index: m.index });
+    }
+  }
+
+  // 3. In brackets or markdown table cells: [45060429437] or | 45060429437 |
+  const bracketOrTableRegex = /\[(\d{10,12})\]|(?<=\|\s*`?)(\d{10,12})(?=`?\s*\|)/g;
+  while ((m = bracketOrTableRegex.exec(lineText)) !== null) {
+    const rId = m[1] || m[2];
+    if (rId && !matches.some((e) => e.id === rId)) {
+      matches.push({ id: rId, index: m.index });
+    }
+  }
+
+  return matches;
+}
 
 lines.forEach(({ text: lineText, lineNum }) => {
   // Extract all commits on this line with their index positions
@@ -87,14 +118,7 @@ lines.forEach(({ text: lineText, lineNum }) => {
   }
 
   // Extract unique runs on this line with their index positions
-  const runMatches = [];
-  let rMatch;
-  while ((rMatch = lineRunRegex.exec(lineText)) !== null) {
-    const rId = rMatch[1] || rMatch[2];
-    if (!runMatches.some(m => m.id === rId)) {
-      runMatches.push({ id: rId, index: rMatch.index });
-    }
-  }
+  const runMatches = extractRunIdsFromLine(lineText);
 
   // Extract conclusion words with index positions
   const wordMatches = [];
@@ -109,13 +133,18 @@ lines.forEach(({ text: lineText, lineNum }) => {
   runMatches.forEach(run => {
     runIds.add(run.id);
 
-    // Find paired commit: closest preceding commit, or closest following if none precede
+    // Fail if run ID has no commit hash on the same line
     let pairedCommit = null;
-    const precedingCommits = commitMatches.filter(c => c.index < run.index);
-    if (precedingCommits.length > 0) {
-      pairedCommit = precedingCommits[precedingCommits.length - 1].hash;
-    } else if (commitMatches.length > 0) {
-      pairedCommit = commitMatches[0].hash;
+    if (commitMatches.length === 0) {
+      console.error(`[FAIL] Run ${run.id} on line ${lineNum} has no commit hash on the same line:`);
+      console.error(`  Line: ${lineText}`);
+    } else {
+      const precedingCommits = commitMatches.filter(c => c.index < run.index);
+      if (precedingCommits.length > 0) {
+        pairedCommit = precedingCommits[precedingCommits.length - 1].hash;
+      } else {
+        pairedCommit = commitMatches[0].hash;
+      }
     }
 
     // Find closest conclusion word to the run
@@ -142,6 +171,13 @@ lines.forEach(({ text: lineText, lineNum }) => {
     });
   });
 });
+
+// Fail if section contains words "CI Run" or "Run <number>", but no run id is found
+const mentionsRunWords = /\b(?:CI\s+Run|Run\s+\d+)\b/i.test(sectionContent);
+if (mentionsRunWords && runIds.size === 0) {
+  console.error(`[FAIL] Section contains 'CI Run' or 'Run <number>' but no run ID was found!`);
+  process.exit(1);
+}
 
 console.log(`Found ${commitHashes.size} unique commit hash(es) and ${runIds.size} unique run ID(s).`);
 
@@ -222,7 +258,11 @@ for (const entry of runEntries) {
     console.log(`[PASS] run: ${runId} (status: ${data.status}, conclusion: ${data.conclusion})`);
 
     // Verify Head SHA matches the commit on the same line
-    if (pairedCommit) {
+    if (!pairedCommit) {
+      console.error(`[FAIL] Run ${runId} on line ${lineNumber} has no commit hash on the same line`);
+      console.error(`  Line: ${lineText}`);
+      shaMismatches++;
+    } else {
       const actualSha = data.head_sha ? data.head_sha.toLowerCase() : "";
       if (!actualSha.startsWith(pairedCommit.toLowerCase())) {
         console.error(`[FAIL] Head SHA mismatch for run ${runId} on line ${lineNumber}: expected commit '${pairedCommit}' but run head_sha is '${actualSha.slice(0, 7)}'`);

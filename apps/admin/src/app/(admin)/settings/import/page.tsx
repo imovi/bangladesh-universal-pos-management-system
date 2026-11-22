@@ -15,7 +15,6 @@ import {
   Download,
   AlertCircle,
   CheckCircle2,
-  FileText,
   AlertTriangle,
   RefreshCw,
   Layers,
@@ -93,7 +92,7 @@ export default function ImportPage() {
 
   const handleDownloadTemplate = async () => {
     try {
-      const res = await apiFetch(`/api/v1/import/templates/${activeTab}`, {
+      const res = await apiFetch(`/import/templates/${activeTab}`, {
         method: "GET",
       });
       const blob = await res.blob();
@@ -120,7 +119,7 @@ export default function ImportPage() {
     setStatusMessage(null);
 
     try {
-      const res = await apiFetch("/api/v1/import/preview", {
+      const res = await apiFetch("/import/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -150,7 +149,7 @@ export default function ImportPage() {
     setStatusMessage(null);
 
     try {
-      const res = await apiFetch("/api/v1/import/commit", {
+      const res = await apiFetch("/import/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

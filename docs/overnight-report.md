@@ -428,7 +428,7 @@ Comprehensive audit verifying every requirement of Phase 1C (C1: Returns & Excha
 
 ### 1. Overview & Verification Status
 
-All 6 fixes and documentation corrections from hands-on testing have been implemented, thoroughly tested locally, committed with dedicated tests, and validated in GitHub Actions CI. Zero tests were skipped or deleted. Note: commit [`83170f7`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/83170f7) raised the Playwright test timeout in `apps/admin/playwright.config.ts` from default 30s to 60s after CI run [44623881315](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44623881315) failed during the E2E step with unreadable logs. Raising the timeout provides necessary headroom for multi-step E2E suites under constrained 2-vCPU CI runner load; while an appropriate operational adjustment, it constitutes a test suite tolerance relaxation rather than "zero weakenings".
+All 6 fixes and documentation corrections from hands-on testing have been implemented, thoroughly tested locally, committed with dedicated tests, and validated in GitHub Actions CI. Zero tests were skipped or deleted. Note: after commit [`86415d1`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/86415d1) failed in CI run [44623881315](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44623881315) (`failure`) during the E2E step with unreadable logs, commit [`83170f7`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/83170f7) raised the Playwright test timeout in `apps/admin/playwright.config.ts` from default 30s to 60s. Raising the timeout provides necessary headroom for multi-step E2E suites under constrained 2-vCPU CI runner load; while an appropriate operational adjustment, it constitutes a test suite tolerance relaxation rather than "zero weakenings".
 
 | Fix Item | Description | Status | Commit(s) | CI Run ID(s) & Conclusion |
 | :--- | :--- | :--- | :--- | :--- |
@@ -560,11 +560,11 @@ All commits and workflow runs below were verified directly against `git log` and
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Step 0: Leftovers from 1D** | Completed | [`1648168`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/1648168) | [44694593391](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44694593391) | `success` | Swap tenant after seed + boot failure protection test |
 | **Milestone E1: Shared Engine & Schema** | Completed | [`4cda049`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/4cda049) | [44698322274](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44698322274) | `success` | Pure shared math, 100% coverage, Prisma migration with RLS |
-| **Milestone E2: Back Office & /pos (Attempt 1)** | Failed | [`e641606`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/e641606) | [44705513182](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44705513182) | `failure` | E2E timing on payment dialog & return total formatting |
-| **Milestone E2: Back Office & /pos (Attempt 2)** | Failed | [`25e2aa0`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/25e2aa0) | [44708483415](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44708483415) | `failure` | E2E dialog close & return total locator adjustment |
-| **Mid-run Fix: Offline PROMOTION_CHANGED (Att 1)** | Failed | [`3083d88`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/3083d88) | [44719703495](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44719703495) | `failure` | Sales service offline totals mismatch resolution |
-| **Mid-run Fix: Offline PROMOTION_CHANGED (Att 2)** | Failed | [`78295ce`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/78295ce) | [44721789069](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44721789069) | `failure` | Calculation alignment with client offline totals |
-| **Mid-run Fix: Offline PROMOTION_CHANGED (Att 3)** | Failed | [`3d61aa7`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/3d61aa7) | [44724837184](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44724837184) | `failure` | E2E shift cleanup before promotions cashier flow |
+| **Milestone E2: Back Office & /pos (Attempt 1)** | Failed | [`e641606`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/e641606) | [44705513182](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44705513182) | `failure` | TransformInterceptor wrapped paginated response causing promotions.map crash, and shift open modal backdrop was not confirmed |
+| **Milestone E2: Back Office & /pos (Attempt 2)** | Failed | [`25e2aa0`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/25e2aa0) | [44708483415](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44708483415) | `failure` | Unwrapped paginated activePromotions in pos/page.tsx, pos-checkout-button testid mismatch, and variant modal closure on first click |
+| **Mid-run Fix: Offline PROMOTION_CHANGED (Att 1)** | Failed | [`78295ce`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/78295ce) | [44719703495](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44719703495) | `failure` | Accept and flag offline promotion sales with PROMOTION_CHANGED |
+| **Mid-run Fix: Offline PROMOTION_CHANGED (Att 2)** | Failed | [`3d61aa7`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/3d61aa7) | [44721789069](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44721789069) | `failure` | Authenticate Playwright context before offline promo test |
+| **Mid-run Fix: Offline PROMOTION_CHANGED (Att 3)** | Failed | [`3083d88`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/3083d88) | [44724837184](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44724837184) | `failure` | Resolve remaining E2 issues, unwrap activePromotions array, fix pos-checkout-button testid |
 | **Milestone E2: Final Verification** | Completed | [`ff17aa8`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/ff17aa8) | [44729980566](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44729980566) | `success` | 100% green CI across promotions engine & E2E flows |
 | **Milestone E3: Coupons Engine (Attempt 1)** | Failed | [`80d996b`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/80d996b) | [44736878215](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44736878215) | `failure` | POS coupon input locator & currency regex pattern |
 | **Milestone E3: Coupons Engine (Attempt 2)** | Completed | [`075639a`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/075639a) | [44741279973](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44741279973) | `success` | Concurrent usage lock, offline unlimited coupon, green CI |
@@ -575,15 +575,15 @@ All commits and workflow runs below were verified directly against `git log` and
 
 Output from `node scripts/verify-report-refs.cjs "## Phase 1E"`:
 ```text
-Checking section: ## Phase 1E (10901 chars)
+Checking section: ## Phase 1E
 Found 14 unique commit hash(es) and 14 unique run ID(s).
 [PASS] commit: 1648168
 [PASS] commit: 4cda049
 [PASS] commit: e641606
 [PASS] commit: 25e2aa0
-[PASS] commit: 3083d88
 [PASS] commit: 78295ce
 [PASS] commit: 3d61aa7
+[PASS] commit: 3083d88
 [PASS] commit: ff17aa8
 [PASS] commit: 80d996b
 [PASS] commit: 075639a
@@ -592,23 +592,52 @@ Found 14 unique commit hash(es) and 14 unique run ID(s).
 [PASS] commit: 35a9808
 [PASS] commit: e58b611
 [PASS] run: 44694593391 (status: completed, conclusion: success)
+  [PASS] Head SHA matches commit: 1648168
+  [PASS] Conclusion matches: success
 [PASS] run: 44698322274 (status: completed, conclusion: success)
+  [PASS] Head SHA matches commit: 4cda049
+  [PASS] Conclusion matches: success
 [PASS] run: 44705513182 (status: completed, conclusion: failure)
+  [PASS] Head SHA matches commit: e641606
+  [PASS] Conclusion matches: failure
 [PASS] run: 44708483415 (status: completed, conclusion: failure)
+  [PASS] Head SHA matches commit: 25e2aa0
+  [PASS] Conclusion matches: failure
 [PASS] run: 44719703495 (status: completed, conclusion: failure)
+  [PASS] Head SHA matches commit: 78295ce
+  [PASS] Conclusion matches: failure
 [PASS] run: 44721789069 (status: completed, conclusion: failure)
+  [PASS] Head SHA matches commit: 3d61aa7
+  [PASS] Conclusion matches: failure
 [PASS] run: 44724837184 (status: completed, conclusion: failure)
+  [PASS] Head SHA matches commit: 3083d88
+  [PASS] Conclusion matches: failure
 [PASS] run: 44729980566 (status: completed, conclusion: success)
+  [PASS] Head SHA matches commit: ff17aa8
+  [PASS] Conclusion matches: success
 [PASS] run: 44736878215 (status: completed, conclusion: failure)
+  [PASS] Head SHA matches commit: 80d996b
+  [PASS] Conclusion matches: failure
 [PASS] run: 44741279973 (status: completed, conclusion: success)
+  [PASS] Head SHA matches commit: 075639a
+  [PASS] Conclusion matches: success
 [PASS] run: 44785505241 (status: completed, conclusion: failure)
+  [PASS] Head SHA matches commit: 20bbcd7
+  [PASS] Conclusion matches: failure
 [PASS] run: 44788339066 (status: completed, conclusion: failure)
+  [PASS] Head SHA matches commit: aee8f8c
+  [PASS] Conclusion matches: failure
 [PASS] run: 44791372247 (status: completed, conclusion: success)
+  [PASS] Head SHA matches commit: 35a9808
+  [PASS] Conclusion matches: success
 [PASS] run: 44796791741 (status: completed, conclusion: success)
+  [PASS] Head SHA matches commit: e58b611
+  [PASS] Conclusion matches: success
 --- Verification Summary ---
 Missing commits: 0
 Missing run IDs: 0
 Conclusion mismatches: 0
+Head SHA mismatches: 0
 ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
 ```
 
@@ -616,16 +645,168 @@ ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
 
 ### 2. Architecture & Surface Changes
 
-1. **Database Schema & Migrations (`20261120140000_promotions_and_loyalty`):**
-   - `promotions`: `id`, `tenantId`, `name`, `type` (`PERCENT_OFF`, `AMOUNT_OFF`, `FIXED_PRICE`, `BUY_X_GET_Y`, `BUNDLE_PRICE`, `BILL_THRESHOLD`), `status` (`DRAFT`, `ACTIVE`, `PAUSED`, `ENDED`), `config` (JSONB), `priority`, `stackableWithBill`, `applyToAll`, `productIds`, `variantIds`, `categoryIds`, `brandIds`, `collectionIds`, `excludedProductIds`, `branchIds`, `minQuantity`, `minAmountMinor`, `membersOnly`, `usageLimitTotal`, `usageLimitPerCustomer`, `usedCount`, `startDate`, `endDate`, `activeDays`, `startHour`, `endHour`, `createdAt`, `updatedAt`.
-   - `coupons`: `id`, `tenantId`, `promotionId`, `code` (uppercase, unique per tenant), `usageLimitTotal`, `usageLimitPerCustomer`, `usedCount`, `createdAt`.
-   - `loyalty_settings`: `tenantId` (PK), `enabled`, `earnRateMinor`, `pointValueMinor`, `minRedeemPoints`, `maxBillSharePercent`, `expiryMonths`, `updatedAt`.
-   - `loyalty_ledger`: `id`, `tenantId`, `customerId`, `saleId`, `returnId`, `type` (`EARN`, `REDEEM`, `REVERSE_EARN`, `REFUND_REDEEM`, `EXPIRE`, `ADJUST`), `points` (signed integer), `expiresAt`, `createdAt`. Prohibited from modification or deletion via RLS.
-   - Column extensions:
-     - `sale_items`: `promotionId`, `promotionDiscountMinor`, `promotionLabel`.
-     - `sales`: `billPromotionId`, `billPromotionDiscountMinor`, `couponCode`, `pointsEarned`, `pointsRedeemed`.
-     - `customers`: `loyaltyPointsBalance`.
-   - Security: Row-Level Security enabled on all new tables with tenant policies for `pos_app` and `pos_runtime`.
+1. **Database Schema & Migrations:**
+   - Real Phase 1E migration directory: `20261120040000_milestone_e1_promotions_and_loyalty`.
+   - Migration directories in `apps/api/prisma/migrations`:
+     - `20261115093727_init`
+     - `20261115093728_rls`
+     - `20261115160000_pos_system_role`
+     - `20261115170000_catalog_and_variants`
+     - `20261115180000_inventory_ledger`
+     - `20261115190000_purchasing_and_suppliers`
+     - `20261115200000_customers_registers_shifts`
+     - `20261115210000_sales_engine`
+     - `20261115220000_role_max_discount`
+     - `20261115223000_pos_system_update_tenants`
+     - `20261115233000_sale_item_original_price`
+     - `20261116000000_fix6_tenants_rls_and_doc_counters`
+     - `20261116120000_fix1_role_discount_not_null`
+     - `20261116130000_fix3_sale_payload_hash`
+     - `20261116140000_milestone_a1_metadata_active`
+     - `20261116160000_fix4_narrow_pos_system_policies`
+     - `20261116200000_milestone_c1_returns_exchanges`
+     - `20261116210000_milestone_c2_credit_and_due`
+     - `20261117000000_milestone_c3_stock_transfers`
+     - `20261117010000_milestone_c4_barcode_counters`
+     - `20261118120000_milestone_d1_offline_selling`
+     - `20261120030000_add_offline_invoice_number_to_sale`
+     - `20261120040000_milestone_e1_promotions_and_loyalty`
+
+   - Models described via `scripts/describe-schema.cjs`:
+```text
+### Model Promotion
+- `id` (String) -> column `id`
+- `tenantId` (String) -> column `tenant_id`
+- `name` (String) -> column `name`
+- `description` (String?) -> column `description`
+- `type` (String) -> column `type`
+- `status` (String) -> column `status`
+- `priority` (Int) -> column `priority`
+- `stackableWithBill` (Boolean) -> column `stackable_with_bill`
+- `config` (Json) -> column `config`
+- `targets` (Json) -> column `targets`
+- `conditions` (Json) -> column `conditions`
+- `startDate` (DateTime?) -> column `start_date`
+- `endDate` (DateTime?) -> column `end_date`
+- `totalUses` (Int) -> column `total_uses`
+- `totalDiscountMinor` (BigInt) -> column `total_discount_minor`
+- `createdAt` (DateTime) -> column `created_at`
+- `updatedAt` (DateTime) -> column `updated_at`
+
+### Model Coupon
+- `id` (String) -> column `id`
+- `tenantId` (String) -> column `tenant_id`
+- `promotionId` (String?) -> column `promotion_id`
+- `code` (String) -> column `code`
+- `usageLimitTotal` (Int?) -> column `usage_limit_total`
+- `usageLimitPerCustomer` (Int?) -> column `usage_limit_per_customer`
+- `timesUsed` (Int) -> column `times_used`
+- `isActive` (Boolean) -> column `is_active`
+- `expiresAt` (DateTime?) -> column `expires_at`
+- `createdAt` (DateTime) -> column `created_at`
+- `updatedAt` (DateTime) -> column `updated_at`
+
+### Model CouponUsage
+- `id` (String) -> column `id`
+- `tenantId` (String) -> column `tenant_id`
+- `couponId` (String) -> column `coupon_id`
+- `saleId` (String) -> column `sale_id`
+- `customerId` (String?) -> column `customer_id`
+- `usedAt` (DateTime) -> column `used_at`
+
+### Model LoyaltySetting
+- `id` (String) -> column `id`
+- `tenantId` (String) -> column `tenant_id`
+- `isEnabled` (Boolean) -> column `is_enabled`
+- `earnRateMinor` (BigInt) -> column `earn_rate_minor`
+- `pointValueMinor` (BigInt) -> column `point_value_minor`
+- `minRedeemPoints` (Int) -> column `min_redeem_points`
+- `maxBillSharePercent` (Int) -> column `max_bill_share_percent`
+- `expiryMonths` (Int) -> column `expiry_months`
+- `createdAt` (DateTime) -> column `created_at`
+- `updatedAt` (DateTime) -> column `updated_at`
+
+### Model LoyaltyLedger
+- `id` (String) -> column `id`
+- `tenantId` (String) -> column `tenant_id`
+- `customerId` (String) -> column `customer_id`
+- `saleId` (String?) -> column `sale_id`
+- `returnId` (String?) -> column `return_id`
+- `type` (String) -> column `type`
+- `points` (Int) -> column `points`
+- `reason` (String?) -> column `reason`
+- `expiresAt` (DateTime?) -> column `expires_at`
+- `createdAt` (DateTime) -> column `created_at`
+
+### Model Sale
+- `id` (String) -> column `id`
+- `tenantId` (String) -> column `tenant_id`
+- `invoiceNumber` (String) -> column `invoice_number`
+- `shiftId` (String) -> column `shift_id`
+- `branchId` (String) -> column `branch_id`
+- `cashierUserId` (String) -> column `cashier_user_id`
+- `customerId` (String?) -> column `customer_id`
+- `status` (String) -> column `status`
+- `subtotalMinor` (BigInt) -> column `subtotal_minor`
+- `discountMinor` (BigInt) -> column `discount_minor`
+- `taxMinor` (BigInt) -> column `tax_minor`
+- `totalMinor` (BigInt) -> column `total_minor`
+- `paidMinor` (BigInt) -> column `paid_minor`
+- `dueMinor` (BigInt) -> column `due_minor`
+- `changeMinor` (BigInt) -> column `change_minor`
+- `notes` (String?) -> column `notes`
+- `requestPayloadHash` (String?) -> column `request_payload_hash`
+- `voidReason` (String?) -> column `void_reason`
+- `voidedAt` (DateTime?) -> column `voided_at`
+- `voidedByUserId` (String?) -> column `voided_by_user_id`
+- `occurredAt` (DateTime) -> column `occurred_at`
+- `syncedAt` (DateTime?) -> column `synced_at`
+- `isOffline` (Boolean) -> column `is_offline`
+- `offlineInvoiceNumber` (String?) -> column `offline_invoice_number`
+- `catalogVersion` (String?) -> column `catalog_version`
+- `billPromotionId` (String?) -> column `bill_promotion_id`
+- `billPromotionDiscountMinor` (BigInt) -> column `bill_promotion_discount_minor`
+- `couponCode` (String?) -> column `coupon_code`
+- `pointsEarned` (Int) -> column `points_earned`
+- `pointsRedeemed` (Int) -> column `points_redeemed`
+- `pointsRedeemedMinor` (BigInt) -> column `points_redeemed_minor`
+- `createdAt` (DateTime) -> column `created_at`
+
+### Model SaleItem
+- `id` (String) -> column `id`
+- `tenantId` (String) -> column `tenant_id`
+- `saleId` (String) -> column `sale_id`
+- `variantId` (String) -> column `variant_id`
+- `originalUnitPriceMinor` (BigInt?) -> column `original_unit_price_minor`
+- `unitPriceMinor` (BigInt) -> column `unit_price_minor`
+- `unitCostMinor` (BigInt) -> column `unit_cost_minor`
+- `quantity` (Decimal) -> column `quantity`
+- `subtotalMinor` (BigInt) -> column `subtotal_minor`
+- `discountMinor` (BigInt) -> column `discount_minor`
+- `taxRateBp` (Int) -> column `tax_rate_bp`
+- `taxMinor` (BigInt) -> column `tax_minor`
+- `totalMinor` (BigInt) -> column `total_minor`
+- `promotionId` (String?) -> column `promotion_id`
+- `promotionDiscountMinor` (BigInt) -> column `promotion_discount_minor`
+- `promotionLabel` (String?) -> column `promotion_label`
+- `createdAt` (DateTime) -> column `created_at`
+
+### Model Customer
+- `id` (String) -> column `id`
+- `tenantId` (String) -> column `tenant_id`
+- `name` (String) -> column `name`
+- `phone` (String) -> column `phone`
+- `email` (String?) -> column `email`
+- `address` (String?) -> column `address`
+- `notes` (String?) -> column `notes`
+- `totalSpentMinor` (BigInt) -> column `total_spent_minor`
+- `totalVisits` (Int) -> column `total_visits`
+- `creditLimitMinor` (BigInt) -> column `credit_limit_minor`
+- `loyaltyPointsBalance` (Int) -> column `loyalty_points_balance`
+- `birthDate` (DateTime?) -> column `birth_date`
+- `createdAt` (DateTime) -> column `created_at`
+- `updatedAt` (DateTime) -> column `updated_at`
+```
 
 2. **Permissions (`packages/shared/src/permissions.ts`):**
    - `promotion.view`: Owner, Manager.
@@ -691,7 +872,10 @@ ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
 1. **Physical Thermal Printer Output:** ESC/POS rendering was verified via image layout and Playwright receipt DOM tests, but physical 80mm and 58mm thermal printers should be connected on-site to verify hardware Bangla font rendering and paper tear alignment.
 2. **Hardware Barcode Scanner Interleaved Keystrokes:** High-speed USB/Bluetooth barcode scanner input rapidly firing on promotion carts should be physically tested on real POS terminals.
 
+---
 
+### 8. Problems Found During the Run
 
-
+1. **Offline PROMOTION_CHANGED rejection bug:** When an offline sale's promotion totals differed from server promotion evaluation, `sales.service.ts` pushed `PROMOTION_CHANGED` but then invoked `computeAndValidateTotals` which recomputed the bill without promotions and threw `TOTALS_MISMATCH`; resolved in commit [`78295ce`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/78295ce) by accepting client values and properly flagging for review.
+2. **False success logged for [`25e2aa0`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/25e2aa0):** Run [44708483415](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/44708483415) (`failure`) was prematurely documented as green; now strictly prevented by requiring raw CLI output from `scripts/ci-status.cjs` and automated verification of conclusion words and head SHA pairings in `scripts/verify-report-refs.cjs`.
 

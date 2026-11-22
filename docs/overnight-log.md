@@ -2214,22 +2214,20 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
 - **CI Run 1:** `44796791741` (Status: `completed`, Conclusion: `success`).
   - *Result:* 100% green across all CI steps including Build, Lint, Unit tests with coverage, Database migrations, Demo seed, Reset & seed E2E database, Run Admin Dashboard E2E tests, and Development database untouched verification.
 
+---
 
+## Phase 1F: Go-Live Readiness
 
+**Date & Time:** 2026-11-22 20:05 +06:00  
+**Specification:** `docs/prompts/antigravity-pos-phase1f-go-live-prompt.md`  
+**Mode:** Unattended Autonomous Mode  
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+### Step 0: Phase 1E Report Cleanup & Validator Gap Closure
+- Extended `scripts/verify-report-refs.cjs` to pair commit hashes and run IDs on the same line, verifying that the run's `head_sha` begins with the commit hash. Exits code 1 if mismatched.
+- Added comprehensive unit test in `scripts/test-verify-report-refs.cjs` with mocked responses verifying that conclusion and head SHA mismatches exit code 1.
+- Created `scripts/describe-schema.cjs` using brace-depth parsing to print Prisma models with field types and @map column names.
+- Corrected commit ↔ run pairing and descriptions in Phase 1E table in `docs/overnight-report.md`.
+- Updated Section 2 ("Architecture & Surface Changes") of Phase 1E in `docs/overnight-report.md` with exact output of `scripts/describe-schema.cjs` and real migration folders.
+- Added Section 8 ("Problems Found During the Run") covering the offline `PROMOTION_CHANGED` bug (`78295ce`) and false success prevention for `25e2aa0`.
+- Ran `node scripts/verify-report-refs.cjs` across `## Phase 1D, fixes`, `## Phase 1D, fixes follow-up`, and `## Phase 1E`: all passed with 0 missing commits, 0 missing run IDs, 0 conclusion mismatches, and 0 head SHA mismatches.
 

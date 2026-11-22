@@ -50,45 +50,97 @@ while ((m = inlineHashRegex.exec(sectionContent)) !== null) {
 }
 
 // Extract run IDs line by line and find associated conclusion word on the same line
-const lines = sectionContent.split('\n');
-const runEntries = []; // Array of { runId, line, writtenConclusion, lineNumber }
+const rawLines = sectionContent.split('\n');
+const lines = []; // { text, lineNum }
+
+rawLines.forEach((lineText, idx) => {
+  // If this is a markdown table row with <br> separating attempts in columns, expand into sub-rows
+  if (lineText.trim().startsWith('|') && lineText.trim().endsWith('|') && lineText.includes('<br>')) {
+    const cols = lineText.split('|');
+    const colParts = cols.map(c => c.split(/<br\s*\/?>/i).map(p => p.trim()));
+    const maxLen = Math.max(...colParts.map(p => p.length));
+    for (let i = 0; i < maxLen; i++) {
+      const subCols = colParts.map(parts => parts[i] || '');
+      lines.push({ text: subCols.join(' | '), lineNum: idx + 1 });
+    }
+  } else {
+    lines.push({ text: lineText, lineNum: idx + 1 });
+  }
+});
+
+const runEntries = []; // Array of { runId, pairedCommit, lineText, writtenConclusion, lineNumber }
 const runIds = new Set();
 
-const runIdRegex = /\b(44\d{9})\b/g;
+const lineRunRegex = /\[(44\d{9})\]|(?<![\/\w])(44\d{9})(?![\w\/])/g;
 const conclusionRegex = /\b(success|failure|cancelled|green|red|in_progress)\b/gi;
+const lineHashRegex = /\[`([0-9a-f]{7,40})`\]|(?<!\[)`([0-9a-f]{7,40})`(?!\])/gi;
 
-lines.forEach((lineText, idx) => {
-  let match;
-  while ((match = runIdRegex.exec(lineText)) !== null) {
-    const runId = match[1];
-    runIds.add(runId);
+lines.forEach(({ text: lineText, lineNum }) => {
+  // Extract all commits on this line with their index positions
+  const commitMatches = [];
+  let cMatch;
+  while ((cMatch = lineHashRegex.exec(lineText)) !== null) {
+    const val = (cMatch[1] || cMatch[2]).toLowerCase();
+    if (/^[0-9a-f]{7,40}$/i.test(val)) {
+      commitMatches.push({ hash: val, index: cMatch.index });
+    }
+  }
 
-    // Look for conclusion word on this same line
-    const words = [];
-    let wMatch;
-    while ((wMatch = conclusionRegex.exec(lineText)) !== null) {
-      words.push(wMatch[1].toLowerCase());
+  // Extract unique runs on this line with their index positions
+  const runMatches = [];
+  let rMatch;
+  while ((rMatch = lineRunRegex.exec(lineText)) !== null) {
+    const rId = rMatch[1] || rMatch[2];
+    if (!runMatches.some(m => m.id === rId)) {
+      runMatches.push({ id: rId, index: rMatch.index });
+    }
+  }
+
+  // Extract conclusion words with index positions
+  const wordMatches = [];
+  let wMatch;
+  while ((wMatch = conclusionRegex.exec(lineText)) !== null) {
+    let w = wMatch[1].toLowerCase();
+    if (w === 'green') w = 'success';
+    if (w === 'red') w = 'failure';
+    wordMatches.push({ word: w, index: wMatch.index });
+  }
+
+  runMatches.forEach(run => {
+    runIds.add(run.id);
+
+    // Find paired commit: closest preceding commit, or closest following if none precede
+    let pairedCommit = null;
+    const precedingCommits = commitMatches.filter(c => c.index < run.index);
+    if (precedingCommits.length > 0) {
+      pairedCommit = precedingCommits[precedingCommits.length - 1].hash;
+    } else if (commitMatches.length > 0) {
+      pairedCommit = commitMatches[0].hash;
     }
 
-    // Determine normalized written conclusion
+    // Find closest conclusion word to the run
     let written = null;
-    if (words.includes('success') || words.includes('green')) {
-      written = 'success';
-    } else if (words.includes('failure') || words.includes('red')) {
-      written = 'failure';
-    } else if (words.includes('cancelled')) {
-      written = 'cancelled';
-    } else if (words.includes('in_progress')) {
-      written = 'in_progress';
+    if (wordMatches.length > 0) {
+      let closest = wordMatches[0];
+      let minDiff = Math.abs(closest.index - run.index);
+      for (let i = 1; i < wordMatches.length; i++) {
+        const diff = Math.abs(wordMatches[i].index - run.index);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closest = wordMatches[i];
+        }
+      }
+      written = closest.word;
     }
 
     runEntries.push({
-      runId,
+      runId: run.id,
+      pairedCommit,
       lineText: lineText.trim(),
       writtenConclusion: written,
-      lineNumber: idx + 1,
+      lineNumber: lineNum,
     });
-  }
+  });
 });
 
 console.log(`Found ${commitHashes.size} unique commit hash(es) and ${runIds.size} unique run ID(s).`);
@@ -142,9 +194,10 @@ if (process.env.VERIFY_MOCK_RUNS) {
 
 let missingRuns = 0;
 let conclusionMismatches = 0;
+let shaMismatches = 0;
 
 for (const entry of runEntries) {
-  const { runId, lineText, writtenConclusion } = entry;
+  const { runId, pairedCommit, lineText, writtenConclusion, lineNumber } = entry;
   try {
     let data = cachedRuns.get(String(runId));
     if (!data && !process.env.VERIFY_MOCK_RUNS) {
@@ -167,6 +220,18 @@ for (const entry of runEntries) {
 
     const realConclusion = data.conclusion || (data.status === 'in_progress' ? 'in_progress' : data.status);
     console.log(`[PASS] run: ${runId} (status: ${data.status}, conclusion: ${data.conclusion})`);
+
+    // Verify Head SHA matches the commit on the same line
+    if (pairedCommit) {
+      const actualSha = data.head_sha ? data.head_sha.toLowerCase() : "";
+      if (!actualSha.startsWith(pairedCommit.toLowerCase())) {
+        console.error(`[FAIL] Head SHA mismatch for run ${runId} on line ${lineNumber}: expected commit '${pairedCommit}' but run head_sha is '${actualSha.slice(0, 7)}'`);
+        console.error(`  Line: ${lineText}`);
+        shaMismatches++;
+      } else {
+        console.log(`  [PASS] Head SHA matches commit: ${pairedCommit}`);
+      }
+    }
 
     if (writtenConclusion) {
       const normalizedReal = realConclusion === 'success' ? 'success' :
@@ -194,8 +259,9 @@ console.log('--- Verification Summary ---');
 console.log(`Missing commits: ${missingCommits}`);
 console.log(`Missing run IDs: ${missingRuns}`);
 console.log(`Conclusion mismatches: ${conclusionMismatches}`);
+console.log(`Head SHA mismatches: ${shaMismatches}`);
 
-if (missingCommits > 0 || missingRuns > 0 || conclusionMismatches > 0) {
+if (missingCommits > 0 || missingRuns > 0 || conclusionMismatches > 0 || shaMismatches > 0) {
   process.exit(1);
 } else {
   console.log('ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.');

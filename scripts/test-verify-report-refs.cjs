@@ -19,15 +19,16 @@ if (!fs.existsSync(testDir)) {
 
 const fixtureFile = path.join(testDir, "fixture-report.md");
 
-// Mock data: run 44111111111 is success, run 44222222222 is failure
+// Mock data: run 44111111111 is success on 4cda049, run 44222222222 is failure on e641606
 const mockRuns = JSON.stringify({
-  "44111111111": { id: 44111111111, status: "completed", conclusion: "success" },
-  "44222222222": { id: 44222222222, status: "completed", conclusion: "failure" },
+  "44111111111": { id: 44111111111, head_sha: "4cda0491234567890abcdef", status: "completed", conclusion: "success" },
+  "44222222222": { id: 44222222222, head_sha: "e6416061234567890abcdef", status: "completed", conclusion: "failure" },
+  "44333333333": { id: 44333333333, head_sha: "78295ce1234567890abcdef", status: "completed", conclusion: "failure" },
 });
 
 console.log("=== Testing verify-report-refs.cjs ===");
 
-// 1. Valid fixture: both conclusions match
+// 1. Valid fixture: both conclusions and head_shas match
 const validFixture = `
 ## Test Section Valid
 - Commit \`4cda049\` run 44111111111 (Conclusion: success)
@@ -85,10 +86,44 @@ if (!failedAsExpected) {
   process.exit(1);
 }
 
+// 3. Invalid fixture: commit 4cda049 paired on same line with run 44333333333 whose head_sha is 78295ce
+const shaMismatchFixture = `
+## Test Section SHA Mismatch
+- Commit \`4cda049\` run 44333333333 (Conclusion: failure)
+`;
+
+fs.writeFileSync(fixtureFile, shaMismatchFixture, "utf8");
+
+let shaFailedAsExpected = false;
+try {
+  execSync(
+    `node "${path.join(__dirname, "verify-report-refs.cjs")}" "## Test Section SHA Mismatch" "${fixtureFile}"`,
+    {
+      env: { ...process.env, VERIFY_MOCK_RUNS: mockRuns },
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    }
+  );
+} catch (err) {
+  shaFailedAsExpected = true;
+  const output = (err.stdout ? err.stdout.toString() : "") + (err.stderr ? err.stderr.toString() : "");
+  if (output.includes("Head SHA mismatch for run 44333333333") && output.includes("expected commit '4cda049' but run head_sha is '78295ce'")) {
+    console.log("[PASS] Invalid fixture caught head_sha mismatch as expected.");
+  } else {
+    console.error("[FAIL] Invalid fixture failed with unexpected output:", output);
+    process.exit(1);
+  }
+}
+
+if (!shaFailedAsExpected) {
+  console.error("[FAIL] SHA mismatch fixture did not exit with error!");
+  process.exit(1);
+}
+
 // Cleanup fixture file
 try {
   fs.unlinkSync(fixtureFile);
   fs.rmdirSync(testDir);
 } catch {}
 
-console.log("=== All verify-report-refs conclusion tests passed! ===");
+console.log("=== All verify-report-refs tests passed! ===");

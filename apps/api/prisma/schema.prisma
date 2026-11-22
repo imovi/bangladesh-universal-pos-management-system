@@ -798,6 +798,7 @@ model Sale {
   @@index([status])
   @@index([occurredAt])
   @@index([createdAt])
+  @@index([tenantId, status, occurredAt])
   @@map("sales")
 }
 

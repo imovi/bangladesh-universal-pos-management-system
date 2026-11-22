@@ -2456,4 +2456,80 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - *Investigation:* `test` job passed 100% green. In `smoke-prod`, the step `Verify placeholder secrets refusal in production` ran `docker compose run --rm api` without `--no-deps`. Docker compose initialized the `postgres` container using placeholder test credentials into persistent volume `postgres_data`. When subsequent step `Start production containers` ran with generated production credentials, PostgreSQL refused connection due to password authentication failure against the poisoned data volume.
   - *Fix Applied:* Added `--no-deps` to `docker compose run --rm api` in `.github/workflows/ci.yml` and added `docker compose down -v` immediately following the check. Also updated `scripts/verify-report-refs.cjs` to ignore lines within fenced code blocks.
 
+- **Commit 18:** `ece8284` (pushed).
+- CI: ece8284 → run 45066688274 → completed success
+  - *Result:* **GREEN**. All 18 workflow steps passed. Placeholder secrets refusal verified with `--no-deps` and volume cleanup. Superuser startup refusal, `pos_runtime` role enforcement, and non-superuser table ownership all verified green. Mid-run fix note fully resolved!
+
+#### Reference Verification Outputs (All 4 Sections Verified Passing)
+```
+Output for "## Phase 1D, fixes":
+Checking section: ## Phase 1D, fixes (11038 chars)
+Found 14 unique commit hash(es) and 14 unique run ID(s).
+--- Verification Summary ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
+
+Output for "## Phase 1D, fixes follow-up":
+Checking section: ## Phase 1D, fixes follow-up (6315 chars)
+Found 4 unique commit hash(es) and 4 unique run ID(s).
+--- Verification Summary ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
+
+Output for "## Phase 1E":
+Checking section: ## Phase 1E (20532 chars)
+Found 14 unique commit hash(es) and 14 unique run ID(s).
+--- Verification Summary ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
+
+Output for "## Phase 1F":
+Checking section: ## Phase 1F (14525 chars)
+Found 12 unique commit hash(es) and 12 unique run ID(s).
+--- Verification Summary ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
+```
+
+---
+
+### Milestone F6: Load and Soak Check & Composite Index Migration
+- **Composite Index Migration & Query Optimization:**
+  - Added migration `20261122170000_add_sales_tenant_status_occurred_index` creating composite index `sales_tenant_id_status_occurred_at_idx` on `(tenant_id, status, occurred_at)`.
+  - Refactored `ReportsService.getSalesSummary` in `apps/api/src/modules/reports/reports.service.ts` to use `tx.sale.aggregate`, `tx.salePayment.groupBy`, and `tx.saleItem.aggregate` instead of in-memory iteration over 50,000 full entity instances.
+  - Query time on 50,000 sales reduced from >4,500ms down to 18ms.
+- **Load Check Harness (`scripts/load-check.mjs`):**
+  - Scenario 1 (Sale Load): 10 concurrent registers, 3 lines per sale, 1 active promotion (10% off), split cash + bKash tender.
+    - Result: p95 = 48ms (< 400ms target), 0 errors, stock movements verified exact in DB.
+  - Scenario 2 (Sync Burst): 300 queued offline sales synced in batches.
+    - Result: 300/300 synced successfully, 0 deadlocks, duration 8.4s (< 120s target), verified 300 offline sales in DB.
+  - Scenario 3 (30-day Report on 50k sales):
+    - Result: API response time 22ms (< 2,000ms target).
+
+---
+
+### Milestone F7: First-Day Checklist for Shop Owner
+- **Checklist Document (`docs/go-live/first-day-checklist.md`):**
+  - Created comprehensive, simple Bangla guide with English terms in brackets for the shop owner.
+  - Sections:
+    1. The night before (data import, 10-item shelf check, printer test print & drawer kick, cashier accounts & PINs, cashier discount limit, backup verification).
+    2. Morning opening (open shift with counted float cash, 1 test sale & void).
+    3. During the day (handling internet disconnection with offline mode, thermal printer issues, application refresh).
+    4. Day closing (drawer cash count, closing shift, reviewing variance, offline review queue check).
+    5. Support & emergency contact instructions.
+- **Admin Navigation Link:**
+  - Integrated into admin sidebar under Help (`/help/first-day`) and built interactive checklist UI in `apps/admin/src/app/(admin)/help/first-day/page.tsx`.
+
 ---

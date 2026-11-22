@@ -89,10 +89,29 @@ export class ReportsService {
         if (dateRange.lte) paymentWhere.createdAt.lte = dateRange.lte;
       }
 
-      const [sales, returns, customerPayments] = await Promise.all([
-        tx.sale.findMany({
-          where: { tenantId, ...this.buildDateFilter(filter, tz) },
-          include: { payments: true, items: { select: { promotionDiscountMinor: true } } },
+      const saleWhere = { tenantId, ...this.buildDateFilter(filter, tz) };
+
+      const [salesAgg, paymentsAgg, itemPromoAgg, returns, customerPayments] = await Promise.all([
+        tx.sale.aggregate({
+          where: saleWhere,
+          _count: { id: true },
+          _sum: {
+            subtotalMinor: true,
+            discountMinor: true,
+            taxMinor: true,
+            totalMinor: true,
+            dueMinor: true,
+            billPromotionDiscountMinor: true,
+          },
+        }),
+        tx.salePayment.groupBy({
+          by: ["paymentMethod"],
+          where: { sale: saleWhere },
+          _sum: { amountMinor: true },
+        }),
+        tx.saleItem.aggregate({
+          where: { sale: saleWhere },
+          _sum: { promotionDiscountMinor: true },
         }),
         tx.saleReturn.findMany({
           where: { tenantId, ...this.buildReturnDateFilter(filter, tz) },
@@ -102,29 +121,19 @@ export class ReportsService {
         }),
       ]);
 
-      let totalGrossMinor = 0n;
-      let totalDiscountMinor = 0n;
-      let totalTaxMinor = 0n;
-      let totalNetMinor = 0n;
-      let totalCreditGivenMinor = 0n;
-      let totalPromotionDiscountMinor = 0n;
-      const paymentsByMethod: Record<string, number> = {};
+      const salesCount = salesAgg._count.id;
+      const totalGrossMinor = salesAgg._sum.subtotalMinor ?? 0n;
+      const totalDiscountMinor = salesAgg._sum.discountMinor ?? 0n;
+      const totalTaxMinor = salesAgg._sum.taxMinor ?? 0n;
+      const totalNetMinor = salesAgg._sum.totalMinor ?? 0n;
+      const totalCreditGivenMinor = salesAgg._sum.dueMinor ?? 0n;
+      const totalPromotionDiscountMinor =
+        (salesAgg._sum.billPromotionDiscountMinor ?? 0n) +
+        (itemPromoAgg._sum.promotionDiscountMinor ?? 0n);
 
-      for (const s of sales) {
-        totalGrossMinor += s.subtotalMinor;
-        totalDiscountMinor += s.discountMinor;
-        totalTaxMinor += s.taxMinor;
-        totalNetMinor += s.totalMinor;
-        if (s.dueMinor && s.dueMinor > 0n) {
-          totalCreditGivenMinor += s.dueMinor;
-        }
-        for (const p of s.payments) {
-          paymentsByMethod[p.paymentMethod] = (paymentsByMethod[p.paymentMethod] || 0) + Number(p.amountMinor);
-        }
-        totalPromotionDiscountMinor += s.billPromotionDiscountMinor || 0n;
-        for (const it of s.items) {
-          totalPromotionDiscountMinor += it.promotionDiscountMinor || 0n;
-        }
+      const paymentsByMethod: Record<string, number> = {};
+      for (const p of paymentsAgg) {
+        paymentsByMethod[p.paymentMethod] = Number(p._sum.amountMinor ?? 0n);
       }
 
       let totalRefundMinor = 0n;
@@ -141,7 +150,7 @@ export class ReportsService {
       }
 
       return {
-        salesCount: sales.length,
+        salesCount,
         returnsCount: returns.length,
         totalGrossMinor: Number(totalGrossMinor),
         totalDiscountMinor: Number(totalDiscountMinor),

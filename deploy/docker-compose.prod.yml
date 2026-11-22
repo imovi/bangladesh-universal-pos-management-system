@@ -41,6 +41,7 @@ services:
       target: migrator
     environment:
       DATABASE_URL: ${MIGRATION_DATABASE_URL:-postgresql://${POSTGRES_USER:-pos_admin}:${POSTGRES_PASSWORD:-pos_secret}@postgres:5432/${POSTGRES_DB:-universal_pos}?schema=public}
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:-postgresql://${POSTGRES_USER:-pos_admin}:${POSTGRES_PASSWORD:-pos_secret}@postgres:5432/${POSTGRES_DB:-universal_pos}?schema=public}
     depends_on:
       postgres:
         condition: service_healthy
@@ -56,6 +57,7 @@ services:
       NODE_ENV: production
       PORT: 4000
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_RUNTIME_USER:-pos_runtime}:${POSTGRES_RUNTIME_PASSWORD:-pos_runtime_secret}@postgres:5432/${POSTGRES_DB:-universal_pos}?schema=public&connection_limit=30}
+      MIGRATION_DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_RUNTIME_USER:-pos_runtime}:${POSTGRES_RUNTIME_PASSWORD:-pos_runtime_secret}@postgres:5432/${POSTGRES_DB:-universal_pos}?schema=public&connection_limit=30}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
@@ -85,6 +87,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      HOSTNAME: "0.0.0.0"
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://${DOMAIN:-localhost}/api/v1}
     depends_on:
       api:

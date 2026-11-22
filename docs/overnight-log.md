@@ -2258,5 +2258,18 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - Smoke test script: `scripts/smoke-prod.mjs` verifying tenant signup, login, product creation with variants, shift opening, cash sale, receipt retrieval, and shift closing against production API.
   - Operator deployment guide: `docs/go-live/deploy.md` with step-by-step instructions.
   - CI workflow: added `smoke-prod` job in `.github/workflows/ci.yml` that boots production compose, waits for Caddy & API health, executes `smoke-prod.mjs`, and tears down cleanly.
+- **Commit 2:** `9f27156` (pushed).
+- **CI Run 2:** `45033806284` (Status: `completed`, Conclusion: `failure`).
+  - *Investigation:* `test` job passed green. `smoke-prod` job failed at step "Build and start production containers".
+  - *Local Reproduction & Root Cause:*
+    1. In `deploy/docker-compose.prod.yml`, the `migrate` service had `DATABASE_URL` set but omitted `MIGRATION_DATABASE_URL`. Because `schema.prisma` declares `directUrl = env("MIGRATION_DATABASE_URL")`, Prisma CLI halted with `P1012: Environment variable not found: MIGRATION_DATABASE_URL`.
+    2. In `apps/admin/Dockerfile`, Next.js standalone server lacked `ENV HOSTNAME="0.0.0.0"`, causing `server.js` to bind to container hostname rather than `0.0.0.0`, resulting in Docker healthcheck (`fetch('http://localhost:3000/')`) failing with `ECONNREFUSED`.
+    3. In `scripts/smoke-prod.mjs`, `/auth/login` omitted required `tenantSlug`, and `/sales` POST required `Idempotency-Key` header matching body `id`.
+  - *Fix Applied:*
+    1. Passed `MIGRATION_DATABASE_URL` in `deploy/docker-compose.prod.yml` to both `migrate` and `api` services.
+    2. Added `ENV HOSTNAME="0.0.0.0"` in `apps/admin/Dockerfile` and `deploy/docker-compose.prod.yml`.
+    3. Added `tenantSlug` to login and `Idempotency-Key: saleId` header to `/sales` in `scripts/smoke-prod.mjs`.
+    4. Verified complete production compose boot, all containers healthy (`postgres`, `redis`, `migrate`, `api`, `admin`, `caddy`), and all 7 steps of `smoke-prod.mjs` succeeded 100% locally against `https://localhost/api/v1`.
+
 
 

@@ -86,6 +86,7 @@ async function runSmokeTest() {
   const loginRes = await apiRequest("/auth/login", {
     method: "POST",
     body: JSON.stringify({
+      tenantSlug: slug,
       email,
       password,
     }),
@@ -183,6 +184,9 @@ async function runSmokeTest() {
   const saleRes = await apiRequest("/sales", {
     method: "POST",
     token,
+    headers: {
+      "Idempotency-Key": saleId,
+    },
     body: JSON.stringify({
       id: saleId,
       shiftId,

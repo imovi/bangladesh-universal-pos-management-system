@@ -2411,6 +2411,18 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
 - **CI Run 14:** `45057282584` (Status: `completed`, Conclusion: `failure`).
   - *Investigation:* In `apps/admin/e2e/data-import-flow.spec.ts`, navigating to `/pos` encountered the shift-in-use modal (`ShiftInUseAlert`: "এই রেজিস্টারে অন্য ক্যাশিয়ারের শিফট চলমান রয়েছে") because `Main Counter` (`REG01`) was already in use by demo cashier `Sultana Razia`. The modal backdrop intercepted pointer events when attempting to click elements.
   - *Fix Applied:* Updated `apps/admin/e2e/data-import-flow.spec.ts` to dismiss the shift-in-use modal by clicking `[data-testid="switch-register-btn"]` when visible, search for the newly imported SKU via `[data-testid="pos-search-input"]`, and verify that the imported product card and its opening stock quantity (`88`) are clearly visible on `/pos`.
+- **Commit 15:** `6fb7b51` (pushed).
+- **CI Run 15:** `45060429437` (Status: `completed`, Conclusion: `success`).
+  - *Result:* **GREEN**. All 17 workflow steps passed including unit tests, integration tests, backup restore drill, and all Playwright E2E suites (`data-import-flow.spec.ts` passed in 5.5s). Milestone F4 is officially unblocked and verified green!
+
+### Milestone F5: Health Probes, Structured JSON Logging, and Daily Health Alerts
+- **Deliverables:**
+  1. `/api/v1/health/live` (Liveness) and `/api/v1/health/ready` (Readiness) probes checking DB, migrations, and optional Redis in `apps/api/src/modules/health.controller.ts`.
+  2. Single-line structured JSON logger middleware with field masking (passwords, PINs, tokens, phone numbers) in `apps/api/src/common/logging/json-logger.ts`.
+  3. Scheduled daily health summary at 23:30 Asia/Dhaka checking backup age (>26h), open shifts (>16h), and pending review flags, logging to audit log under `DAILY_HEALTH_SUMMARY` in `apps/api/src/modules/audit/daily-health.service.ts`.
+  4. Docker Compose and Caddy readiness health check routing in `deploy/docker-compose.prod.yml` and `deploy/Caddyfile`.
+  5. Operator monitoring guide in `docs/go-live/monitoring.md`.
+  6. Unit test suites in `apps/api/test/json-logger.spec.ts` (4 tests) and `apps/api/test/daily-health-alert.spec.ts` (4 tests).
 
 
 

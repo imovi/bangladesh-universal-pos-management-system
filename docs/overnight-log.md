@@ -2387,6 +2387,12 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
 - **Unit & Performance Tests:**
   - `apps/api/test/csv-parser.spec.ts`: 10/10 tests passed.
   - `apps/api/test/import-engine.spec.ts`: 12/12 tests passed, including 5,000-row synthetic benchmark completing in 49.97s (< 60s limit).
+- **Commit 11:** `5d4c7cf` (pushed).
+- **CI Run 11:** `45051900730` (Status: `completed`, Conclusion: `failure`).
+  - *Investigation:* `test` job failed at step 17 `Run Admin Dashboard E2E tests` in `apps/admin/e2e/data-import-flow.spec.ts`.
+  - *Root Cause:* Opening stock CSV in the E2E test used branch code `DMD-01` instead of the seeded demo tenant branch code `GFS-01` ("Gulshan Flagship Store"). Preview correctly rejected the row as unknown branch (`অজানা শাখা কোড: DMD-01`), causing test assertion `text=সঠিক লাইন: 1` to fail.
+  - *Fix Applied:* Corrected branch code to `GFS-01` in `apps/admin/e2e/data-import-flow.spec.ts`. Also optimized `import.service.ts` to perform nested variant barcode and option creates in a single query per variant, keeping the 5,000-row import well under the 60s limit (49.97s).
+
 
 
 

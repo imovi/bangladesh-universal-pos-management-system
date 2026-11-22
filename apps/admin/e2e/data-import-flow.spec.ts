@@ -66,7 +66,7 @@ test.describe("Milestone F4: Day-One CSV Import E2E Flow", () => {
     const stockCsvPath = path.join(tempDir, `stock-${uniqueSuffix}.csv`);
     const stockCsvContent =
       "sku,branch_code,quantity,unit_cost\r\n" +
-      `${sku},DMD-01,88,1600\r\n`;
+      `${sku},GFS-01,88,1600\r\n`;
 
     fs.writeFileSync(stockCsvPath, stockCsvContent, "utf-8");
 

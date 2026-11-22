@@ -2270,6 +2270,53 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
     2. Added `ENV HOSTNAME="0.0.0.0"` in `apps/admin/Dockerfile` and `deploy/docker-compose.prod.yml`.
     3. Added `tenantSlug` to login and `Idempotency-Key: saleId` header to `/sales` in `scripts/smoke-prod.mjs`.
     4. Verified complete production compose boot, all containers healthy (`postgres`, `redis`, `migrate`, `api`, `admin`, `caddy`), and all 7 steps of `smoke-prod.mjs` succeeded 100% locally against `https://localhost/api/v1`.
+- **Commit 3:** `f83e420` (pushed).
+- **CI Run 3:** `45035661220` (Status: `completed`, Conclusion: `success`).
+  - *Result:* 100% green across both CI jobs:
+    - `test`: Build, Lint, Unit tests with coverage, Database migrations, Demo seed, Reset & seed E2E database, Run Admin Dashboard E2E tests, and Development database untouched verification.
+    - `smoke-prod`: Prepared production environment, built all production multi-stage images, started production cluster, verified Caddy automatic HTTPS, and completed all 7 smoke test steps end-to-end.
+
+---
+
+### Milestone F2: Backups Proven to Restore with Automated RLS & Immutability Drill
+- **Backup & Restore Tooling:**
+  - Created `scripts/backup.ts` and `scripts/backup.sh`:
+    - Full database backup using PostgreSQL custom format (`pg_dump --format=custom -Fc`).
+    - Dumps global roles and grants separately via `pg_dumpall --globals-only`.
+    - Asymmetric encryption support via `age` using public recipient key (`BACKUP_AGE_PUBLIC_KEY`).
+    - Generates SHA-256 checksums alongside dumps (`.sha256`).
+    - Retention management: keeps 14 daily backups and 8 weekly backups, pruning older files.
+    - Off-server copy via `rclone copy` to remote target specified by `BACKUP_RCLONE_REMOTE`.
+    - Emits loud warning `"ব্যাকআপ শুধু এই সার্ভারে আছে"` when `BACKUP_RCLONE_REMOTE` is unconfigured.
+    - Writes backup status metadata to `last-backup.json`.
+  - Created `scripts/restore.ts` and `scripts/restore.sh`:
+    - Strict safety guard: throws error if target database is the live database (`universal_pos`).
+    - Drops and recreates target database cleanly (`DROP DATABASE IF EXISTS`, `CREATE DATABASE`).
+    - Decrypts `age` encrypted backups with private identity key when required.
+    - Restores globals and schema/data via `pg_restore --clean --if-exists --no-owner`.
+    - Automatically grants permissions on the restored database to `pos_runtime`.
+    - Queries and displays row count summaries for 8 core tables: `tenants`, `products`, `product_variants`, `sales`, `sale_items`, `stock_movements`, `loyalty_ledger`, `audit_logs`.
+    - Writes drill verification metadata to `last-restore-drill.json`.
+  - Added npm scripts `"backup:now": "tsx scripts/backup.ts"` and `"restore:drill": "tsx scripts/restore.ts"`.
+- **Automated Restore Drill Test:**
+  - Built `apps/api/test/restore-drill.spec.ts` verifying 4 critical invariants on a freshly restored database:
+    1. Backs up source database, drops it, and restores into `universal_pos_drill_restored`.
+    2. Exact row count parity across all 8 core tables (`tenants`, `products`, `product_variants`, `sales`, `sale_items`, `stock_movements`, `loyalty_ledger`, `audit_logs`).
+    3. Multi-tenant RLS isolation: authenticated tenant token can only access its own records; attempting to query another tenant's records returns 0 rows.
+    4. Append-only immutability: verifies `audit_logs` and `loyalty_ledger` reject `UPDATE` and `DELETE` queries with permission denied errors under the `pos_app` role.
+- **Admin UI & API:**
+  - Added `@Get("backups")` endpoint in `apps/api/src/modules/tenants/settings.controller.ts` protected by `tenant.read` permission and Owner role verification, returning timestamp, size, encrypted state, off-server status, and last restore drill date.
+  - Built `BackupsCard` in `apps/admin/src/components/settings/backups-card.tsx` (Owner-only, read-only, no download button, displaying off-server warning badge when unconfigured).
+  - Created `/settings` overview index page in `apps/admin/src/app/(admin)/settings/page.tsx` and embedded `BackupsCard` in `/settings/shop`.
+  - Added translation keys in `apps/admin/src/i18n/bn.ts` and `apps/admin/src/i18n/en.ts`.
+  - Added `/settings` route to `apps/admin/e2e/global-data-integrity-guard.spec.ts`.
+- **Documentation:**
+  - Created `docs/go-live/backup-restore.md` explaining backup mechanics, encryption setup, rclone remote configuration, monthly drill instructions, and disaster recovery switch-over procedures.
+
+
+---
+
+
 
 
 

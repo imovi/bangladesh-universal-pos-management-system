@@ -43,3 +43,8 @@ blob-report/
 
 # Docker
 .docker/
+
+# Backups
+backups/
+*.dump
+

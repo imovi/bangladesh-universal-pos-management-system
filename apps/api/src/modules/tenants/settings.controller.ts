@@ -7,17 +7,66 @@ import {
   Req,
   Ip,
   BadRequestException,
+  ForbiddenException,
 } from "@nestjs/common";
+import fs from "fs";
+import path from "path";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard.js";
 import { PermissionsGuard } from "../../common/guards/permissions.guard.js";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator.js";
 import { TenantsService } from "./tenants.service.js";
-import { PERMISSIONS, UpdateTenantSettingsSchema } from "@universal-pos/shared";
+import { PERMISSIONS, SYSTEM_ROLES, UpdateTenantSettingsSchema } from "@universal-pos/shared";
 
 @Controller("settings")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SettingsController {
   constructor(private readonly tenantsService: TenantsService) {}
+
+  @Get("backups")
+  @RequirePermission(PERMISSIONS.TENANT_READ)
+  async getBackupsStatus(@Req() req: any) {
+    if (req.user.roleName !== SYSTEM_ROLES.OWNER) {
+      throw new ForbiddenException("Only Owner can view backup status");
+    }
+    const backupDir =
+      process.env.BACKUP_DIR || path.resolve(process.cwd(), "backups");
+    let lastBackup: any = null;
+    const lastBackupFile = path.join(backupDir, "last-backup.json");
+    if (fs.existsSync(lastBackupFile)) {
+      try {
+        lastBackup = JSON.parse(fs.readFileSync(lastBackupFile, "utf8"));
+      } catch {}
+    }
+
+    let lastRestoreDrill: any = null;
+    const lastRestoreDrillFile = path.join(backupDir, "last-restore-drill.json");
+    if (fs.existsSync(lastRestoreDrillFile)) {
+      try {
+        lastRestoreDrill = JSON.parse(
+          fs.readFileSync(lastRestoreDrillFile, "utf8"),
+        );
+      } catch {}
+    }
+
+    const rcloneRemote = process.env.BACKUP_RCLONE_REMOTE;
+    const offServerConfigured = Boolean(
+      rcloneRemote || lastBackup?.offServerConfigured,
+    );
+    const offServerWarning = offServerConfigured
+      ? null
+      : "ব্যাকআপ শুধু এই সার্ভারে আছে";
+
+    return {
+      lastBackupAt: lastBackup?.timestamp ?? null,
+      lastBackupSizeBytes: lastBackup?.sizeBytes ?? null,
+      lastBackupFilename: lastBackup?.filename ?? null,
+      encrypted: lastBackup?.encrypted ?? false,
+      offServerConfigured,
+      offServerWarning,
+      lastRestoreDrillAt: lastRestoreDrill?.timestamp ?? null,
+      lastRestoreDrillStatus: lastRestoreDrill?.status ?? null,
+    };
+  }
 
   @Get("pos")
   @RequirePermission(PERMISSIONS.SALE_CREATE)

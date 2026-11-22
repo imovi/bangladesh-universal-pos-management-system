@@ -18,6 +18,7 @@ const routes = [
   "/reports/sales",
   "/reports/stock",
   "/reports/profit",
+  "/settings",
   "/settings/shop",
   "/settings/branches",
   "/settings/roles",

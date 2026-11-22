@@ -71,7 +71,7 @@ rawLines.forEach((lineText, idx) => {
 const runEntries = []; // Array of { runId, pairedCommit, lineText, writtenConclusion, lineNumber }
 const runIds = new Set();
 
-const lineRunRegex = /\[(44\d{9})\]|(?<![\/\w])(44\d{9})(?![\w\/])/g;
+const lineRunRegex = /\[(4\d{10})\]|(?<![\/\w])(4\d{10})(?![\w\/])/g;
 const conclusionRegex = /\b(success|failure|cancelled|green|red|in_progress)\b/gi;
 const lineHashRegex = /\[`([0-9a-f]{7,40})`\]|(?<!\[)`([0-9a-f]{7,40})`(?!\])/gi;
 

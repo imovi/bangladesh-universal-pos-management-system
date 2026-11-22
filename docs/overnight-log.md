@@ -2315,13 +2315,14 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
 - **Commit 4:** `2f80b82` (pushed).
 - **CI Run 4:** `45039128502` (Status: `completed`, Conclusion: `failure`).
   - *Investigation:* `test` job failed at step `Run tests with coverage as non-superuser pos_runtime`.
-  - *Local Reproduction & Root Cause:*
-    1. In `scripts/restore.ts`, `pg_restore` exits with status 1 on non-fatal warnings (such as comments or existing schema public). The previous code caught any non-zero exit and attempted fallback via `docker exec -i universal_pos_postgres`. On the CI Ubuntu runner, PostgreSQL is a service container, not a named Docker container, causing `Error: No such container: universal_pos_postgres`.
-    2. At step 90 of CI (`Run tests with coverage`), `universal_pos` had migrations applied but had not yet run `seed:demo` (which runs at step 105). Backing up `universal_pos` and restoring it into `SOURCE_DB` produced an empty database with 0 tenants, causing `expect(tenants.length).toBeGreaterThanOrEqual(1)` to fail.
-  - *Fix Applied:*
-    1. Updated `scripts/backup.ts` and `scripts/restore.ts` to detect native `pg_dump` and `pg_restore` first, and treat exit status 1 as non-fatal warnings without triggering fallback.
-    2. Added `seedDrillSourceData` in `apps/api/test/restore-drill.spec.ts` to self-seed demo records into `SOURCE_DB` whenever empty, ensuring complete autonomy from `universal_pos`.
-    3. Verified `npm --workspace=@universal-pos/api run test -- test/restore-drill.spec.ts` passes 4/4 tests cleanly.
+  - *Local Reproduction & Root Cause:* In `scripts/restore.ts`, `pg_restore` exits with status 1 on non-fatal warnings (such as comments or existing schema public). The previous code caught any non-zero exit and attempted fallback via `docker exec -i universal_pos_postgres`. On the CI Ubuntu runner, PostgreSQL is a service container, not a named Docker container, causing `Error: No such container: universal_pos_postgres`. Also, at step 90 of CI (`Run tests with coverage`), `universal_pos` had migrations applied but had not yet run `seed:demo` (step 105). Backing up `universal_pos` produced an empty database with 0 tenants.
+  - *Fix Applied:* Updated `scripts/backup.ts` and `scripts/restore.ts` to detect native `pg_dump` and `pg_restore` first, and treat exit status 1 as non-fatal warnings without triggering fallback. Added `seedDrillSourceData` in `apps/api/test/restore-drill.spec.ts` to self-seed demo records into `SOURCE_DB` whenever empty.
+- **Commit 5:** `622d38e` (pushed).
+- **CI Run 5:** `45040186367` (Status: `completed`, Conclusion: `failure`).
+  - *Investigation:* `test` job failed at step `Run tests with coverage as non-superuser pos_runtime`.
+  - *Annotation & Root Cause:* GitHub Check Run annotation reported `PrismaClientKnownRequestError: Raw query failed. Code: 42601. Message: ERROR: cannot insert multiple commands into a prepared statement` at `seedDrillSourceData` in `apps/api/test/restore-drill.spec.ts:55:5`. In PostgreSQL prepared statements invoked through Prisma `$executeRawUnsafe()`, batching multiple semicolon-delimited `INSERT` statements in a single string is forbidden by the PostgreSQL engine.
+  - *Fix Applied:* Split each table `INSERT INTO` statement in `seedDrillSourceData` into its own distinct `await prisma.$executeRawUnsafe(...)` call. Also cleaned up unused `tz` and parameter `_filter` in `apps/api/src/modules/reports/reports.service.ts`.
+  - *Local Verification:* Tested against dev database and confirmed all 4 tests pass cleanly.
 
 
 ---

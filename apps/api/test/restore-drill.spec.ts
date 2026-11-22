@@ -56,43 +56,69 @@ describe("Milestone F2: PostgreSQL Backup & Restore Drill with RLS and Immutabil
       INSERT INTO "tenants" (id, name, slug, business_type, status)
       VALUES ('${tAId}', 'Drill Tenant A', 'drill-tenant-a', 'fashion', 'ACTIVE'),
              ('${tBId}', 'Drill Tenant B', 'drill-tenant-b', 'fashion', 'ACTIVE');
+    `);
 
+    await prisma.$executeRawUnsafe(`
       INSERT INTO "branches" (id, tenant_id, name, code, address)
       VALUES ('${branchId}', '${tAId}', 'Flagship Branch', 'BR01', 'Dhaka');
+    `);
 
+    await prisma.$executeRawUnsafe(`
       INSERT INTO "users" (id, tenant_id, name, email, phone, password_hash, status)
       VALUES ('${userId}', '${tAId}', 'Cashier A', 'cashier@drilla.com', '+8801700000099', 'hash', 'ACTIVE');
+    `);
 
+    await prisma.$executeRawUnsafe(`
       INSERT INTO "registers" (id, tenant_id, branch_id, name, code)
       VALUES ('${regId}', '${tAId}', '${branchId}', 'Register 01', 'REG01');
+    `);
 
+    await prisma.$executeRawUnsafe(`
       INSERT INTO "shifts" (id, tenant_id, branch_id, register_id, opened_by_user_id, status, opened_at, starting_cash_minor)
       VALUES ('${shiftId}', '${tAId}', '${branchId}', '${regId}', '${userId}', 'OPEN', NOW(), 100000);
+    `);
 
+    await prisma.$executeRawUnsafe(`
       INSERT INTO "categories" (id, tenant_id, name, slug)
       VALUES ('${catId}', '${tAId}', 'Clothing', 'clothing');
+    `);
 
+    await prisma.$executeRawUnsafe(`
       INSERT INTO "products" (id, tenant_id, category_id, name, slug, type, status, pricing_type)
       VALUES ('${prodId}', '${tAId}', '${catId}', 'Panjabi', 'panjabi', 'STANDARD', 'ACTIVE', 'FIXED');
+    `);
 
+    await prisma.$executeRawUnsafe(`
       INSERT INTO "product_variants" (id, tenant_id, product_id, sku, price_minor, cost_price_minor, status)
       VALUES ('${varId}', '${tAId}', '${prodId}', 'PAN-01', 250000, 150000, 'ACTIVE');
+    `);
 
+    await prisma.$executeRawUnsafe(`
       INSERT INTO "stock_movements" (tenant_id, branch_id, variant_id, qty_delta, type, unit_cost_minor, actor_user_id)
       VALUES ('${tAId}', '${branchId}', '${varId}', 50, 'OPENING', 150000, '${userId}');
+    `);
 
+    await prisma.$executeRawUnsafe(`
       INSERT INTO "customers" (id, tenant_id, name, phone)
       VALUES ('${custId}', '${tAId}', 'Drill Customer', '+8801711998877');
+    `);
 
+    await prisma.$executeRawUnsafe(`
       INSERT INTO "sales" (id, tenant_id, invoice_number, shift_id, branch_id, cashier_user_id, customer_id, status, subtotal_minor, total_minor, paid_minor)
       VALUES ('${saleId}', '${tAId}', 'INV-DRILL-001', '${shiftId}', '${branchId}', '${userId}', '${custId}', 'completed', 250000, 250000, 250000);
+    `);
 
+    await prisma.$executeRawUnsafe(`
       INSERT INTO "sale_items" (id, tenant_id, sale_id, variant_id, product_name, variant_sku, quantity, unit_price_minor, total_minor)
       VALUES ('${saleItemId}', '${tAId}', '${saleId}', '${varId}', 'Panjabi', 'PAN-01', 1, 250000, 250000);
+    `);
 
+    await prisma.$executeRawUnsafe(`
       INSERT INTO "loyalty_ledger" (tenant_id, customer_id, type, points, reason)
       VALUES ('${tAId}', '${custId}', 'EARN', 25, 'Drill purchase');
+    `);
 
+    await prisma.$executeRawUnsafe(`
       INSERT INTO "audit_logs" (tenant_id, actor_user_id, action, entity_type, entity_id)
       VALUES ('${tAId}', '${userId}', 'DRILL_INIT', 'DATABASE', '${prodId}');
     `);

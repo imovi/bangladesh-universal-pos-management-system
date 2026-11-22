@@ -1072,8 +1072,7 @@ export class ReportsService {
     });
   }
 
-  async getLoyaltyReport(tenantId: string, filter: ReportDateFilter) {
-    const tz = await this.getTimeZone(tenantId);
+  async getLoyaltyReport(tenantId: string, _filter: ReportDateFilter) {
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const [setting, ledgers, customers] = await Promise.all([
         tx.loyaltySetting.findUnique({ where: { tenantId } }),

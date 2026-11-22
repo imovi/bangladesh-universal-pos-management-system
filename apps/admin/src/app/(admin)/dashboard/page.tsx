@@ -121,6 +121,25 @@ export default function DashboardPage() {
     },
   });
 
+  // Query Daily Health Alerts
+  const { data: healthAlerts } = useQuery<{
+    needsAction: boolean;
+    alerts: Array<{ messageEn: string; messageBn: string }>;
+  }>({
+    queryKey: ["dashboard-daily-health-alerts"],
+    queryFn: async () => {
+      try {
+        const res = await apiFetch("/audit-logs/daily-health");
+        if (!res.ok) return null;
+        const json = await res.json();
+        return json.data || json;
+      } catch {
+        return null;
+      }
+    },
+    refetchInterval: 60000,
+  });
+
   // Query Open Shifts Count
   const { data: openShiftsCount = 0 } = useQuery<number>({
     queryKey: ["dashboard-open-shifts", selectedBranchId],
@@ -189,7 +208,7 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-xl bg-card border border-border shadow-sm">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            {locale === "bn" ? "দোকান ড্যাশবোর্ড" : "Store Dashboard"}
+            {strings.nav.dashboard}
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
             {locale === "bn"
@@ -216,6 +235,31 @@ export default function DashboardPage() {
           </Button>
         </div>
       </div>
+
+      {healthAlerts?.needsAction && healthAlerts.alerts && healthAlerts.alerts.length > 0 && (
+        <div
+          className="mb-6 p-4 rounded-lg bg-red-50 border border-red-300 text-red-900 shadow-sm"
+          role="alert"
+          data-testid="dashboard-health-alert-banner"
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <h2 className="font-semibold text-sm text-red-800">
+                {strings.dashboard.urgentAlerts}
+              </h2>
+              <ul className="mt-1 space-y-1 text-sm">
+                {healthAlerts.alerts.map((alert, idx) => (
+                  <li key={idx} className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-red-500 inline-block"></span>
+                    <span>{alert[locale === "bn" ? "messageBn" : "messageEn"]}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Top KPI Cards Grid - Neutral grey icons, text-foreground amounts */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
@@ -254,7 +298,7 @@ export default function DashboardPage() {
               {salesCount}
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {locale === "bn" ? "মোট ভাউচার সংখ্যা" : "Completed receipts"}
+              {strings.dashboard.salesCount}
             </p>
           </CardContent>
         </Card>
@@ -274,7 +318,7 @@ export default function DashboardPage() {
               {formatMoney(avgSaleMinor)}
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {locale === "bn" ? "প্রতি বিক্রিতে গড় আয়" : "Average sale amount"}
+              {strings.dashboard.averageBasket}
             </p>
           </CardContent>
         </Card>
@@ -295,7 +339,7 @@ export default function DashboardPage() {
                 {lowStockCount}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {locale === "bn" ? "সীমার নিচে থাকা স্টক" : "Below reorder limit"}
+                {strings.dashboard.lowStockAlerts}
               </p>
             </CardContent>
           </Card>
@@ -317,7 +361,7 @@ export default function DashboardPage() {
                 {openShiftsCount}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {locale === "bn" ? "সক্রিয় ক্যাশিয়ার শিফট" : "Open register sessions"}
+                {strings.dashboard.openShifts}
               </p>
             </CardContent>
           </Card>

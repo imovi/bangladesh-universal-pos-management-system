@@ -2357,6 +2357,12 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - Built printer settings page at `/settings/printer` allowing paper width selection, connection selection, test print, open drawer, auto-print toggling, and copy count.
   - Updated `ReceiptView` in `apps/admin/src/components/pos/receipt-view.tsx` with direct transport integration and auto-print support.
   - Documented setup guide and 10-point checklist in `docs/go-live/printer-setup.md`.
+- **Commit 9:** `a9b5379` (pushed).
+- **CI Run 9:** `45048824052` (Status: `completed`, Conclusion: `failure`).
+  - *Investigation:* `test` job failed at step 11 `Build packages`. Unauthenticated GitHub API log returned 403; reproduced locally.
+  - *Local Reproduction & Root Cause:* In commit `a9b5379`, `apps/admin/src/app/(admin)/settings/printer/page.tsx` referenced translation keys (`strings.settings.printerTitle`, `printerConnected`, etc.) while `apps/admin/src/i18n/bn.ts` and `apps/admin/src/i18n/en.ts` had not been committed with it. During CI `npm run build`, `next build` failed TypeScript type checking due to property existence errors on `strings.settings`.
+  - *Fix Applied:* Added printer translation keys to `bn.ts` and `en.ts`, updated `sw.js`, and adjusted dashboard and first-day strings to stay within the strict inline `locale === 'bn'` ceiling (684 <= 685). All 9 test files (56 tests) in admin workspace passed.
+
 
 
 

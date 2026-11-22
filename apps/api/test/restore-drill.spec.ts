@@ -38,6 +38,66 @@ describe("Milestone F2: PostgreSQL Backup & Restore Drill with RLS and Immutabil
     "audit_logs",
   ];
 
+  async function seedDrillSourceData(prisma: PrismaClient) {
+    const tAId = "01934c56-0001-7000-8000-000000000001";
+    const tBId = "01934c56-0002-7000-8000-000000000002";
+    const branchId = "01934c56-0003-7000-8000-000000000003";
+    const userId = "01934c56-0004-7000-8000-000000000004";
+    const regId = "01934c56-0005-7000-8000-000000000005";
+    const shiftId = "01934c56-0006-7000-8000-000000000006";
+    const catId = "01934c56-0007-7000-8000-000000000007";
+    const prodId = "01934c56-0008-7000-8000-000000000008";
+    const varId = "01934c56-0009-7000-8000-000000000009";
+    const saleId = "01934c56-0010-7000-8000-000000000010";
+    const saleItemId = "01934c56-0011-7000-8000-000000000011";
+    const custId = "01934c56-0012-7000-8000-000000000012";
+
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "tenants" (id, name, slug, business_type, status)
+      VALUES ('${tAId}', 'Drill Tenant A', 'drill-tenant-a', 'fashion', 'ACTIVE'),
+             ('${tBId}', 'Drill Tenant B', 'drill-tenant-b', 'fashion', 'ACTIVE');
+
+      INSERT INTO "branches" (id, tenant_id, name, code, address)
+      VALUES ('${branchId}', '${tAId}', 'Flagship Branch', 'BR01', 'Dhaka');
+
+      INSERT INTO "users" (id, tenant_id, name, email, phone, password_hash, status)
+      VALUES ('${userId}', '${tAId}', 'Cashier A', 'cashier@drilla.com', '+8801700000099', 'hash', 'ACTIVE');
+
+      INSERT INTO "registers" (id, tenant_id, branch_id, name, code)
+      VALUES ('${regId}', '${tAId}', '${branchId}', 'Register 01', 'REG01');
+
+      INSERT INTO "shifts" (id, tenant_id, branch_id, register_id, opened_by_user_id, status, opened_at, starting_cash_minor)
+      VALUES ('${shiftId}', '${tAId}', '${branchId}', '${regId}', '${userId}', 'OPEN', NOW(), 100000);
+
+      INSERT INTO "categories" (id, tenant_id, name, slug)
+      VALUES ('${catId}', '${tAId}', 'Clothing', 'clothing');
+
+      INSERT INTO "products" (id, tenant_id, category_id, name, slug, type, status, pricing_type)
+      VALUES ('${prodId}', '${tAId}', '${catId}', 'Panjabi', 'panjabi', 'STANDARD', 'ACTIVE', 'FIXED');
+
+      INSERT INTO "product_variants" (id, tenant_id, product_id, sku, price_minor, cost_price_minor, status)
+      VALUES ('${varId}', '${tAId}', '${prodId}', 'PAN-01', 250000, 150000, 'ACTIVE');
+
+      INSERT INTO "stock_movements" (tenant_id, branch_id, variant_id, qty_delta, type, unit_cost_minor, actor_user_id)
+      VALUES ('${tAId}', '${branchId}', '${varId}', 50, 'OPENING', 150000, '${userId}');
+
+      INSERT INTO "customers" (id, tenant_id, name, phone)
+      VALUES ('${custId}', '${tAId}', 'Drill Customer', '+8801711998877');
+
+      INSERT INTO "sales" (id, tenant_id, invoice_number, shift_id, branch_id, cashier_user_id, customer_id, status, subtotal_minor, total_minor, paid_minor)
+      VALUES ('${saleId}', '${tAId}', 'INV-DRILL-001', '${shiftId}', '${branchId}', '${userId}', '${custId}', 'completed', 250000, 250000, 250000);
+
+      INSERT INTO "sale_items" (id, tenant_id, sale_id, variant_id, product_name, variant_sku, quantity, unit_price_minor, total_minor)
+      VALUES ('${saleItemId}', '${tAId}', '${saleId}', '${varId}', 'Panjabi', 'PAN-01', 1, 250000, 250000);
+
+      INSERT INTO "loyalty_ledger" (tenant_id, customer_id, type, points, reason)
+      VALUES ('${tAId}', '${custId}', 'EARN', 25, 'Drill purchase');
+
+      INSERT INTO "audit_logs" (tenant_id, actor_user_id, action, entity_type, entity_id)
+      VALUES ('${tAId}', '${userId}', 'DRILL_INIT', 'DATABASE', '${prodId}');
+    `);
+  }
+
   beforeAll(async () => {
     fs.mkdirSync(TEMP_BACKUP_DIR, { recursive: true });
 
@@ -63,7 +123,12 @@ describe("Milestone F2: PostgreSQL Backup & Restore Drill with RLS and Immutabil
     });
 
     // Capture pre-drill tenant IDs and row counts
-    const tenants: any = await sourcePrisma.$queryRawUnsafe(`SELECT id FROM "tenants" LIMIT 2`);
+    let tenants: any = await sourcePrisma.$queryRawUnsafe(`SELECT id FROM "tenants" LIMIT 2`);
+    if (!tenants || tenants.length === 0) {
+      await seedDrillSourceData(sourcePrisma);
+      tenants = await sourcePrisma.$queryRawUnsafe(`SELECT id FROM "tenants" LIMIT 2`);
+    }
+
     expect(tenants.length).toBeGreaterThanOrEqual(1);
     tenantAId = tenants[0].id;
     tenantBId = tenants[1]?.id || tenants[0].id;

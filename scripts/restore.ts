@@ -128,20 +128,41 @@ export async function runRestore(options: RestoreOptions = {}): Promise<RestoreR
 
     // 2. Restore database content from custom dump
     console.log(`[RESTORE] Executing pg_restore into '${targetDb}'...`);
-    try {
-      execSync("pg_restore --version", { stdio: "pipe" });
-      execSync(
-        `pg_restore -h ${host} -p ${port} -U ${user} -d ${targetDb} --no-owner --role=${user} "${dumpToRestore}"`,
-        { env, stdio: "pipe" }
-      );
-    } catch {
+    const hasNativePgRestore = (() => {
+      try {
+        execSync("pg_restore --version", { stdio: "pipe" });
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+
+    if (hasNativePgRestore) {
+      try {
+        execSync(
+          `pg_restore -h ${host} -p ${port} -U ${user} -d ${targetDb} --no-owner "${dumpToRestore}"`,
+          { env, stdio: "pipe" }
+        );
+      } catch (err: any) {
+        // Exit status 1 in pg_restore indicates non-fatal warnings (e.g. existing comments, public schema)
+        if (err.status === 1) {
+          console.log(`[RESTORE] pg_restore finished with non-fatal warnings (status 1).`);
+        } else {
+          throw err;
+        }
+      }
+    } else {
       const cont = container || process.env.POSTGRES_CONTAINER || "universal_pos_postgres";
       const dumpBytes = fs.readFileSync(dumpToRestore);
-      execSync(`docker exec -i ${cont} pg_restore -U ${user} -d ${targetDb} --no-owner --role=${user}`, {
-        input: dumpBytes,
-        env,
-        maxBuffer: 50 * 1024 * 1024,
-      });
+      try {
+        execSync(`docker exec -i ${cont} pg_restore -U ${user} -d ${targetDb} --no-owner`, {
+          input: dumpBytes,
+          env,
+          maxBuffer: 50 * 1024 * 1024,
+        });
+      } catch (err: any) {
+        if (err.status !== 1) throw err;
+      }
     }
 
     // 3. Ensure runtime user grants are active on restored target database

@@ -2312,6 +2312,16 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - Added `/settings` route to `apps/admin/e2e/global-data-integrity-guard.spec.ts`.
 - **Documentation:**
   - Created `docs/go-live/backup-restore.md` explaining backup mechanics, encryption setup, rclone remote configuration, monthly drill instructions, and disaster recovery switch-over procedures.
+- **Commit 4:** `2f80b82` (pushed).
+- **CI Run 4:** `45039128502` (Status: `completed`, Conclusion: `failure`).
+  - *Investigation:* `test` job failed at step `Run tests with coverage as non-superuser pos_runtime`.
+  - *Local Reproduction & Root Cause:*
+    1. In `scripts/restore.ts`, `pg_restore` exits with status 1 on non-fatal warnings (such as comments or existing schema public). The previous code caught any non-zero exit and attempted fallback via `docker exec -i universal_pos_postgres`. On the CI Ubuntu runner, PostgreSQL is a service container, not a named Docker container, causing `Error: No such container: universal_pos_postgres`.
+    2. At step 90 of CI (`Run tests with coverage`), `universal_pos` had migrations applied but had not yet run `seed:demo` (which runs at step 105). Backing up `universal_pos` and restoring it into `SOURCE_DB` produced an empty database with 0 tenants, causing `expect(tenants.length).toBeGreaterThanOrEqual(1)` to fail.
+  - *Fix Applied:*
+    1. Updated `scripts/backup.ts` and `scripts/restore.ts` to detect native `pg_dump` and `pg_restore` first, and treat exit status 1 as non-fatal warnings without triggering fallback.
+    2. Added `seedDrillSourceData` in `apps/api/test/restore-drill.spec.ts` to self-seed demo records into `SOURCE_DB` whenever empty, ensuring complete autonomy from `universal_pos`.
+    3. Verified `npm --workspace=@universal-pos/api run test -- test/restore-drill.spec.ts` passes 4/4 tests cleanly.
 
 
 ---

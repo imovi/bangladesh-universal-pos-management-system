@@ -74,8 +74,28 @@ export function runBackup(options: BackupOptions = {}): BackupResult {
   }
 
   // 2. Dump database in custom format (-Fc)
-  const dumpCmd = resolvePgCommand("pg_dump", `-d ${database} --format=custom`, host, port, user, container);
-  const dumpData = execSync(dumpCmd, { env, maxBuffer: 50 * 1024 * 1024 });
+  const hasNativePgDump = (() => {
+    try {
+      execSync("pg_dump --version", { stdio: "pipe" });
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+
+  let dumpData: Buffer;
+  if (hasNativePgDump) {
+    dumpData = execSync(`pg_dump -h ${host} -p ${port} -U ${user} -d ${database} --format=custom`, {
+      env,
+      maxBuffer: 50 * 1024 * 1024,
+    });
+  } else {
+    const cont = container || process.env.POSTGRES_CONTAINER || "universal_pos_postgres";
+    dumpData = execSync(`docker exec -i ${cont} pg_dump -U ${user} -d ${database} --format=custom`, {
+      env,
+      maxBuffer: 50 * 1024 * 1024,
+    });
+  }
   fs.writeFileSync(dumpFile, dumpData);
 
   let finalFile = dumpFile;

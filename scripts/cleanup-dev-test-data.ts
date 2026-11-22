@@ -1,6 +1,10 @@
 import { PrismaClient } from "@prisma/client";
 
 async function main() {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Refusing to run cleanup-dev-test-data in production environment (NODE_ENV=production)");
+  }
+
   const rawUrl =
     process.env.DATABASE_URL ||
     "postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public";

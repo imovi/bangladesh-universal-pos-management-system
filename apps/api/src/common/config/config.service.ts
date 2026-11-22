@@ -4,6 +4,11 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+export const EXAMPLE_JWT_ACCESS_SECRET =
+  "super-secret-access-key-change-me-in-production-min-32-chars";
+export const EXAMPLE_JWT_REFRESH_SECRET =
+  "super-secret-refresh-key-change-me-in-production-min-32-chars";
+
 export const envSchema = z
   .object({
     NODE_ENV: z
@@ -30,6 +35,34 @@ export const envSchema = z
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === "production") {
+      if (!data.JWT_ACCESS_SECRET || Buffer.byteLength(data.JWT_ACCESS_SECRET, "utf8") < 32) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["JWT_ACCESS_SECRET"],
+          message: "JWT_ACCESS_SECRET must be at least 32 bytes in production",
+        });
+      }
+      if (data.JWT_ACCESS_SECRET === EXAMPLE_JWT_ACCESS_SECRET) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["JWT_ACCESS_SECRET"],
+          message: "JWT_ACCESS_SECRET cannot equal default .env.example value in production",
+        });
+      }
+      if (!data.JWT_REFRESH_SECRET || Buffer.byteLength(data.JWT_REFRESH_SECRET, "utf8") < 32) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["JWT_REFRESH_SECRET"],
+          message: "JWT_REFRESH_SECRET must be at least 32 bytes in production",
+        });
+      }
+      if (data.JWT_REFRESH_SECRET === EXAMPLE_JWT_REFRESH_SECRET) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["JWT_REFRESH_SECRET"],
+          message: "JWT_REFRESH_SECRET cannot equal default .env.example value in production",
+        });
+      }
       const trimmed = data.CORS_ORIGINS?.trim() || "";
       if (
         !trimmed ||

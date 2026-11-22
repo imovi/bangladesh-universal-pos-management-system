@@ -1,0 +1,38 @@
+#!/bin/bash
+set -e
+
+RUNTIME_USER="${POSTGRES_RUNTIME_USER:-pos_runtime}"
+RUNTIME_PASSWORD="${POSTGRES_RUNTIME_PASSWORD:-pos_runtime_secret}"
+ADMIN_USER="${POSTGRES_USER:-pos_admin}"
+ADMIN_DB="${POSTGRES_DB:-universal_pos}"
+
+echo "Bootstrapping PostgreSQL roles and permissions for Universal POS..."
+
+psql -v ON_ERROR_STOP=1 --username "$ADMIN_USER" --dbname "$ADMIN_DB" <<-EOSQL
+    DO \$\$
+    BEGIN
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'pos_app') THEN
+            CREATE ROLE pos_app NOLOGIN NOINHERIT;
+        END IF;
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'pos_system') THEN
+            CREATE ROLE pos_system NOLOGIN NOINHERIT;
+        END IF;
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$RUNTIME_USER') THEN
+            EXECUTE format('CREATE ROLE %I WITH LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS', '$RUNTIME_USER', '$RUNTIME_PASSWORD');
+        ELSE
+            EXECUTE format('ALTER ROLE %I WITH PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS', '$RUNTIME_USER', '$RUNTIME_PASSWORD');
+        END IF;
+        EXECUTE format('GRANT pos_app, pos_system TO %I', '$RUNTIME_USER');
+    END
+    \$\$;
+
+    GRANT CONNECT ON DATABASE "$ADMIN_DB" TO "$RUNTIME_USER";
+    GRANT USAGE ON SCHEMA public TO "$RUNTIME_USER", pos_app, pos_system;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO pos_app;
+    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO pos_app;
+
+    ALTER DEFAULT PRIVILEGES FOR ROLE "$ADMIN_USER" IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO pos_app;
+    ALTER DEFAULT PRIVILEGES FOR ROLE "$ADMIN_USER" IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO pos_app;
+EOSQL
+
+echo "PostgreSQL role bootstrap complete."

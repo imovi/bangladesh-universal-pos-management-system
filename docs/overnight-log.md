@@ -2230,4 +2230,33 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
 - Updated Section 2 ("Architecture & Surface Changes") of Phase 1E in `docs/overnight-report.md` with exact output of `scripts/describe-schema.cjs` and real migration folders.
 - Added Section 8 ("Problems Found During the Run") covering the offline `PROMOTION_CHANGED` bug (`78295ce`) and false success prevention for `25e2aa0`.
 - Ran `node scripts/verify-report-refs.cjs` across `## Phase 1D, fixes`, `## Phase 1D, fixes follow-up`, and `## Phase 1E`: all passed with 0 missing commits, 0 missing run IDs, 0 conclusion mismatches, and 0 head SHA mismatches.
+- **Commit 1:** `d4da019` (pushed).
+- **CI Run 1:** `45030935054` (Status: `completed`, Conclusion: `success`).
+  - *Result:* 100% green across all CI steps including Build, Lint, Unit tests with coverage, Database migrations, Demo seed, Reset & seed E2E database, Run Admin Dashboard E2E tests, and Development database untouched verification.
+
+### Milestone F1: Production Build, Compose Deploy Package & Smoke Test
+- **Security & Hardening:**
+  - Installed `helmet` in `apps/api` and enabled secure HTTP headers (CSP, HSTS, frameguard, etc.).
+  - Configured `app.set('trust proxy', 1)` in `apps/api/src/main.ts` for clean reverse proxying behind Caddy.
+  - Implemented runtime production environment validation using Zod `superRefine` in `apps/api/src/common/config/config.service.ts`:
+    - Enforced `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` length >= 32 characters, rejecting default example values.
+    - Enforced `CORS_ORIGINS` to contain explicit domains and no wildcard `*`.
+  - Added superuser blocker in `apps/api/src/common/database/prisma.service.ts` checking `SELECT current_setting('is_superuser')` on startup in production, halting process if superuser.
+  - Added production guard in `scripts/cleanup-dev-test-data.ts` preventing destructive operations when `NODE_ENV === "production"`.
+  - Built unit tests in `apps/api/test/production-config.spec.ts` covering 7 test cases (all passed).
+- **Docker & Deployment Assets:**
+  - Multi-stage Dockerfiles:
+    - `apps/api/Dockerfile`: multi-stage (`builder`, `migrator`, `runner`) on `node:24-bookworm-slim`, non-root user `node`, `npm ci --omit=dev`, healthcheck on `/api/v1/health`.
+    - `apps/admin/Dockerfile`: standalone Next.js (`output: "standalone"`) on `node:24-bookworm-slim`, non-root user `node`, healthcheck on `/`.
+  - Docker ignore files `.dockerignore`, `apps/api/.dockerignore`, `apps/admin/.dockerignore` filtering git, `.next`, node_modules, and env files.
+  - Deployment bundle in `deploy/`:
+    - `deploy/.env.production.example`: commented production environment template.
+    - `deploy/init-db.sh`: PostgreSQL role bootstrapping script creating `pos_app`, `pos_system`, and `pos_runtime` with `NOSUPERUSER NOBYPASSRLS NOINHERIT`.
+    - `deploy/Caddyfile`: reverse proxy with automatic HTTPS, routing `/api/*` to `api:4000` and frontend to `admin:3000`.
+    - `deploy/docker-compose.prod.yml`: PostgreSQL 17, Redis 7, one-shot migration runner, API, Admin, and Caddy services with healthchecks and named volumes.
+  - Secret generator script: `scripts/gen-secrets.cjs` generating cryptographically secure secrets to stdout.
+  - Smoke test script: `scripts/smoke-prod.mjs` verifying tenant signup, login, product creation with variants, shift opening, cash sale, receipt retrieval, and shift closing against production API.
+  - Operator deployment guide: `docs/go-live/deploy.md` with step-by-step instructions.
+  - CI workflow: added `smoke-prod` job in `.github/workflows/ci.yml` that boots production compose, waits for Caddy & API health, executes `smoke-prod.mjs`, and tears down cleanly.
+
 

@@ -1,4 +1,5 @@
 import { NestFactory } from "@nestjs/core";
+import helmet from "helmet";
 import { AppModule } from "./app.module.js";
 import { ConfigService } from "./common/config/config.service.js";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor.js";
@@ -14,6 +15,9 @@ async function bootstrap() {
 
   // Prefix: /api/v1
   app.setGlobalPrefix("api/v1");
+
+  // Security headers with helmet
+  app.use(helmet());
 
   // Trust proxy for reverse proxies and Next.js route handlers
   const expressApp = app.getHttpAdapter().getInstance();

@@ -1,0 +1,14 @@
+**/.git
+**/.github
+**/.env*
+!deploy/.env.production.example
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/test-results
+**/playwright-report
+**/*.log
+**/*.pem
+**/*.key
+docs

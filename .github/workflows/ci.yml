@@ -155,3 +155,55 @@ jobs:
           name: playwright-report
           path: apps/admin/playwright-report/
           retention-days: 7
+
+  smoke-prod:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+
+      - name: Prepare production environment
+        run: |
+          node -e "
+            const fs = require('fs');
+            const crypto = require('crypto');
+            let env = fs.readFileSync('deploy/.env.production.example', 'utf8');
+            env = env.replace('replace-with-generated-postgres-password', crypto.randomBytes(24).toString('base64url'))
+                     .replace('replace-with-generated-runtime-password', crypto.randomBytes(24).toString('base64url'))
+                     .replace('replace-with-generated-jwt-access-secret-min-32-chars', crypto.randomBytes(32).toString('hex'))
+                     .replace('replace-with-generated-jwt-refresh-secret-min-32-chars', crypto.randomBytes(32).toString('hex'));
+            fs.writeFileSync('deploy/.env.production', env);
+          "
+
+      - name: Build and start production containers
+        run: |
+          docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production up -d --build
+
+      - name: Wait for API and Admin health
+        run: |
+          echo "Waiting for Caddy & API to respond..."
+          for i in {1..60}; do
+            if curl -k -sf https://localhost/api/v1/health > /dev/null 2>&1; then
+              echo "Production API is healthy!"
+              break
+            fi
+            echo "Waiting for API... ($i/60)"
+            sleep 2
+          done
+          curl -k -sf https://localhost/api/v1/health || (docker compose -f deploy/docker-compose.prod.yml logs && exit 1)
+
+      - name: Run production smoke test
+        run: |
+          API_URL=https://localhost/api/v1 node scripts/smoke-prod.mjs
+
+      - name: Tear down production containers
+        if: always()
+        run: |
+          docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production down -v
+

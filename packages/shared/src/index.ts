@@ -8,3 +8,4 @@ export * from "./timezone.js";
 export * from "./barcodes.js";
 export * from "./sizes.js";
 export * from "./promotions.js";
+export * from "./printing.js";

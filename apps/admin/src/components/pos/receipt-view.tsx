@@ -1,12 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { formatMoney, formatDateTime } from "@/lib/utils";
 import { useTranslation } from "@/i18n/context";
 import { formatPaymentMethod } from "@/i18n/formatters";
 import { Button } from "@/components/ui/button";
 import { PrinterPaperSize, getPrinterPaperSize, setPrinterPaperSize } from "@/lib/pos/pos-storage";
 import { Printer, RotateCcw, CheckCircle2 } from "lucide-react";
+import { getPrinterConfig } from "@/lib/printing/printer-settings";
+import { getPrinterTransport } from "@/lib/printing/printer-transport";
+import { renderReceiptToCanvasBitmap } from "@/lib/printing/canvas-rasterizer";
+import { encodeReceiptEscPos, ReceiptModel } from "@universal-pos/shared";
 
 export interface ReceiptData {
   saleId: string;
@@ -85,9 +89,85 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
     setPrinterPaperSize(size);
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    try {
+      const config = getPrinterConfig();
+      if (config.connectionType !== "browser_dialog") {
+        const transport = getPrinterTransport(config);
+        const receiptModel: ReceiptModel = {
+          shopName: receipt.shopName,
+          branchName: receipt.branchName,
+          branchAddress: receipt.branchAddress,
+          invoiceNumber: receipt.invoiceNumber,
+          createdAt: formatDateTime(receipt.createdAt, timezone),
+          cashierName: receipt.cashierName,
+          registerName: receipt.registerName,
+          customerName: receipt.customerName,
+          customerPhone: receipt.customerPhone,
+          items: receipt.items.map((i) => ({
+            name: i.name,
+            sku: i.sku,
+            size: i.size,
+            color: i.color,
+            quantity: i.quantity,
+            unitPriceMinor: i.unitPriceMinor,
+            totalMinor: i.totalMinor,
+            discountMinor: i.discountMinor,
+          })),
+          grossMinor: receipt.grossMinor,
+          discountMinor: receipt.discountMinor,
+          taxMinor: receipt.taxMinor,
+          totalMinor: receipt.totalMinor,
+          paidMinor: receipt.paidMinor,
+          changeMinor: receipt.changeMinor,
+          dueMinor: receipt.dueMinor,
+          customerTotalDueMinor: receipt.customerTotalDueMinor,
+          pointsEarned: receipt.pointsEarned,
+          pointsRedeemed: receipt.pointsRedeemed,
+          newPointsBalance: receipt.newPointsBalance,
+          payments: receipt.payments,
+          receiptHeader: receipt.receiptHeader,
+          receiptFooter: receipt.receiptFooter,
+        };
+
+        let bytes: Uint8Array;
+        if (config.mode === "raster") {
+          const bitmap = renderReceiptToCanvasBitmap(receiptModel, {
+            paperWidth: config.paperWidth,
+          });
+          bytes = encodeReceiptEscPos(
+            receiptModel,
+            {
+              paperWidth: config.paperWidth,
+              mode: "raster",
+              copies: config.copies,
+              openCashDrawer: config.openCashDrawer,
+            },
+            bitmap || undefined
+          );
+        } else {
+          bytes = encodeReceiptEscPos(receiptModel, {
+            paperWidth: config.paperWidth,
+            mode: "text",
+            copies: config.copies,
+            openCashDrawer: config.openCashDrawer,
+          });
+        }
+        await transport.print(bytes);
+        return;
+      }
+    } catch (err) {
+      console.warn("Direct printer transport failed, falling back to window.print()", err);
+    }
     window.print();
   };
+
+  useEffect(() => {
+    const config = getPrinterConfig();
+    if (config.autoPrintOnSale && config.connectionType !== "browser_dialog") {
+      handlePrint();
+    }
+  }, []);
 
   const getMethodLabel = (method: string) => {
     return formatPaymentMethod(method, strings);

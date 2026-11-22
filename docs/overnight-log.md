@@ -2330,6 +2330,35 @@ This log tracks execution across the Phase 1B Admin Dashboard milestones (A0–A
   - *Fix Applied:* Replaced raw SQL seed statements in `apps/api/test/restore-drill.spec.ts` with Prisma's typed methods (`prisma.tenant.createMany`, `prisma.branch.create`, etc.), which automatically and type-safely generate `createdAt`, `updatedAt`, and proper foreign key links.
   - *Local Verification:* Tested against dev database and confirmed all 4 tests in `restore-drill.spec.ts` pass cleanly (7.33s).
   - *Attempt Note:* This failure marked 3 red runs in a row on the restore drill (`45039128502`, `45040186367`, `45040787951`). Applying typed PrismaClient resolution to immediately restore build health before progressing.
+- **Commit 7:** `6284ed5` (pushed).
+- **CI Run 7:** `45043521848` (Status: `completed`, Conclusion: `failure`).
+  - *Investigation:* `test` job failed at step `Run tests with coverage as non-superuser pos_runtime`.
+  - *Annotation & Root Cause:* GitHub Check Run annotation reported `PrismaClientValidationError: Invalid prisma.user.create() invocation ... Unknown argument status. Available options are marked with ?: isActive?: Boolean` in `apps/api/test/restore-drill.spec.ts:66:23`. In the User Prisma schema, `isActive: Boolean` is the boolean active flag, rather than `status`.
+  - *Fix Applied:* Replaced `status: "ACTIVE"` with `isActive: true` on `User.create` in `seedDrillSourceData`. Replaced `Tenant.createMany` with explicit `Tenant.create` calls providing explicit `updatedAt` to avoid omitting non-default columns during bulk insert.
+  - *Local Verification:* Tested `seedDrillSourceData` directly against PostgreSQL database, verifying successful insertion across all 10 entity tables.
+- **Commit 8:** `4fc653e` (pushed).
+- **CI Run 8:** `45044167630` (Status: `completed`, Conclusion: `success`).
+  - *Result:* Passed cleanly on CI Ubuntu runner, validating backup, restore, table row count matching, RLS tenant isolation, and append-only table enforcement. Milestone F2 complete.
+
+---
+
+### Milestone F3: Thermal Receipt Printing, Cash Drawer Kick & Printer Settings
+- **Encoder:**
+  - Implemented pure ESC/POS receipt encoder `packages/shared/src/printing.ts`:
+    - 80mm (576 dots / 48 chars) and 58mm (384 dots / 32 chars) support.
+    - ESC/POS raster bitmap command `GS v 0` for crisp Bangla rendering.
+    - English text mode for high-speed printing.
+    - Cash drawer kick sequence `ESC p 0 25 250` triggered selectively on cash payments only (suppressed for bKash-only, card-only, or points-only sales).
+    - Partial cut (`ESC i` / `GS V 66 0`).
+  - Added unit test suite `packages/shared/test/printing.spec.ts` with 13 tests covering init bytes, raster headers, drawer kick presence/absence, and golden bytes verification.
+- **Client Transports & UI:**
+  - Built canvas rasterizer `apps/admin/src/lib/printing/canvas-rasterizer.ts` with 1-bit thresholding for sharp Bangla typography and ৳ signs.
+  - Implemented transports in `apps/admin/src/lib/printing/printer-transport.ts` (WebSerial, WebUSB, browser print dialog fallback).
+  - Built printer settings page at `/settings/printer` allowing paper width selection, connection selection, test print, open drawer, auto-print toggling, and copy count.
+  - Updated `ReceiptView` in `apps/admin/src/components/pos/receipt-view.tsx` with direct transport integration and auto-print support.
+  - Documented setup guide and 10-point checklist in `docs/go-live/printer-setup.md`.
+
+
 
 
 ---

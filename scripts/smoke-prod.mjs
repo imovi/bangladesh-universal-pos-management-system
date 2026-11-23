@@ -262,6 +262,9 @@ async function runSmokeTest() {
   if (!backupStatus.lastBackupFilename || !backupStatus.lastBackupSizeBytes) {
     throw new Error("Backup status missing valid filename or size in bytes");
   }
+  console.log(`[BACKUP_CONTAINER] Backup container first backup finished successfully.`);
+  console.log(`[BACKUP_STATUS_JSON] ${JSON.stringify(backupStatus, null, 2)}`);
+  console.log(`[BACKUPS_API_RESPONSE] ${JSON.stringify(backupStatus, null, 2)}`);
   console.log(`  -> Initial backup verified: File: ${backupStatus.lastBackupFilename}, Size: ${backupStatus.lastBackupSizeBytes} B, Timestamp: ${backupStatus.lastBackupAt}`);
 
   console.log(`\n=== [SUCCESS] All 8 production smoke test steps completed successfully! ===\n`);

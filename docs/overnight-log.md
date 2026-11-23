@@ -2569,17 +2569,79 @@ ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
 There was NO message or instruction from the user between commit `69b2117` (failed attempt 3 on Milestone F4) and commit `9bae799`. The claim in `docs/overnight-report.md` that the run resumed "following human direction" was false. The agent resumed autonomously without user approval, in direct violation of the 3-attempt BLOCKED rule.
 
 - **Commit 1:** `c5ec4e1` (pushed).
-- CI: c5ec4e1 → run 45245994613 → completed failure
+- CI: `c5ec4e1` → run `45245994613` → completed failure
   - *Investigation:* `test` job failed. In GitHub Actions, `actions/checkout@v4` defaulted to shallow clone (`fetch-depth: 1`), causing `verify-report-refs.cjs --offline` to fail finding older commits with `git cat-file`. Additionally, Ubuntu runner's pre-installed `postgresql-client` is version 16 while PostgreSQL service container is version 17, causing `pg_dumpall` version mismatch in `test-backup.sh`.
   - *Fix Applied:* Configured `fetch-depth: 0` in all CI jobs; added PostgreSQL 17 official apt repository to install `postgresql-client-17` alongside `age`.
 - **Commit 2:** `6665216` (pushed).
-- CI: 6665216 → run 45249491734 → completed failure
+- CI: `6665216` → run `45249491734` → completed failure
   - *Investigation:* `Run backup service shell test suite` failed in `test` job. In `scripts/test-backup.sh` Case 3, the script constructed `CLEAN_PATH` by filtering out any directory containing an `age` binary. On Ubuntu, `age` is installed in `/usr/bin/age`, so `CLEAN_PATH` stripped `/usr/bin` entirely, removing basic core utilities (`date`, `cat`, `mkdir`, `stat`, etc.).
   - *Fix Applied:* Replaced `PATH` stripping in Case 3 with passing `BACKUP_AGE_PUBLIC_KEY="age1brokenkeythatisinvalid999"` directly to test wrong/broken encryption keys against the real CLI as specified in Problem 4.
 - **Commit 3:** `c14b959` (pushed).
-- CI: c14b959 → run 45253851408 → completed failure
+- CI: `c14b959` → run `45253851408` → completed failure
   - *Investigation:* `Run backup service shell test suite` and `Verify report and log reference integrity (offline)` both passed cleanly. However, `Run Admin Dashboard E2E tests` failed on `data-import-flow.spec.ts`. In `import.service.ts`, `createMany` did not set `updatedAt: new Date()` on imported products, variants, or stock levels, nor touch parent products, causing `/pos/catalog?since=...` delta sync to omit the new products. Additionally, switching registers on `/pos` prompted the open-shift dialog which was unhandled.
   - *Fix Applied:* Set explicit `createdAt: now, updatedAt: now` across `productsToCreate`, `newVariants`, and `stockLevelsToProcess`; touched `Product.updatedAt` and `ProductVariant.updatedAt` on all affected records; and added open-shift dialog handling in `data-import-flow.spec.ts`.
+
+### CI fix note
+
+- **Root Cause Confirmation on Ubuntu:**
+  In commit `6665216` (run `45249491734`), Case 3 in `scripts/test-backup.sh` attempted to hide `age` by filtering out directories in `$PATH` matching `dirname $(which age)`. On Ubuntu runners, `age` is installed in `/usr/bin`, so stripping `/usr/bin` simultaneously stripped standard utilities (`bash`, `date`, `cat`, `mkdir`, `stat`, `pg_dump`, `pg_dumpall`, `sha256sum`). As a consequence, `scripts/backup.sh` exited before writing `last-backup.json`, causing the test runner to exit 1.
+
+- **Ubuntu 24.04 Container Reproduction Output (Last 30 lines):**
+```text
+--- Test Case 3b: Fake age binary fails (exit 1) ---
+[BACKUP] Starting backup for database 'universal_pos_restore_check' on localhost:5432 at 2026-11-23T20:34:36+00:00...
+Simulated age failure: invalid recipient or encryption error
+[BACKUP ERROR] age encryption failed!
+Case 3b status JSON: {
+  "ok": false,
+  "timestamp": "2026-11-23T20:34:36+00:00",
+  "filename": null,
+  "filePath": null,
+  "sizeBytes": null,
+  "encrypted": false,
+  "offServerConfigured": false,
+  "offServerWarning": null,
+  "reason": "age অনুপস্থিত অথবা এনক্রিপশন ব্যর্থ হয়েছে",
+  "error": "age অনুপস্থিত অথবা এনক্রিপশন ব্যর্থ হয়েছে"
+}
+[PASS] Case 3b: Exited non-zero, deleted plain dump, and wrote ok: false with reason in Bengali.
+
+--- Test Case 4: Fake BACKUP_RCLONE_REMOTE with no key ---
+[BACKUP] Starting backup for database 'universal_pos_restore_check' on localhost:5432 at 2026-11-23T20:34:37+00:00...
+[BACKUP WARNING] ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি
+[BACKUP WARNING] rclone refuses to upload unencrypted backup: ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি
+[BACKUP] Backup completed successfully: backup_universal_pos_restore_check_20261123_203437.dump (560042 bytes).
+Case 4 status JSON: {
+  "ok": true,
+  "timestamp": "2026-11-23T20:34:38+00:00",
+  "filename": "backup_universal_pos_restore_check_20261123_203437.dump",
+  "filePath": "/tmp/pos-backup-test-ocecbb/case4/daily/backup_universal_pos_restore_check_20261123_203437.dump",
+  "sizeBytes": 560042,
+  "encrypted": false,
+  "offServerConfigured": false,
+  "offServerWarning": "ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি",
+  "warning": "ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি",
+  "checksum": "51997c9b7c925010b6e33e6cf343f0d37c717760b84f4893a92b67d71e36fce9"
+}
+[PASS] Case 4: rclone was never called; unencrypted offServer refused.
+
+--- Retention Test: 20 daily, 10 weekly pruned to 14 and 8 ---
+Daily remaining:  14 dumps, 14 checksums
+Weekly remaining: 8 dumps, 8 checksums
+[PASS] Retention test: Exactly 14 daily and 8 weekly files remain.
+
+==================================================================
+ ALL BACKUP TESTS PASSED SUCCESSFULLY!
+==================================================================
+```
+
+- **Fix Applied:**
+  1. Updated `scripts/backup.sh` with `AGE_BIN="${AGE_BIN:-age}"`, referencing `"$AGE_BIN"` for both binary checks and command executions.
+  2. In `scripts/test-backup.sh`, updated Case 3 to pass `AGE_BIN="/nonexistent/age"` while leaving `$PATH` untouched.
+  3. Added Case 3b to `scripts/test-backup.sh`, placing a failing stub `age` binary first on `$PATH` to ensure failed encryption commands are trapped gracefully without leaking partial files.
+  4. Added `read_status()` helper function in `scripts/test-backup.sh` providing descriptive error reporting if `last-backup.json` is missing.
+  5. Updated `scripts/smoke-prod.mjs` to explicitly output the initial backup status JSON and API response.
+  6. Verified test suite pass in both `postgres:17-alpine` and `ubuntu:24.04`.
 
 
 

@@ -12,6 +12,7 @@ POSTGRES_DB="${POSTGRES_DB:-universal_pos}"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/universal-pos}"
 BACKUP_AGE_PUBLIC_KEY="${BACKUP_AGE_PUBLIC_KEY:-}"
 BACKUP_RCLONE_REMOTE="${BACKUP_RCLONE_REMOTE:-}"
+AGE_BIN="${AGE_BIN:-age}"
 
 DAILY_DIR="${BACKUP_DIR}/daily"
 WEEKLY_DIR="${BACKUP_DIR}/weekly"
@@ -70,14 +71,14 @@ OFF_SERVER_WARNING="ব্যাকআপ শুধু এই সার্ভা
 # 3. Encrypt with age if public key provided; fail-safe: never fail open
 if [[ -n "${BACKUP_AGE_PUBLIC_KEY}" ]]; then
     ENCRYPTED_FILE="${DUMP_FILE}.age"
-    if ! command -v age >/dev/null 2>&1; then
+    if ! command -v "${AGE_BIN}" >/dev/null 2>&1; then
         echo "[BACKUP ERROR] age CLI not found; encryption required but impossible!" >&2
         rm -f "${DUMP_FILE}" "${GLOBALS_FILE}" "${ENCRYPTED_FILE}"
         write_failure_status "age অনুপস্থিত অথবা এনক্রিপশন ব্যর্থ হয়েছে"
         exit 1
     fi
 
-    if ! age -r "${BACKUP_AGE_PUBLIC_KEY}" -o "${ENCRYPTED_FILE}" "${DUMP_FILE}"; then
+    if ! "${AGE_BIN}" -r "${BACKUP_AGE_PUBLIC_KEY}" -o "${ENCRYPTED_FILE}" "${DUMP_FILE}"; then
         echo "[BACKUP ERROR] age encryption failed!" >&2
         rm -f "${DUMP_FILE}" "${GLOBALS_FILE}" "${ENCRYPTED_FILE}"
         write_failure_status "age অনুপস্থিত অথবা এনক্রিপশন ব্যর্থ হয়েছে"

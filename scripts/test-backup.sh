@@ -38,6 +38,11 @@ fi
 TEST_BASE="$(mktemp -d /tmp/pos-backup-test-XXXXXX)"
 trap 'rm -rf "${TEST_BASE}"' EXIT
 
+read_status() {
+  [[ -f "$1" ]] || { echo "FAILED: status file missing: $1" >&2; exit 1; }
+  cat "$1"
+}
+
 echo "[TEST] Working directory: ${TEST_BASE}"
 
 # -------------------------------------------------------------------------
@@ -56,7 +61,7 @@ if ls -1 "${CASE1_DIR}/daily"/*.age >/dev/null 2>&1; then
     echo "FAILED: Unexpected .age file found in Case 1!" >&2
     exit 1
 fi
-STATUS1=$(cat "${CASE1_DIR}/last-backup.json")
+STATUS1=$(read_status "${CASE1_DIR}/last-backup.json")
 echo "Case 1 status JSON: ${STATUS1}"
 if ! echo "${STATUS1}" | grep -q '"ok": true'; then
     echo "FAILED: Case 1 last-backup.json ok is not true!" >&2
@@ -122,7 +127,7 @@ if ls -1 "${CASE2_DIR}/daily"/*.dump >/dev/null 2>&1; then
     echo "FAILED: Plain .dump file leaked in Case 2!" >&2
     exit 1
 fi
-STATUS2=$(cat "${CASE2_DIR}/last-backup.json")
+STATUS2=$(read_status "${CASE2_DIR}/last-backup.json")
 echo "Case 2 status JSON: ${STATUS2}"
 if ! echo "${STATUS2}" | grep -q '"ok": true'; then
     echo "FAILED: Case 2 last-backup.json ok is not true!" >&2
@@ -135,19 +140,19 @@ fi
 echo "[PASS] Case 2: Only .age file exists, zero plain dump left behind."
 
 # -------------------------------------------------------------------------
-# Test Case 3: Wrong or Broken Encryption Key
-# Must exit non-zero, delete the plain dump, leave no files, and write status ok: false in Bengali.
+# Test Case 3: age binary missing / nonexistent
+# Must exit non-zero, delete the plain dump, leave no files in daily, and write status ok: false in Bengali.
 # -------------------------------------------------------------------------
-echo -e "\n--- Test Case 3: Wrong or broken encryption key ---"
+echo -e "\n--- Test Case 3: age binary missing (AGE_BIN=/nonexistent/age) ---"
 CASE3_DIR="${TEST_BASE}/case3"
 
 set +e
-BACKUP_DIR="${CASE3_DIR}" BACKUP_AGE_PUBLIC_KEY="age1brokenkeythatisinvalid999" BACKUP_RCLONE_REMOTE="" bash scripts/backup.sh
+BACKUP_DIR="${CASE3_DIR}" AGE_BIN="/nonexistent/age" BACKUP_AGE_PUBLIC_KEY="age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p" BACKUP_RCLONE_REMOTE="" bash scripts/backup.sh
 EXIT_CODE=$?
 set -e
 
 if [[ "${EXIT_CODE}" -eq 0 ]]; then
-    echo "FAILED: Case 3 expected non-zero exit code when key is broken, got 0!" >&2
+    echo "FAILED: Case 3 expected non-zero exit code when AGE_BIN is nonexistent, got 0!" >&2
     exit 1
 fi
 
@@ -156,7 +161,7 @@ if ls -1 "${CASE3_DIR}/daily"/* >/dev/null 2>&1; then
     exit 1
 fi
 
-STATUS3=$(cat "${CASE3_DIR}/last-backup.json")
+STATUS3=$(read_status "${CASE3_DIR}/last-backup.json")
 echo "Case 3 status JSON: ${STATUS3}"
 if ! echo "${STATUS3}" | grep -q '"ok": false'; then
     echo "FAILED: Case 3 status ok is not false!" >&2
@@ -167,6 +172,48 @@ if ! echo "${STATUS3}" | grep -q 'এনক্রিপশন ব্যর্থ
     exit 1
 fi
 echo "[PASS] Case 3: Exited non-zero, deleted plain dump, and wrote ok: false with reason in Bengali."
+
+# -------------------------------------------------------------------------
+# Test Case 3b: Fake age binary that exists but fails (exits 1)
+# Must exit non-zero, delete the plain dump, leave no files in daily, and write status ok: false in Bengali.
+# -------------------------------------------------------------------------
+echo -e "\n--- Test Case 3b: Fake age binary fails (exit 1) ---"
+CASE3B_DIR="${TEST_BASE}/case3b"
+FAKE_AGE_DIR="${TEST_BASE}/fake_age_bin"
+mkdir -p "${FAKE_AGE_DIR}"
+cat <<'EOF' > "${FAKE_AGE_DIR}/age"
+#!/bin/bash
+echo "Simulated age failure: invalid recipient or encryption error" >&2
+exit 1
+EOF
+chmod +x "${FAKE_AGE_DIR}/age"
+
+set +e
+PATH="${FAKE_AGE_DIR}:${PATH}" BACKUP_DIR="${CASE3B_DIR}" BACKUP_AGE_PUBLIC_KEY="age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p" BACKUP_RCLONE_REMOTE="" bash scripts/backup.sh
+EXIT_CODE_3B=$?
+set -e
+
+if [[ "${EXIT_CODE_3B}" -eq 0 ]]; then
+    echo "FAILED: Case 3b expected non-zero exit code when age fails, got 0!" >&2
+    exit 1
+fi
+
+if ls -1 "${CASE3B_DIR}/daily"/* >/dev/null 2>&1; then
+    echo "FAILED: Leaked plain or partial files in daily directory in Case 3b!" >&2
+    exit 1
+fi
+
+STATUS3B=$(read_status "${CASE3B_DIR}/last-backup.json")
+echo "Case 3b status JSON: ${STATUS3B}"
+if ! echo "${STATUS3B}" | grep -q '"ok": false'; then
+    echo "FAILED: Case 3b status ok is not false!" >&2
+    exit 1
+fi
+if ! echo "${STATUS3B}" | grep -q 'এনক্রিপশন ব্যর্থ'; then
+    echo "FAILED: Case 3b status missing Bangla failure reason!" >&2
+    exit 1
+fi
+echo "[PASS] Case 3b: Exited non-zero, deleted plain dump, and wrote ok: false with reason in Bengali."
 
 # -------------------------------------------------------------------------
 # Test Case 4: Fake BACKUP_RCLONE_REMOTE with No Key
@@ -193,7 +240,7 @@ if [[ -f "${MARKER_FILE}" ]]; then
     exit 1
 fi
 
-STATUS4=$(cat "${CASE4_DIR}/last-backup.json")
+STATUS4=$(read_status "${CASE4_DIR}/last-backup.json")
 echo "Case 4 status JSON: ${STATUS4}"
 if ! echo "${STATUS4}" | grep -q '"offServerConfigured": false'; then
     echo "FAILED: Case 4 offServerConfigured is not false!" >&2

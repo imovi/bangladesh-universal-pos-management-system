@@ -427,6 +427,7 @@ export class ImportService {
           isActive: true,
           options: [],
         };
+        const now = new Date();
         productsToCreate.push({
           id: newProductId,
           tenantId,
@@ -436,6 +437,8 @@ export class ImportService {
           taxClassId,
           name: productName,
           isActive: true,
+          createdAt: now,
+          updatedAt: now,
         });
         productMap.set(pKey, product);
       }
@@ -606,6 +609,7 @@ export class ImportService {
           });
         } else {
           const variantId = crypto.randomUUID();
+          const now = new Date();
           newVariants.push({
             id: variantId,
             tenantId,
@@ -614,6 +618,8 @@ export class ImportService {
             priceMinor: BigInt(vData.salePriceMinor),
             costMinor: BigInt(vData.costPriceMinor),
             isActive: true,
+            createdAt: now,
+            updatedAt: now,
           });
 
           if (vData.barcode) {
@@ -675,6 +681,7 @@ export class ImportService {
           priceMinor: upd.priceMinor,
           costMinor: upd.costMinor,
           isActive: true,
+          updatedAt: new Date(),
         },
       });
 
@@ -714,6 +721,20 @@ export class ImportService {
           });
         }
       }
+    }
+
+    // Ensure all touched products have their updatedAt bumped for catalog delta sync
+    const touchedProductIds = new Set<string>();
+    for (const p of productsToCreate) touchedProductIds.add(p.id);
+    for (const [, rows] of productGroups) {
+      const p = productMap.get(rows[0].data.productName?.toLowerCase());
+      if (p?.id) touchedProductIds.add(p.id);
+    }
+    if (touchedProductIds.size > 0) {
+      await tx.product.updateMany({
+        where: { id: { in: Array.from(touchedProductIds) }, tenantId },
+        data: { updatedAt: new Date() },
+      });
     }
 
     return newVariants.length + existingVariantUpdates.length;
@@ -881,6 +902,7 @@ export class ImportService {
     }
 
     // Upsert StockLevels
+    const now = new Date();
     for (const sl of stockLevelsToProcess) {
       await tx.stockLevel.upsert({
         where: {
@@ -890,11 +912,35 @@ export class ImportService {
             variantId: sl.variantId,
           },
         },
-        create: sl,
+        create: {
+          ...sl,
+          updatedAt: now,
+        },
         update: {
           qty: { increment: sl.qty },
+          updatedAt: now,
         },
       });
+    }
+
+    // Touch updatedAt on affected variants and products so delta sync includes new stock
+    const touchedVariantIds = Array.from(new Set(stockLevelsToProcess.map((sl) => sl.variantId)));
+    if (touchedVariantIds.length > 0) {
+      await tx.productVariant.updateMany({
+        where: { id: { in: touchedVariantIds }, tenantId },
+        data: { updatedAt: now },
+      });
+      const variantsWithProd = await tx.productVariant.findMany({
+        where: { id: { in: touchedVariantIds }, tenantId },
+        select: { productId: true },
+      });
+      const prodIds = Array.from(new Set(variantsWithProd.map((v: any) => v.productId)));
+      if (prodIds.length > 0) {
+        await tx.product.updateMany({
+          where: { id: { in: prodIds }, tenantId },
+          data: { updatedAt: now },
+        });
+      }
     }
 
     return movementsToCreate.length;

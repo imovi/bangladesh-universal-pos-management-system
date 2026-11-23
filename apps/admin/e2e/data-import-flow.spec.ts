@@ -99,6 +99,25 @@ test.describe("Milestone F4: Day-One CSV Import E2E Flow", () => {
       await expect(switchBtn).toBeHidden({ timeout: 5000 });
     }
 
+    // Ensure shift is open if open-shift dialog appears
+    const confirmShiftBtn = page.locator('[data-testid="confirm-open-shift-button"]');
+    if (await confirmShiftBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await page.fill('[data-testid="opening-cash-input"]', "500");
+      await confirmShiftBtn.click();
+      await expect(confirmShiftBtn).toBeHidden({ timeout: 5000 });
+    } else {
+      const openShiftBtn = page.locator('[data-testid="open-shift-button"], button:has-text("শিফট শুরু করুন")');
+      if (await openShiftBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+        await openShiftBtn.click();
+        await page.waitForTimeout(300);
+        if (await confirmShiftBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await page.fill('[data-testid="opening-cash-input"]', "500");
+          await confirmShiftBtn.click();
+          await expect(confirmShiftBtn).toBeHidden({ timeout: 5000 });
+        }
+      }
+    }
+
     // Wait for POS search input to be ready
     const searchInput = page.locator('[data-testid="pos-search-input"]');
     await expect(searchInput).toBeVisible({ timeout: 15000 });

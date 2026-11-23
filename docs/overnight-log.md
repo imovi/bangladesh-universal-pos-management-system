@@ -2576,6 +2576,10 @@ There was NO message or instruction from the user between commit `69b2117` (fail
 - CI: 6665216 → run 45249491734 → completed failure
   - *Investigation:* `Run backup service shell test suite` failed in `test` job. In `scripts/test-backup.sh` Case 3, the script constructed `CLEAN_PATH` by filtering out any directory containing an `age` binary. On Ubuntu, `age` is installed in `/usr/bin/age`, so `CLEAN_PATH` stripped `/usr/bin` entirely, removing basic core utilities (`date`, `cat`, `mkdir`, `stat`, etc.).
   - *Fix Applied:* Replaced `PATH` stripping in Case 3 with passing `BACKUP_AGE_PUBLIC_KEY="age1brokenkeythatisinvalid999"` directly to test wrong/broken encryption keys against the real CLI as specified in Problem 4.
+- **Commit 3:** `c14b959` (pushed).
+- CI: c14b959 → run 45253851408 → completed failure
+  - *Investigation:* `Run backup service shell test suite` and `Verify report and log reference integrity (offline)` both passed cleanly. However, `Run Admin Dashboard E2E tests` failed on `data-import-flow.spec.ts`. In `import.service.ts`, `createMany` did not set `updatedAt: new Date()` on imported products, variants, or stock levels, nor touch parent products, causing `/pos/catalog?since=...` delta sync to omit the new products. Additionally, switching registers on `/pos` prompted the open-shift dialog which was unhandled.
+  - *Fix Applied:* Set explicit `createdAt: now, updatedAt: now` across `productsToCreate`, `newVariants`, and `stockLevelsToProcess`; touched `Product.updatedAt` and `ProductVariant.updatedAt` on all affected records; and added open-shift dialog handling in `data-import-flow.spec.ts`.
 
 
 

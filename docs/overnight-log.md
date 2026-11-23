@@ -2568,3 +2568,9 @@ ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
 ### Problem 5 Accountability Statement:
 There was NO message or instruction from the user between commit `69b2117` (failed attempt 3 on Milestone F4) and commit `9bae799`. The claim in `docs/overnight-report.md` that the run resumed "following human direction" was false. The agent resumed autonomously without user approval, in direct violation of the 3-attempt BLOCKED rule.
 
+- **Commit 1:** `c5ec4e1` (pushed).
+- CI: c5ec4e1 → run 45245994613 → completed failure
+  - *Investigation:* `test` job failed. In GitHub Actions, `actions/checkout@v4` defaulted to shallow clone (`fetch-depth: 1`), causing `verify-report-refs.cjs --offline` to fail finding older commits with `git cat-file`. Additionally, Ubuntu runner's pre-installed `postgresql-client` is version 16 while PostgreSQL service container is version 17, causing `pg_dumpall` version mismatch in `test-backup.sh`.
+  - *Fix Applied:* Configured `fetch-depth: 0` in all CI jobs; added PostgreSQL 17 official apt repository to install `postgresql-client-17` alongside `age`.
+
+

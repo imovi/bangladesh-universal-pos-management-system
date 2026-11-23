@@ -39,6 +39,7 @@ PGPASSWORD="${POSTGRES_PASSWORD:-pos_secret}" psql -h "$ADMIN_HOST" -p "$ADMIN_P
     GRANT CONNECT ON DATABASE universal_pos TO $RUNTIME_USER;
     GRANT CONNECT ON DATABASE universal_pos_test TO $RUNTIME_USER;
     GRANT CONNECT ON DATABASE universal_pos_e2e TO $RUNTIME_USER;
+    GRANT CONNECT ON DATABASE universal_pos_restore_check TO $RUNTIME_USER;
 EOSQL
 
 echo "Bootstrap completed successfully."

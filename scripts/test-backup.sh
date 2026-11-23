@@ -135,33 +135,24 @@ fi
 echo "[PASS] Case 2: Only .age file exists, zero plain dump left behind."
 
 # -------------------------------------------------------------------------
-# Test Case 3: Key Provided with age CLI Hidden from PATH
-# Must exit 1, write no plain or age file, and record status ok: false.
+# Test Case 3: Wrong or Broken Encryption Key
+# Must exit non-zero, delete the plain dump, leave no files, and write status ok: false in Bengali.
 # -------------------------------------------------------------------------
-echo -e "\n--- Test Case 3: Key provided with age CLI hidden from PATH ---"
+echo -e "\n--- Test Case 3: Wrong or broken encryption key ---"
 CASE3_DIR="${TEST_BASE}/case3"
-NO_AGE_DIR="${TEST_BASE}/no_age_bin"
-mkdir -p "${NO_AGE_DIR}"
-
-# Build a clean PATH that excludes any directory containing age
-CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | while read -r p; do
-    if [[ -d "$p" && ! -f "$p/age" ]]; then
-        echo -n "$p:"
-    fi
-done)
 
 set +e
-PATH="${CLEAN_PATH}" BACKUP_DIR="${CASE3_DIR}" BACKUP_AGE_PUBLIC_KEY="age1fakekey999" BACKUP_RCLONE_REMOTE="" bash scripts/backup.sh
+BACKUP_DIR="${CASE3_DIR}" BACKUP_AGE_PUBLIC_KEY="age1brokenkeythatisinvalid999" BACKUP_RCLONE_REMOTE="" bash scripts/backup.sh
 EXIT_CODE=$?
 set -e
 
 if [[ "${EXIT_CODE}" -eq 0 ]]; then
-    echo "FAILED: Case 3 expected non-zero exit code when age missing, got 0!" >&2
+    echo "FAILED: Case 3 expected non-zero exit code when key is broken, got 0!" >&2
     exit 1
 fi
 
 if ls -1 "${CASE3_DIR}/daily"/* >/dev/null 2>&1; then
-    echo "FAILED: Leaked files in daily directory in Case 3!" >&2
+    echo "FAILED: Leaked plain or partial files in daily directory in Case 3!" >&2
     exit 1
 fi
 
@@ -175,7 +166,7 @@ if ! echo "${STATUS3}" | grep -q 'এনক্রিপশন ব্যর্থ
     echo "FAILED: Case 3 status missing Bangla failure reason!" >&2
     exit 1
 fi
-echo "[PASS] Case 3: Exited 1, no files left behind, status ok: false recorded."
+echo "[PASS] Case 3: Exited non-zero, deleted plain dump, and wrote ok: false with reason in Bengali."
 
 # -------------------------------------------------------------------------
 # Test Case 4: Fake BACKUP_RCLONE_REMOTE with No Key

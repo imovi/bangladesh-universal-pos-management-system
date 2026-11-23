@@ -2572,5 +2572,10 @@ There was NO message or instruction from the user between commit `69b2117` (fail
 - CI: c5ec4e1 → run 45245994613 → completed failure
   - *Investigation:* `test` job failed. In GitHub Actions, `actions/checkout@v4` defaulted to shallow clone (`fetch-depth: 1`), causing `verify-report-refs.cjs --offline` to fail finding older commits with `git cat-file`. Additionally, Ubuntu runner's pre-installed `postgresql-client` is version 16 while PostgreSQL service container is version 17, causing `pg_dumpall` version mismatch in `test-backup.sh`.
   - *Fix Applied:* Configured `fetch-depth: 0` in all CI jobs; added PostgreSQL 17 official apt repository to install `postgresql-client-17` alongside `age`.
+- **Commit 2:** `6665216` (pushed).
+- CI: 6665216 → run 45249491734 → completed failure
+  - *Investigation:* `Run backup service shell test suite` failed in `test` job. In `scripts/test-backup.sh` Case 3, the script constructed `CLEAN_PATH` by filtering out any directory containing an `age` binary. On Ubuntu, `age` is installed in `/usr/bin/age`, so `CLEAN_PATH` stripped `/usr/bin` entirely, removing basic core utilities (`date`, `cat`, `mkdir`, `stat`, etc.).
+  - *Fix Applied:* Replaced `PATH` stripping in Case 3 with passing `BACKUP_AGE_PUBLIC_KEY="age1brokenkeythatisinvalid999"` directly to test wrong/broken encryption keys against the real CLI as specified in Problem 4.
+
 
 

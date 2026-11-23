@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import path from "path";
+import fs from "fs";
 import { DailyHealthAlertService } from "../src/modules/audit/daily-health.service.js";
 
 describe("Milestone F5: Daily Health Alert Service", () => {
@@ -32,6 +34,27 @@ describe("Milestone F5: Daily Health Alert Service", () => {
     expect(healthMissing.backupOverdue).toBe(true);
     expect(healthMissing.needsAction).toBe(true);
     expect(healthMissing.alerts.some((a) => a.type === "BACKUP_OVERDUE")).toBe(true);
+  });
+
+  it("detects when backup status file reports ok: false with failure reason", async () => {
+    const tempFile = path.resolve(process.cwd(), "temp-failed-backup.json");
+    fs.writeFileSync(
+      tempFile,
+      JSON.stringify({
+        ok: false,
+        timestamp: new Date().toISOString(),
+        reason: "age অনুপস্থিত অথবা এনক্রিপশন ব্যর্থ হয়েছে",
+      })
+    );
+    try {
+      const health = await service.evaluateHealth("tenant-1", 0, tempFile);
+      expect(health.needsAction).toBe(true);
+      const backupFailedAlert = health.alerts.find((a) => a.type === "BACKUP_FAILED");
+      expect(backupFailedAlert).toBeDefined();
+      expect(backupFailedAlert?.messageBn).toContain("এনক্রিপশন ব্যর্থ হয়েছে");
+    } finally {
+      if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+    }
   });
 
   it("detects shifts left open for more than 16 hours", async () => {

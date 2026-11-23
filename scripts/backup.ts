@@ -16,14 +16,18 @@ export interface BackupOptions {
 }
 
 export interface BackupResult {
+  ok: boolean;
   timestamp: string;
-  filename: string;
-  filePath: string;
-  sizeBytes: number;
+  filename: string | null;
+  filePath: string | null;
+  sizeBytes: number | null;
   encrypted: boolean;
   offServerConfigured: boolean;
   offServerWarning: string | null;
-  checksum: string;
+  warning?: string | null;
+  checksum?: string | null;
+  reason?: string | null;
+  error?: string | null;
 }
 
 function resolvePgCommand(cmd: string, args: string, host: string, port: number | string, user: string, container?: string): string {
@@ -100,20 +104,67 @@ export function runBackup(options: BackupOptions = {}): BackupResult {
 
   let finalFile = dumpFile;
   let isEncrypted = false;
+  let warningMsg: string | null = null;
+  let offServerConfigured = false;
+  let offServerWarning: string | null = "ব্যাকআপ শুধু এই সার্ভারে আছে";
 
-  // 3. Encrypt with age if public key provided and age CLI is installed
+  // 3. Encrypt with age if public key provided; fail-safe: never fail open
   if (agePublicKey) {
     try {
       execSync("age --version", { stdio: "pipe" });
+    } catch {
+      if (fs.existsSync(dumpFile)) fs.unlinkSync(dumpFile);
+      if (fs.existsSync(globalsFile)) fs.unlinkSync(globalsFile);
+      const failResult: BackupResult = {
+        ok: false,
+        timestamp: now.toISOString(),
+        filename: null,
+        filePath: null,
+        sizeBytes: null,
+        encrypted: false,
+        offServerConfigured: false,
+        offServerWarning: null,
+        reason: "age অনুপস্থিত অথবা এনক্রিপশন ব্যর্থ হয়েছে",
+        error: "age অনুপস্থিত অথবা এনক্রিপশন ব্যর্থ হয়েছে",
+      };
+      fs.writeFileSync(path.join(backupDir, "last-backup.json"), JSON.stringify(failResult, null, 2));
+      throw new Error("age CLI not available; encryption required but impossible");
+    }
+
+    try {
       const encryptedFile = `${dumpFile}.age`;
       execSync(`age -r "${agePublicKey}" -o "${encryptedFile}" "${dumpFile}"`, { stdio: "pipe" });
       fs.unlinkSync(dumpFile);
       finalFile = encryptedFile;
       isEncrypted = true;
       console.log(`[BACKUP] File successfully encrypted with age.`);
-    } catch {
-      console.warn(`[WARNING] age CLI not available; saving unencrypted backup.`);
+    } catch (err: any) {
+      if (fs.existsSync(dumpFile)) fs.unlinkSync(dumpFile);
+      if (fs.existsSync(globalsFile)) fs.unlinkSync(globalsFile);
+      const failResult: BackupResult = {
+        ok: false,
+        timestamp: now.toISOString(),
+        filename: null,
+        filePath: null,
+        sizeBytes: null,
+        encrypted: false,
+        offServerConfigured: false,
+        offServerWarning: null,
+        reason: "age অনুপস্থিত অথবা এনক্রিপশন ব্যর্থ হয়েছে",
+        error: "age অনুপস্থিত অথবা এনক্রিপশন ব্যর্থ হয়েছে",
+      };
+      fs.writeFileSync(path.join(backupDir, "last-backup.json"), JSON.stringify(failResult, null, 2));
+      throw new Error(`age encryption failed: ${err.message}`);
     }
+  } else {
+    // BACKUP_AGE_PUBLIC_KEY is not set:
+    // Stored unencrypted on the server.
+    // rclone must refuse to upload an unencrypted file.
+    isEncrypted = false;
+    warningMsg = "ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি";
+    offServerWarning = "ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি";
+    offServerConfigured = false;
+    console.warn(`[BACKUP WARNING] ${warningMsg}`);
   }
 
   // 4. Compute SHA-256 Checksum
@@ -138,22 +189,28 @@ export function runBackup(options: BackupOptions = {}): BackupResult {
   pruneDirectory(weeklyDir, 8);
 
   // 7. Off-server copy via rclone
-  const offServerConfigured = Boolean(rcloneRemote);
-  const offServerWarning = offServerConfigured ? null : "ব্যাকআপ শুধু এই সার্ভারে আছে";
-
-  if (offServerConfigured) {
-    try {
-      execSync(`rclone copy "${finalFile}" "${rcloneRemote}"`, { stdio: "pipe" });
-      console.log(`[BACKUP] Successfully copied backup to remote '${rcloneRemote}'.`);
-    } catch (err: any) {
-      console.error(`[BACKUP ERROR] Failed to copy to rclone remote: ${err.message}`);
+  if (isEncrypted) {
+    if (rcloneRemote) {
+      try {
+        execSync(`rclone copy "${finalFile}" "${rcloneRemote}"`, { stdio: "pipe" });
+        offServerConfigured = true;
+        offServerWarning = null;
+        console.log(`[BACKUP] Successfully copied backup to remote '${rcloneRemote}'.`);
+      } catch (err: any) {
+        console.error(`[BACKUP ERROR] Failed to copy to rclone remote: ${err.message}`);
+      }
+    } else {
+      console.warn(`[WARNING] BACKUP_RCLONE_REMOTE not configured! ${offServerWarning}`);
     }
   } else {
-    console.warn(`[WARNING] BACKUP_RCLONE_REMOTE not configured! ${offServerWarning}`);
+    if (rcloneRemote) {
+      console.warn(`[BACKUP WARNING] rclone refuses to upload unencrypted backup: ${offServerWarning}`);
+    }
   }
 
   // 8. Record last-backup.json metadata
   const result: BackupResult = {
+    ok: true,
     timestamp: now.toISOString(),
     filename: path.basename(finalFile),
     filePath: finalFile,
@@ -161,6 +218,7 @@ export function runBackup(options: BackupOptions = {}): BackupResult {
     encrypted: isEncrypted,
     offServerConfigured,
     offServerWarning,
+    warning: warningMsg,
     checksum,
   };
 

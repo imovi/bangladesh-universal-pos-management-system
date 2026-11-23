@@ -11,6 +11,7 @@
  * 5. Make a cash sale
  * 6. Fetch the receipt
  * 7. Close the shift
+ * 8. Verify automated backup container first run & /settings/backups status
  */
 
 import crypto from "crypto";
@@ -223,7 +224,7 @@ async function runSmokeTest() {
   console.log(`  -> Receipt verified: Invoice ${receiptRes.invoiceNumber}, Items: ${receiptRes.items?.length || 0}`);
 
   // 7. Close the shift
-  console.log(`[7/7] Closing shift ${shiftId}...`);
+  console.log(`[7/8] Closing shift ${shiftId}...`);
   const closeRes = await apiRequest(`/shifts/${shiftId}/close`, {
     method: "POST",
     token,
@@ -234,7 +235,36 @@ async function runSmokeTest() {
   });
   console.log(`  -> Shift closed: Status ${closeRes.status}`);
 
-  console.log(`\n=== [SUCCESS] All 7 production smoke test steps completed successfully! ===\n`);
+  // 8. Verify automated backup container first run & /settings/backups
+  console.log(`[8/8] Verifying backup container first run & /settings/backups status...`);
+  let backupStatus = null;
+  for (let attempt = 1; attempt <= 15; attempt++) {
+    try {
+      backupStatus = await apiRequest("/settings/backups", {
+        method: "GET",
+        token,
+      });
+      if (backupStatus?.lastBackupAt && (backupStatus.ok === true || backupStatus.ok === undefined)) {
+        break;
+      }
+    } catch {
+      // Backup service may still be performing initial dump
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+
+  if (!backupStatus || !backupStatus.lastBackupAt) {
+    throw new Error("Backup service did not complete initial backup within 30 seconds");
+  }
+  if (backupStatus.ok === false) {
+    throw new Error(`Backup service reported failure: ${backupStatus.reason}`);
+  }
+  if (!backupStatus.lastBackupFilename || !backupStatus.lastBackupSizeBytes) {
+    throw new Error("Backup status missing valid filename or size in bytes");
+  }
+  console.log(`  -> Initial backup verified: File: ${backupStatus.lastBackupFilename}, Size: ${backupStatus.lastBackupSizeBytes} B, Timestamp: ${backupStatus.lastBackupAt}`);
+
+  console.log(`\n=== [SUCCESS] All 8 production smoke test steps completed successfully! ===\n`);
 }
 
 runSmokeTest()

@@ -66,6 +66,10 @@ services:
       RATE_LIMIT_TTL: ${RATE_LIMIT_TTL:-60}
       RATE_LIMIT_LIMIT: ${RATE_LIMIT_LIMIT:-100}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://${DOMAIN:-localhost}}
+      BACKUP_DIR: /backups
+      BACKUP_RCLONE_REMOTE: ${BACKUP_RCLONE_REMOTE:-}
+    volumes:
+      - backups:/backups:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,6 +79,28 @@ services:
         condition: service_completed_successfully
     expose:
       - "4000"
+
+  backup:
+    build:
+      context: ..
+      dockerfile: deploy/backup/Dockerfile
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-pos_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env.production}
+      POSTGRES_DB: ${POSTGRES_DB:-universal_pos}
+      BACKUP_DIR: /backups
+      BACKUP_AGE_PUBLIC_KEY: ${BACKUP_AGE_PUBLIC_KEY:-}
+      BACKUP_RCLONE_REMOTE: ${BACKUP_RCLONE_REMOTE:-}
+      RCLONE_CONFIG_DATA: ${RCLONE_CONFIG_DATA:-}
+      TZ: Asia/Dhaka
+    volumes:
+      - backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   admin:
     build:
@@ -115,3 +141,4 @@ volumes:
   redis_data:
   caddy_data:
   caddy_config:
+  backups:

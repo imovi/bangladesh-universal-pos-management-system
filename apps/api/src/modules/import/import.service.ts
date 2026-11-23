@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException } from "@nestjs/common";
+import crypto from "crypto";
 import { PrismaService } from "../../common/database/prisma.service.js";
 import { TenantContextService } from "../../common/database/tenant-context.service.js";
 import {
@@ -37,6 +38,14 @@ export interface ImportCommitResult {
   type: ImportType;
   importedCount: number;
   message: string;
+}
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
 }
 
 @Injectable()
@@ -346,64 +355,41 @@ export class ImportService {
     });
     const variantMap = new Map<string, any>(existingVariants.map((v: any) => [v.sku.toLowerCase(), v]));
 
-    let variantCount = 0;
-
-    for (const [productName, variantRows] of productGroups) {
+    // Step 1: Pre-resolve/create missing Categories, Brands, Collections, TaxClasses
+    for (const [, variantRows] of productGroups) {
       const firstRow = variantRows[0].data;
 
-      // Find or create category
       const catKey = firstRow.category.toLowerCase();
-      let category = categoryMap.get(catKey);
-      if (!category) {
-        category = await tx.category.create({
-          data: {
-            tenantId,
-            name: firstRow.category,
-          },
+      if (!categoryMap.has(catKey)) {
+        const category = await tx.category.create({
+          data: { tenantId, name: firstRow.category },
         });
         categoryMap.set(catKey, category);
       }
 
-      // Find or create brand (optional)
-      let brandId: string | null = null;
       if (firstRow.brand) {
         const brandKey = firstRow.brand.toLowerCase();
-        let brand = brandMap.get(brandKey);
-        if (!brand) {
-          brand = await tx.brand.create({
-            data: {
-              tenantId,
-              name: firstRow.brand,
-            },
+        if (!brandMap.has(brandKey)) {
+          const brand = await tx.brand.create({
+            data: { tenantId, name: firstRow.brand },
           });
           brandMap.set(brandKey, brand);
         }
-        brandId = brand.id;
       }
 
-      // Find or create collection (optional)
-      let collectionId: string | null = null;
       if (firstRow.collection) {
         const collKey = firstRow.collection.toLowerCase();
-        let collection = collectionMap.get(collKey);
-        if (!collection) {
-          collection = await tx.collection.create({
-            data: {
-              tenantId,
-              name: firstRow.collection,
-            },
+        if (!collectionMap.has(collKey)) {
+          const collection = await tx.collection.create({
+            data: { tenantId, name: firstRow.collection },
           });
           collectionMap.set(collKey, collection);
         }
-        collectionId = collection.id;
       }
 
-      // Find or create TaxClass if VAT rate > 0
-      let taxClassId: string | null = null;
       if (firstRow.vatRate > 0) {
         const rateBp = Math.round(firstRow.vatRate * 100);
-        let existingId = taxClassMap.get(rateBp);
-        if (!existingId) {
+        if (!taxClassMap.has(rateBp)) {
           const tc = await tx.taxClass.create({
             data: {
               tenantId,
@@ -411,212 +397,326 @@ export class ImportService {
               rateBp,
             },
           });
-          existingId = tc.id;
           taxClassMap.set(rateBp, tc.id);
         }
-        taxClassId = existingId ?? null;
       }
+    }
 
-      // Find or create product
+    // Step 2: Batch insert missing Products
+    const productsToCreate: any[] = [];
+    for (const [productName, variantRows] of productGroups) {
       const pKey = productName.toLowerCase();
       let product = productMap.get(pKey);
       if (!product) {
-        product = await tx.product.create({
-          data: {
-            tenantId,
-            categoryId: category.id,
-            brandId,
-            collectionId,
-            taxClassId,
-            name: productName,
-            isActive: true,
-          },
-          include: {
-            options: {
-              include: { values: true },
-            },
-          },
+        const firstRow = variantRows[0].data;
+        const category = categoryMap.get(firstRow.category.toLowerCase());
+        const brandId = firstRow.brand ? brandMap.get(firstRow.brand.toLowerCase())?.id : null;
+        const collectionId = firstRow.collection ? collectionMap.get(firstRow.collection.toLowerCase())?.id : null;
+        const rateBp = firstRow.vatRate > 0 ? Math.round(firstRow.vatRate * 100) : null;
+        const taxClassId = rateBp ? taxClassMap.get(rateBp) : null;
+
+        const newProductId = crypto.randomUUID();
+        product = {
+          id: newProductId,
+          tenantId,
+          categoryId: category?.id,
+          brandId,
+          collectionId,
+          taxClassId,
+          name: productName,
+          isActive: true,
+          options: [],
+        };
+        productsToCreate.push({
+          id: newProductId,
+          tenantId,
+          categoryId: category?.id,
+          brandId,
+          collectionId,
+          taxClassId,
+          name: productName,
+          isActive: true,
         });
         productMap.set(pKey, product);
       }
+    }
 
-      // Find or create product options: Size and Colour
-      let sizeOption = product.options?.find((o: any) => o.name === "Size") || null;
-      let colourOption = product.options?.find((o: any) => o.name === "Colour") || null;
+    if (productsToCreate.length > 0) {
+      for (const chunk of chunkArray(productsToCreate, 500)) {
+        await tx.product.createMany({ data: chunk });
+      }
+    }
 
+    // Step 3: Batch insert missing ProductOptions (Size & Colour)
+    const optionsToCreate: any[] = [];
+    for (const [productName, variantRows] of productGroups) {
+      const product = productMap.get(productName.toLowerCase());
       const hasSize = variantRows.some((r) => r.data.size);
+      let sizeOption = product.options?.find((o: any) => o.name === "Size");
       if (hasSize && !sizeOption) {
-        sizeOption = await tx.productOption.create({
-          data: {
-            tenantId,
-            productId: product.id,
-            name: "Size",
-            position: 0,
-          },
-          include: { values: true },
-        });
+        const sizeOptionId = crypto.randomUUID();
+        sizeOption = {
+          id: sizeOptionId,
+          tenantId,
+          productId: product.id,
+          name: "Size",
+          position: 0,
+          values: [],
+        };
         if (!product.options) product.options = [];
         product.options.push(sizeOption);
+        optionsToCreate.push({
+          id: sizeOptionId,
+          tenantId,
+          productId: product.id,
+          name: "Size",
+          position: 0,
+        });
       }
 
       const hasColour = variantRows.some((r) => r.data.colour);
+      let colourOption = product.options?.find((o: any) => o.name === "Colour");
       if (hasColour && !colourOption) {
-        colourOption = await tx.productOption.create({
-          data: {
-            tenantId,
-            productId: product.id,
-            name: "Colour",
-            position: 1,
-          },
-          include: { values: true },
-        });
+        const colourOptionId = crypto.randomUUID();
+        colourOption = {
+          id: colourOptionId,
+          tenantId,
+          productId: product.id,
+          name: "Colour",
+          position: 1,
+          values: [],
+        };
         if (!product.options) product.options = [];
         product.options.push(colourOption);
+        optionsToCreate.push({
+          id: colourOptionId,
+          tenantId,
+          productId: product.id,
+          name: "Colour",
+          position: 1,
+        });
       }
+    }
 
-      // Cache option values for this product to avoid thousands of repetitive queries
-      const sizeValueMap = new Map<string, string>();
-      if (sizeOption) {
-        if (sizeOption.values) {
-          for (const sv of sizeOption.values) {
-            sizeValueMap.set(sv.value.toLowerCase(), sv.id);
+    if (optionsToCreate.length > 0) {
+      for (const chunk of chunkArray(optionsToCreate, 500)) {
+        await tx.productOption.createMany({ data: chunk });
+      }
+    }
+
+    // Step 4: Batch insert missing ProductOptionValues
+    const optionValuesToCreate: any[] = [];
+    const optionValueMaps = new Map<string, string>(); // `${optionId}:${value.toLowerCase()}` -> id
+
+    // Populate existing values
+    for (const [, product] of productMap) {
+      if (product.options) {
+        for (const opt of product.options) {
+          if (opt.values) {
+            for (const v of opt.values) {
+              optionValueMaps.set(`${opt.id}:${v.value.toLowerCase()}`, v.id);
+            }
           }
         }
       }
+    }
 
-      const colourValueMap = new Map<string, string>();
-      if (colourOption) {
-        if (colourOption.values) {
-          for (const cv of colourOption.values) {
-            colourValueMap.set(cv.value.toLowerCase(), cv.id);
+    for (const [productName, variantRows] of productGroups) {
+      const product = productMap.get(productName.toLowerCase());
+      const sizeOption = product.options?.find((o: any) => o.name === "Size");
+      const colourOption = product.options?.find((o: any) => o.name === "Colour");
+
+      for (const row of variantRows) {
+        const vData = row.data;
+        if (sizeOption && vData.size) {
+          const sKey = `${sizeOption.id}:${vData.size.toLowerCase()}`;
+          if (!optionValueMaps.has(sKey)) {
+            const valId = crypto.randomUUID();
+            optionValueMaps.set(sKey, valId);
+            optionValuesToCreate.push({
+              id: valId,
+              tenantId,
+              optionId: sizeOption.id,
+              value: vData.size,
+              position: 0,
+            });
+          }
+        }
+
+        if (colourOption && vData.colour) {
+          const cKey = `${colourOption.id}:${vData.colour.toLowerCase()}`;
+          if (!optionValueMaps.has(cKey)) {
+            const valId = crypto.randomUUID();
+            optionValueMaps.set(cKey, valId);
+            optionValuesToCreate.push({
+              id: valId,
+              tenantId,
+              optionId: colourOption.id,
+              value: vData.colour,
+              position: 0,
+            });
           }
         }
       }
+    }
 
-      // Process variants
+    if (optionValuesToCreate.length > 0) {
+      for (const chunk of chunkArray(optionValuesToCreate, 500)) {
+        await tx.productOptionValue.createMany({ data: chunk });
+      }
+    }
+
+    // Step 5: Process Variants (Batch insert new variants, update existing)
+    const newVariants: any[] = [];
+    const newBarcodes: any[] = [];
+    const newOptionLinks: any[] = [];
+    const existingVariantUpdates: any[] = [];
+
+    for (const [productName, variantRows] of productGroups) {
+      const product = productMap.get(productName.toLowerCase());
+      const sizeOption = product.options?.find((o: any) => o.name === "Size");
+      const colourOption = product.options?.find((o: any) => o.name === "Colour");
+
       for (const row of variantRows) {
         const vData = row.data;
         const skuKey = vData.sku.toLowerCase();
 
-        // Pre-resolve size option value if present
         let sizeValId: string | undefined;
         if (sizeOption && vData.size) {
-          const sKey = vData.size.toLowerCase();
-          sizeValId = sizeValueMap.get(sKey);
-          if (!sizeValId) {
-            const sizeVal = await tx.productOptionValue.create({
-              data: {
-                tenantId,
-                optionId: sizeOption.id,
-                value: vData.size,
-                position: sizeValueMap.size,
-              },
-            });
-            sizeValId = sizeVal.id;
-            sizeValueMap.set(sKey, sizeVal.id);
-          }
+          sizeValId = optionValueMaps.get(`${sizeOption.id}:${vData.size.toLowerCase()}`);
         }
 
-        // Pre-resolve colour option value if present
         let colValId: string | undefined;
         if (colourOption && vData.colour) {
-          const cKey = vData.colour.toLowerCase();
-          colValId = colourValueMap.get(cKey);
-          if (!colValId) {
-            const colVal = await tx.productOptionValue.create({
-              data: {
-                tenantId,
-                optionId: colourOption.id,
-                value: vData.colour,
-                position: colourValueMap.size,
-              },
-            });
-            colValId = colVal.id;
-            colourValueMap.set(cKey, colVal.id);
-          }
+          colValId = optionValueMaps.get(`${colourOption.id}:${vData.colour.toLowerCase()}`);
         }
 
-        // Upsert variant by SKU (safe to repeat)
-        let variant = variantMap.get(skuKey);
-
-        if (variant) {
-          await tx.productVariant.update({
-            where: { id: variant.id },
-            data: {
-              priceMinor: BigInt(vData.salePriceMinor),
-              costMinor: BigInt(vData.costPriceMinor),
-              isActive: true,
-            },
+        const existingVariant = variantMap.get(skuKey);
+        if (existingVariant) {
+          existingVariantUpdates.push({
+            id: existingVariant.id,
+            priceMinor: BigInt(vData.salePriceMinor),
+            costMinor: BigInt(vData.costPriceMinor),
+            variant: existingVariant,
+            sizeOption,
+            sizeValId,
+            colourOption,
+            colValId,
+            barcode: vData.barcode,
           });
-
-          // Link size if not linked
-          if (sizeValId && sizeOption) {
-            const hasLink = variant.optionValues?.some((ov: any) => ov.optionId === sizeOption!.id);
-            if (!hasLink) {
-              const linked = await tx.variantOptionValue.create({
-                data: { tenantId, variantId: variant.id, optionId: sizeOption.id, optionValueId: sizeValId },
-              });
-              if (!variant.optionValues) variant.optionValues = [];
-              variant.optionValues.push(linked);
-            }
-          }
-
-          // Link colour if not linked
-          if (colValId && colourOption) {
-            const hasColLink = variant.optionValues?.some((ov: any) => ov.optionId === colourOption!.id);
-            if (!hasColLink) {
-              const linked = await tx.variantOptionValue.create({
-                data: { tenantId, variantId: variant.id, optionId: colourOption.id, optionValueId: colValId },
-              });
-              if (!variant.optionValues) variant.optionValues = [];
-              variant.optionValues.push(linked);
-            }
-          }
-
-          // Link barcode if not linked
-          if (vData.barcode) {
-            const hasBc = variant.barcodes?.some((b: any) => b.barcode.toLowerCase() === vData.barcode.toLowerCase());
-            if (!hasBc) {
-              const bc = await tx.variantBarcode.create({
-                data: { tenantId, variantId: variant.id, barcode: vData.barcode },
-              });
-              if (!variant.barcodes) variant.barcodes = [];
-              variant.barcodes.push(bc);
-            }
-          }
         } else {
-          const optionValueCreates = [];
-          if (sizeValId && sizeOption) {
-            optionValueCreates.push({ tenantId, optionId: sizeOption.id, optionValueId: sizeValId });
-          }
-          if (colValId && colourOption) {
-            optionValueCreates.push({ tenantId, optionId: colourOption.id, optionValueId: colValId });
-          }
-
-          variant = await tx.productVariant.create({
-            data: {
-              tenantId,
-              productId: product.id,
-              sku: vData.sku,
-              priceMinor: BigInt(vData.salePriceMinor),
-              costMinor: BigInt(vData.costPriceMinor),
-              isActive: true,
-              barcodes: vData.barcode ? { create: { tenantId, barcode: vData.barcode } } : undefined,
-              optionValues: optionValueCreates.length > 0 ? { create: optionValueCreates } : undefined,
-            },
-            include: {
-              barcodes: true,
-              optionValues: true,
-            },
+          const variantId = crypto.randomUUID();
+          newVariants.push({
+            id: variantId,
+            tenantId,
+            productId: product.id,
+            sku: vData.sku,
+            priceMinor: BigInt(vData.salePriceMinor),
+            costMinor: BigInt(vData.costPriceMinor),
+            isActive: true,
           });
-          variantMap.set(skuKey, variant);
-        }
 
-        variantCount++;
+          if (vData.barcode) {
+            newBarcodes.push({
+              id: crypto.randomUUID(),
+              tenantId,
+              variantId,
+              barcode: vData.barcode,
+            });
+          }
+
+          if (sizeValId && sizeOption) {
+            newOptionLinks.push({
+              id: crypto.randomUUID(),
+              tenantId,
+              variantId,
+              optionId: sizeOption.id,
+              optionValueId: sizeValId,
+            });
+          }
+
+          if (colValId && colourOption) {
+            newOptionLinks.push({
+              id: crypto.randomUUID(),
+              tenantId,
+              variantId,
+              optionId: colourOption.id,
+              optionValueId: colValId,
+            });
+          }
+        }
       }
     }
 
-    return variantCount;
+    // Batch insert new variants, barcodes, and option links in chunks of 500
+    if (newVariants.length > 0) {
+      for (const chunk of chunkArray(newVariants, 500)) {
+        await tx.productVariant.createMany({ data: chunk });
+      }
+    }
+
+    if (newBarcodes.length > 0) {
+      for (const chunk of chunkArray(newBarcodes, 500)) {
+        await tx.variantBarcode.createMany({ data: chunk });
+      }
+    }
+
+    if (newOptionLinks.length > 0) {
+      for (const chunk of chunkArray(newOptionLinks, 500)) {
+        await tx.variantOptionValue.createMany({ data: chunk });
+      }
+    }
+
+    // Process updates for existing variants
+    for (const upd of existingVariantUpdates) {
+      await tx.productVariant.update({
+        where: { id: upd.id },
+        data: {
+          priceMinor: upd.priceMinor,
+          costMinor: upd.costMinor,
+          isActive: true,
+        },
+      });
+
+      if (upd.sizeValId && upd.sizeOption) {
+        const hasLink = upd.variant.optionValues?.some((ov: any) => ov.optionId === upd.sizeOption.id);
+        if (!hasLink) {
+          await tx.variantOptionValue.create({
+            data: {
+              tenantId,
+              variantId: upd.id,
+              optionId: upd.sizeOption.id,
+              optionValueId: upd.sizeValId,
+            },
+          });
+        }
+      }
+
+      if (upd.colValId && upd.colourOption) {
+        const hasColLink = upd.variant.optionValues?.some((ov: any) => ov.optionId === upd.colourOption.id);
+        if (!hasColLink) {
+          await tx.variantOptionValue.create({
+            data: {
+              tenantId,
+              variantId: upd.id,
+              optionId: upd.colourOption.id,
+              optionValueId: upd.colValId,
+            },
+          });
+        }
+      }
+
+      if (upd.barcode) {
+        const hasBc = upd.variant.barcodes?.some((b: any) => b.barcode.toLowerCase() === upd.barcode.toLowerCase());
+        if (!hasBc) {
+          await tx.variantBarcode.create({
+            data: { tenantId, variantId: upd.id, barcode: upd.barcode },
+          });
+        }
+      }
+    }
+
+    return newVariants.length + existingVariantUpdates.length;
   }
 
   // ==================== OPENING STOCK IMPORT ====================
@@ -748,50 +848,56 @@ export class ImportService {
   }
 
   private async commitStock(tenantId: string, userId: string, rows: ImportRowResult[], tx: any): Promise<number> {
-    let count = 0;
+    const movementsToCreate: any[] = [];
+    const stockLevelsToProcess: any[] = [];
 
     for (const row of rows) {
       const data = row.data;
       const qtyDecimal = new Decimal(data.quantity);
 
-      // Create OPENING stock movement
-      await tx.stockMovement.create({
-        data: {
-          tenantId,
-          branchId: data.branchId,
-          variantId: data.variantId,
-          qtyDelta: qtyDecimal,
-          type: "OPENING",
-          unitCostMinor: BigInt(data.unitCostMinor),
-          actorUserId: userId,
-          reason: "Initial CSV Opening Stock Import",
-        },
+      movementsToCreate.push({
+        id: crypto.randomUUID(),
+        tenantId,
+        branchId: data.branchId,
+        variantId: data.variantId,
+        qtyDelta: qtyDecimal,
+        type: "OPENING",
+        unitCostMinor: BigInt(data.unitCostMinor),
+        actorUserId: userId,
+        reason: "Initial CSV Opening Stock Import",
       });
 
-      // Upsert StockLevel
+      stockLevelsToProcess.push({
+        tenantId,
+        branchId: data.branchId,
+        variantId: data.variantId,
+        qty: qtyDecimal,
+      });
+    }
+
+    // Batch insert movements in chunks of 500
+    for (const chunk of chunkArray(movementsToCreate, 500)) {
+      await tx.stockMovement.createMany({ data: chunk });
+    }
+
+    // Upsert StockLevels
+    for (const sl of stockLevelsToProcess) {
       await tx.stockLevel.upsert({
         where: {
           tenantId_branchId_variantId: {
-            tenantId,
-            branchId: data.branchId,
-            variantId: data.variantId,
+            tenantId: sl.tenantId,
+            branchId: sl.branchId,
+            variantId: sl.variantId,
           },
         },
-        create: {
-          tenantId,
-          branchId: data.branchId,
-          variantId: data.variantId,
-          qty: qtyDecimal,
-        },
+        create: sl,
         update: {
-          qty: { increment: qtyDecimal },
+          qty: { increment: sl.qty },
         },
       });
-
-      count++;
     }
 
-    return count;
+    return movementsToCreate.length;
   }
 
   // ==================== CUSTOMERS IMPORT ====================

@@ -49,20 +49,24 @@ export class SettingsController {
     }
 
     const rcloneRemote = process.env.BACKUP_RCLONE_REMOTE;
-    const offServerConfigured = Boolean(
-      rcloneRemote || lastBackup?.offServerConfigured,
-    );
-    const offServerWarning = offServerConfigured
-      ? null
-      : "ব্যাকআপ শুধু এই সার্ভারে আছে";
+    const offServerConfigured = lastBackup
+      ? Boolean(lastBackup.offServerConfigured)
+      : Boolean(rcloneRemote);
+    const offServerWarning =
+      lastBackup?.warning ||
+      lastBackup?.offServerWarning ||
+      (offServerConfigured ? null : "ব্যাকআপ শুধু এই সার্ভারে আছে");
 
     return {
+      ok: lastBackup?.ok ?? (lastBackup?.timestamp ? true : null),
       lastBackupAt: lastBackup?.timestamp ?? null,
       lastBackupSizeBytes: lastBackup?.sizeBytes ?? null,
       lastBackupFilename: lastBackup?.filename ?? null,
       encrypted: lastBackup?.encrypted ?? false,
       offServerConfigured,
       offServerWarning,
+      warning: lastBackup?.warning ?? null,
+      reason: lastBackup?.reason ?? null,
       lastRestoreDrillAt: lastRestoreDrill?.timestamp ?? null,
       lastRestoreDrillStatus: lastRestoreDrill?.status ?? null,
     };

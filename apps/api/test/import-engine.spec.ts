@@ -11,6 +11,7 @@ import { AuthService } from "../src/modules/auth/auth.service.js";
 import { TenantsService } from "../src/modules/tenants/tenants.service.js";
 import { TenantContextService } from "../src/common/database/tenant-context.service.js";
 import { truncateTestDatabase } from "./test-db-helper.js";
+import { PrismaClient } from "@prisma/client";
 
 describe("Milestone F4: Data Import Engine & API Integration Tests", () => {
   let app: INestApplication;
@@ -44,15 +45,22 @@ describe("Milestone F4: Data Import Engine & API Integration Tests", () => {
     tenantsService = app.get(TenantsService);
     tenantContext = app.get(TenantContextService);
 
-    // Setup Tenant A (Owner & Cashier)
+    // Setup Tenant A (Owner & Cashier) with unique randomized slug
+    const runSuffix = Math.random().toString(36).substring(2, 8);
+    const slugA = `import-fashion-${runSuffix}`;
+    const emailA = `owner-${runSuffix}@importfashion.com`;
+    const cashierEmail = `cashier-${runSuffix}@importfashion.com`;
+    const slugB = `other-boutique-${runSuffix}`;
+    const emailB = `owner-${runSuffix}@otherboutique.com`;
+
     const signupA = await tenantsService.signup({
       companyName: "Import Fashion Ltd",
-      slug: "import-fashion",
+      slug: slugA,
       businessType: "fashion",
       owner: {
         name: "Import Owner",
-        email: "owner@importfashion.com",
-        phone: "+8801700000020",
+        email: emailA,
+        phone: `+88017${Math.floor(10000000 + Math.random() * 90000000)}`,
         password: "Password123!",
       },
       branch: { name: "Gulshan Flagship", code: "GUL-01" },
@@ -62,8 +70,8 @@ describe("Milestone F4: Data Import Engine & API Integration Tests", () => {
     branchCode = "GUL-01";
 
     const loginOwner = await authService.login({
-      tenantSlug: "import-fashion",
-      email: "owner@importfashion.com",
+      tenantSlug: slugA,
+      email: emailA,
       password: "Password123!",
     });
     ownerToken = loginOwner.accessToken;
@@ -78,15 +86,15 @@ describe("Milestone F4: Data Import Engine & API Integration Tests", () => {
       .set("Authorization", `Bearer ${ownerToken}`)
       .send({
         name: "Floor Cashier",
-        email: "cashier@importfashion.com",
+        email: cashierEmail,
         password: "Password123!",
         roleIds: [cashierRole.id],
         branchIds: [branchId],
       });
 
     const loginCashier = await authService.login({
-      tenantSlug: "import-fashion",
-      email: "cashier@importfashion.com",
+      tenantSlug: slugA,
+      email: cashierEmail,
       password: "Password123!",
     });
     cashierToken = loginCashier.accessToken;
@@ -94,12 +102,12 @@ describe("Milestone F4: Data Import Engine & API Integration Tests", () => {
     // Setup Tenant B (for cross-tenant isolation)
     const signupB = await tenantsService.signup({
       companyName: "Other Boutique Ltd",
-      slug: "other-boutique",
+      slug: slugB,
       businessType: "fashion",
       owner: {
         name: "Other Owner",
-        email: "owner@otherboutique.com",
-        phone: "+8801700000021",
+        email: emailB,
+        phone: `+88017${Math.floor(10000000 + Math.random() * 90000000)}`,
         password: "Password123!",
       },
       branch: { name: "Uttara Branch", code: "UTT-01" },
@@ -107,16 +115,38 @@ describe("Milestone F4: Data Import Engine & API Integration Tests", () => {
     tenantBId = signupB.tenantId;
 
     const loginB = await authService.login({
-      tenantSlug: "other-boutique",
-      email: "owner@otherboutique.com",
+      tenantSlug: slugB,
+      email: emailB,
       password: "Password123!",
     });
     tenantBToken = loginB.accessToken;
   });
 
   afterAll(async () => {
-    if (app) {
-      await app.close();
+    try {
+      const tenantIdsToDelete = [tenantId, tenantBId].filter(Boolean);
+      if (tenantIdsToDelete.length > 0) {
+        const systemPrisma = new PrismaClient({
+          datasources: {
+            db: {
+              url:
+                process.env.MIGRATION_TEST_DATABASE_URL ||
+                process.env.MIGRATION_DATABASE_URL ||
+                "postgresql://pos_admin:pos_secret@localhost:5432/universal_pos_test?schema=public",
+            },
+          },
+        });
+        await systemPrisma.tenant.deleteMany({
+          where: { id: { in: tenantIdsToDelete } },
+        });
+        await systemPrisma.$disconnect();
+      }
+    } catch (err) {
+      console.warn("Failed to clean up test tenants in afterAll:", err);
+    } finally {
+      if (app) {
+        await app.close();
+      }
     }
   });
 
@@ -480,5 +510,35 @@ describe("Milestone F4: Data Import Engine & API Integration Tests", () => {
       console.log(`5,000-row synthetic CSV import completed in: ${elapsedMs} ms (${(elapsedMs / 1000).toFixed(2)} s)`);
       expect(elapsedMs).toBeLessThan(60000); // must be under 60 s
     }, 90000);
+
+    it("previews a 20,000-row synthetic product CSV in under 30 seconds", async () => {
+      const rows: string[] = [
+        "product_name,category,brand,collection,size,colour,sku,barcode,sale_price,cost_price,vat_rate",
+      ];
+
+      for (let i = 1; i <= 20000; i++) {
+        const pIndex = Math.ceil(i / 5); // 4000 products, 5 variants each
+        const size = ["S", "M", "L", "XL", "XXL"][(i - 1) % 5];
+        rows.push(
+          `Synthetic Shirt 20k ${pIndex},Shirts,BrandPerf,Autumn,${size},Blue,SYN20K-SKU-${i},${800000000000 + i},1500,900,5`
+        );
+      }
+      const largeCsv = rows.join("\n");
+
+      const startTime = Date.now();
+
+      const previewRes = await request(app.getHttpServer())
+        .post("/api/v1/import/preview")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ type: "products", csvText: largeCsv });
+
+      expect(previewRes.status).toBe(200);
+      expect(previewRes.body.data.totalRows).toBe(20000);
+      expect(previewRes.body.data.errorRows).toBe(0);
+
+      const elapsedMs = Date.now() - startTime;
+      console.log(`20,000-row synthetic CSV preview completed in: ${elapsedMs} ms (${(elapsedMs / 1000).toFixed(2)} s)`);
+      expect(elapsedMs).toBeLessThan(30000); // must be under 30 s
+    }, 45000);
   });
 });

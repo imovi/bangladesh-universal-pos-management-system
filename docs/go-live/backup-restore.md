@@ -8,15 +8,20 @@ A comprehensive operational guide for database backups, automated encryption, re
 
 Universal POS employs a multi-tiered backup architecture designed to prevent data loss even in catastrophic hardware failure:
 
-- **Automated Nightly Backup:** Scheduled every night at **02:30 Asia/Dhaka** via cron or on-demand using `npm run backup:now`.
+- **Automated Nightly Backup Service:** Running as a dedicated container (`backup`) defined in `deploy/docker-compose.prod.yml` and built from `deploy/backup/Dockerfile`. Scheduled nightly at **02:30 Asia/Dhaka** (`TZ=Asia/Dhaka`) using BusyBox `crond` logging directly to stdout.
+- **Initial Day-One Backup:** On container start, `entrypoint.sh` executes an immediate backup run so fresh installations have a confirmed backup on day one without waiting for the nightly cron.
 - **Database Dump:** Uses PostgreSQL `pg_dump --format=custom` (`-Fc`), enabling compressed, high-performance table restoration and blob preservation.
 - **Role & Global Grants Dump:** Separate `globals.sql` capture ensuring `pos_app`, `pos_runtime`, and `pos_system` definitions are preserved.
-- **Asymmetric Encryption (`age`):** Backups are encrypted with `age` using a public key (`BACKUP_AGE_PUBLIC_KEY`). The decryption key NEVER resides on the live server.
+- **Asymmetric Encryption (`age`) & Fail-Safe Security:** Backups are encrypted with `age` using a public key (`BACKUP_AGE_PUBLIC_KEY`). The decryption key NEVER resides on the live server. If `BACKUP_AGE_PUBLIC_KEY` is set but `age` fails or is missing, the plain dump is immediately deleted, no file is uploaded, and `last-backup.json` records `ok: false` with Bangla explanation: `age অনুপস্থিত অথবা এনক্রিপশন ব্যর্থ হয়েছে`. If no key is configured, the backup remains local and unencrypted, and `rclone` refuses off-server upload.
 - **Integrity Validation:** SHA-256 checksums (`.sha256`) generated automatically alongside each archive.
 - **Retention Schedule:**
   - **Daily:** 14 most recent daily backups.
   - **Weekly:** 8 most recent weekly backups (taken automatically on Sundays).
 - **Off-Server Replication:** Integrated `rclone` support (`BACKUP_RCLONE_REMOTE`). If unset, the system emits a loud warning on the Admin Dashboard: **"ব্যাকআপ শুধু এই সার্ভারে আছে"**.
+- **Monitoring & Verification:**
+  - **Check container execution logs:** `docker compose -f deploy/docker-compose.prod.yml logs backup`
+  - **Check in UI:** Navigate to `/settings` as Owner and view the **Backups** card.
+  - **Status File:** The `backups` named volume is mounted read-only into the `api` container at `/backups/last-backup.json`.
 
 ---
 
@@ -167,3 +172,16 @@ Verify health:
 curl -k https://localhost/api/v1/health
 ```
 Your store is back online with zero data loss.
+
+---
+
+## 7. Owner Hand-Test: Checking the First Night's Backup
+
+The morning after the shop's first night of operation:
+1. SSH into the production server and inspect the backup service logs:
+   ```bash
+   docker compose -f deploy/docker-compose.prod.yml logs backup
+   ```
+2. Confirm the 02:30 Asia/Dhaka cron executed and logged:
+   `[BACKUP] Backup completed successfully: backup_universal_pos_<timestamp>.dump` (or `.dump.age`)
+3. Open the Admin Dashboard at `https://<your-domain>/settings` as Owner and verify the **Backups** card displays the fresh timestamp, size, and encrypted badge.

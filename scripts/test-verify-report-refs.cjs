@@ -219,6 +219,86 @@ if (!noIdFailedAsExpected) {
   process.exit(1);
 }
 
+// 7. Bare hash fixture: - CI: <sha> → run <id> → <conclusion> format without backticks
+const bareHashFixture = `
+## Test Section Bare Hash Format
+- CI: efe3f6f → run 45064820984 → completed failure
+- CI: 4cda049 → run 44111111111 → completed success
+`;
+fs.writeFileSync(fixtureFile, bareHashFixture, "utf8");
+
+const mockBareRuns = JSON.stringify({
+  "45064820984": { id: 45064820984, head_sha: "efe3f6f1234567890abcdef", status: "completed", conclusion: "failure" },
+  "44111111111": { id: 44111111111, head_sha: "4cda0491234567890abcdef", status: "completed", conclusion: "success" },
+});
+
+try {
+  execSync(
+    `node "${path.join(__dirname, "verify-report-refs.cjs")}" "## Test Section Bare Hash Format" "${fixtureFile}"`,
+    {
+      env: { ...process.env, VERIFY_MOCK_RUNS: mockBareRuns },
+      encoding: "utf8",
+    }
+  );
+  console.log("[PASS] Bare hash format parsed and validated successfully.");
+} catch (err) {
+  console.error("[FAIL] Bare hash format failed unexpectedly:", err.stdout || err.message);
+  process.exit(1);
+}
+
+// 8. Offline mode validation: --offline flag skips API and verifies pairing + git commits
+try {
+  const offlineOut = execSync(
+    `node "${path.join(__dirname, "verify-report-refs.cjs")}" "## Test Section Bare Hash Format" "${fixtureFile}" --offline`,
+    {
+      env: { ...process.env, VERIFY_MOCK_RUNS: mockBareRuns },
+      encoding: "utf8",
+    }
+  );
+  if (offlineOut.includes("ALL REFERENCES AND PAIRINGS VERIFIED SUCCESSFULLY (OFFLINE)")) {
+    console.log("[PASS] Offline mode passed format and pairing verification.");
+  } else {
+    console.error("[FAIL] Offline mode returned unexpected output:", offlineOut);
+    process.exit(1);
+  }
+} catch (err) {
+  console.error("[FAIL] Offline mode failed unexpectedly:", err.stdout || err.message);
+  process.exit(1);
+}
+
+// 9. Offline mode conflicting commits for same run ID must fail
+const conflictFixture = `
+## Test Section Conflicting Run
+- CI: \`4cda049\` → run 44111111111 → completed success
+- CI: \`e641606\` → run 44111111111 → completed failure
+`;
+fs.writeFileSync(fixtureFile, conflictFixture, "utf8");
+
+let conflictFailedAsExpected = false;
+try {
+  execSync(
+    `node "${path.join(__dirname, "verify-report-refs.cjs")}" "## Test Section Conflicting Run" "${fixtureFile}" --offline`,
+    {
+      env: { ...process.env, VERIFY_MOCK_RUNS: mockBareRuns },
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    }
+  );
+} catch (err) {
+  conflictFailedAsExpected = true;
+  const output = (err.stdout ? err.stdout.toString() : "") + (err.stderr ? err.stderr.toString() : "");
+  if (output.includes("is paired with conflicting commits")) {
+    console.log("[PASS] Conflicting run ID across commits caught in offline mode as expected.");
+  } else {
+    console.error("[FAIL] Conflicting run ID failed with unexpected output:", output);
+    process.exit(1);
+  }
+}
+if (!conflictFailedAsExpected) {
+  console.error("[FAIL] Conflicting run ID did not exit with error!");
+  process.exit(1);
+}
+
 // Cleanup fixture file
 try {
   fs.unlinkSync(fixtureFile);

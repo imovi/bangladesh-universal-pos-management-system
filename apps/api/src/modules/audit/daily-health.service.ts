@@ -13,7 +13,7 @@ export interface SystemHealthAlerts {
   pendingFlagsCount: number;
   unsyncedOfflineExceededCount: number;
   alerts: Array<{
-    type: "BACKUP_OVERDUE" | "SHIFT_OPEN_EXCEEDED" | "REVIEW_FLAGS_PENDING" | "OFFLINE_SYNC_OVERDUE";
+    type: "BACKUP_OVERDUE" | "BACKUP_FAILED" | "SHIFT_OPEN_EXCEEDED" | "REVIEW_FLAGS_PENDING" | "OFFLINE_SYNC_OVERDUE";
     severity: "critical" | "warning";
     messageEn: string;
     messageBn: string;
@@ -46,6 +46,7 @@ export class DailyHealthAlertService {
     const backupMetadataPaths = overrideBackupPath
       ? [path.resolve(overrideBackupPath)]
       : [
+          ...(process.env.BACKUP_DIR ? [path.resolve(process.env.BACKUP_DIR, "last-backup.json")] : []),
           path.resolve(process.cwd(), "last-backup.json"),
           path.resolve(process.cwd(), "backups", "last-backup.json"),
           path.resolve(process.cwd(), "temp-drill-backups", "last-backup.json"),
@@ -56,6 +57,16 @@ export class DailyHealthAlertService {
       if (fs.existsSync(p)) {
         try {
           const raw = JSON.parse(fs.readFileSync(p, "utf8"));
+          if (raw.ok === false) {
+            backupOverdue = true;
+            alerts.push({
+              type: "BACKUP_FAILED",
+              severity: "critical",
+              messageEn: `Last backup failed: ${raw.reason || raw.error || "Backup failed"}`,
+              messageBn: `সর্বশেষ ব্যাকআপ ব্যর্থ হয়েছে: ${raw.reason || raw.error || "ব্যাকআপ ব্যর্থ হয়েছে"}`,
+              details: { reason: raw.reason, error: raw.error },
+            });
+          }
           if (raw.timestamp) {
             const backupDate = new Date(raw.timestamp).getTime();
             backupAgeHours = Math.round((Date.now() - backupDate) / (1000 * 60 * 60));

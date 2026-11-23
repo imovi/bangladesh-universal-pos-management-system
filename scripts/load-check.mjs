@@ -212,7 +212,7 @@ async function main() {
 
   // -------------------------------------------------------------------------
   // Scenario 1: Sale Load
-  // 10 registers each make 1 sale every 3 seconds for target duration.
+  // 10 registers each make 1 sale every ~3 seconds for target duration (2 mins).
   // Each sale has 3 lines, 1 active promotion, and split cash + bKash payment.
   // -------------------------------------------------------------------------
   console.log("\n==================================================================");
@@ -220,28 +220,24 @@ async function main() {
   console.log(" Target: p95 < 400ms, 0 errors, stock and shift totals exact.");
   console.log("==================================================================");
 
-  // We run for 40 iterations across 10 registers (400 total sales) in measured batches
-  const TOTAL_ROUNDS = 20; // 20 rounds of 10 concurrent registers = 200 sales
+  const TARGET_DURATION_MS = process.env.LOAD_TEST_DURATION_MS
+    ? parseInt(process.env.LOAD_TEST_DURATION_MS, 10)
+    : 120000; // 2 minutes (120 seconds)
+
   const latencies = [];
   let errorCount = 0;
   let totalSalesMade = 0;
+  let round = 0;
   const startLoadTime = Date.now();
 
-  for (let round = 1; round <= TOTAL_ROUNDS; round++) {
+  while (Date.now() - startLoadTime < TARGET_DURATION_MS) {
+    round++;
     const roundPromises = registers.map(async (reg, idx) => {
       const shift = shifts[idx];
       const saleId = uuidv7();
       const t0 = Date.now();
 
       try {
-        // Line items:
-        // Variant 1: 1 x ৳1,500 = ৳1,500
-        // Variant 2: 1 x ৳1,200 = ৳1,200
-        // Variant 3: 1 x ৳2,000 = ৳2,000
-        // Gross subtotal = ৳4,700 (470000 poisha)
-        // 10% promo discount = ৳470 (47000 poisha)
-        // Total = ৳4,230 (423000 poisha)
-        // Split tender: ৳2,230 cash (223000 poisha) + ৳2,000 bKash (200000 poisha)
         await apiRequest("/sales", {
           token,
           method: "POST",
@@ -283,10 +279,11 @@ async function main() {
 
     await Promise.all(roundPromises);
     if (round % 5 === 0) {
-      console.log(`  Completed round ${round}/${TOTAL_ROUNDS} (${totalSalesMade} sales committed)...`);
+      const elapsedSec = ((Date.now() - startLoadTime) / 1000).toFixed(0);
+      console.log(`  Completed round ${round} (${totalSalesMade} sales committed, ${elapsedSec}s elapsed)...`);
     }
-    // Short sleep between rounds
-    await sleep(200);
+    // Pace: ~3 seconds per sale across 10 registers
+    await sleep(2500);
   }
 
   const loadDurationSec = ((Date.now() - startLoadTime) / 1000).toFixed(2);
@@ -318,7 +315,28 @@ async function main() {
   const actualQtyDelta = Math.abs(Number(stockCheck[0]?.net_qty ?? 0));
   console.log(`Stock Movement Check: Expected -${expectedQtySold} units, DB recorded -${actualQtyDelta} units.`);
 
-  if (p95 < 400 && errorCount === 0 && actualQtyDelta === expectedQtySold) {
+  const scenario1Passed = p95 < 400 && errorCount === 0 && actualQtyDelta === expectedQtySold;
+  const throughput = Number((totalSalesMade / Number(loadDurationSec)).toFixed(1));
+  console.log(JSON.stringify({
+    scenario: 1,
+    name: "sale_load_10_registers",
+    durationSec: Number(loadDurationSec),
+    throughputReqSec: throughput,
+    throughput: `${throughput} req/s`,
+    totalSales: totalSalesMade,
+    errors: errorCount,
+    minMs: minLatency,
+    p50Ms: p50,
+    p95Ms: p95,
+    p99Ms: p99,
+    maxMs: maxLatency,
+    stockExpected: expectedQtySold,
+    stockActual: actualQtyDelta,
+    budgetMet: scenario1Passed,
+    passed: scenario1Passed,
+  }));
+
+  if (scenario1Passed) {
     console.log(">>> SCENARIO 1: PASSED (p95 < 400ms, 0 errors, stock exact)");
   } else {
     console.log(">>> SCENARIO 1: TARGET MISSED");
@@ -406,7 +424,28 @@ async function main() {
   });
   console.log(`DB Offline Sales Verified Count: ${offlineDbCount}/${BURST_COUNT}`);
 
-  if (burstSuccess === BURST_COUNT && burstErrors === 0 && Number(burstDurationSec) < 120 && offlineDbCount === BURST_COUNT) {
+  const scenario2Passed =
+    burstSuccess === BURST_COUNT &&
+    burstErrors === 0 &&
+    Number(burstDurationSec) < 120 &&
+    offlineDbCount === BURST_COUNT;
+  const burstThroughput = Number((burstSuccess / Number(burstDurationSec)).toFixed(1));
+
+  console.log(JSON.stringify({
+    scenario: 2,
+    name: "sync_burst_300_sales",
+    durationSec: Number(burstDurationSec),
+    throughputReqSec: burstThroughput,
+    throughput: `${burstThroughput} req/s`,
+    totalSales: burstSuccess,
+    expectedSales: BURST_COUNT,
+    errors: burstErrors,
+    dbCount: offlineDbCount,
+    budgetMet: scenario2Passed,
+    passed: scenario2Passed,
+  }));
+
+  if (scenario2Passed) {
     console.log(">>> SCENARIO 2: PASSED (Under 2 minutes, all accepted exactly once, 0 deadlocks)");
   } else {
     console.log(">>> SCENARIO 2: TARGET MISSED");
@@ -467,7 +506,17 @@ async function main() {
   console.log(`Sales in Range (DB):     ${reportRes.salesCount ?? reportRes.totalSales ?? "50,000+"}`);
   console.log(`Report API Response Time: ${reportDurationMs}ms (Target: < 2,000ms)`);
 
-  if (reportDurationMs < 2000) {
+  const scenario3Passed = reportDurationMs < 2000;
+  console.log(JSON.stringify({
+    scenario: 3,
+    name: "sales_summary_report_50k",
+    durationMs: reportDurationMs,
+    targetMs: 2000,
+    budgetMet: scenario3Passed,
+    passed: scenario3Passed,
+  }));
+
+  if (scenario3Passed) {
     console.log(`>>> SCENARIO 3: PASSED (${reportDurationMs}ms < 2,000ms)`);
   } else {
     console.log(`>>> SCENARIO 3: TARGET MISSED (${reportDurationMs}ms >= 2,000ms)`);
@@ -479,6 +528,12 @@ async function main() {
   console.log(` - Scenario 2 Sync Burst: ${burstSuccess}/300 in ${burstDurationSec}s`);
   console.log(` - Scenario 3 50k Report:  ${reportDurationMs}ms`);
   console.log("==================================================================");
+
+  if (!scenario1Passed || !scenario2Passed || !scenario3Passed) {
+    console.error("\n[LOAD CHECK FAILED] One or more performance scenarios missed target thresholds!");
+    process.exit(1);
+  }
+  console.log("\n[LOAD CHECK PASSED] All 3 performance scenarios met target thresholds successfully.");
 }
 
 main()

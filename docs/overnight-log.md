@@ -3301,6 +3301,149 @@ c5ec4e1 fix(go-live): resolve Phase 1F review findings across backups, validatio
     `::notice title=smoke-prod backup::<last-backup.json oneline>`
     `::notice title=smoke-prod backup::tableCount=$TABLE_COUNT, tables=[tenants, products, sales] verified`
 
+#### 3. CI Run & Public Annotation Verification (`aac771c`)
+- **Commit:** `aac771c` (`feat(ci): add notice annotations for load metrics and untrack generated sw.js`)
+- CI: `aac771c` → run `45471519979` → completed success
+- Jobs API status for commit `aac771c` (run `45471519979` success):
+  - `test` (job 138720421041): completed success
+  - `smoke-prod` (job 138729092788): completed success
+  - `load-check` (job 138729092665): completed success
+- Raw public notice annotations retrieved via unauthenticated check-run API:
+  - `load-check` annotations (Job 138729092665):
+    ```json
+    {"scenario":1,"name":"sale_load_10_registers","durationSec":120.59,"throughputReqSec":3.8,"throughput":"3.8 req/s","totalSales":460,"errors":0,"minMs":39,"p50Ms":86,"p95Ms":125,"p99Ms":154,"maxMs":189,"stockExpected":1380,"stockActual":1380,"budgetMet":true,"passed":true}
+    {"scenario":2,"name":"sync_burst_300_sales","durationSec":1.97,"throughputReqSec":152.3,"throughput":"152.3 req/s","totalSales":300,"expectedSales":300,"errors":0,"dbCount":300,"budgetMet":true,"passed":true}
+    {"scenario":3,"name":"sales_summary_report_50k","durationMs":31,"targetMs":2000,"salesCount":48333,"budgetMet":true,"passed":true}
+    ```
+  - `smoke-prod` annotations (Job 138729092788):
+    ```text
+    status=running, restarts=, health=healthy, crond=running (PID 1), daily_dumps=1
+    {"ok":true,"timestamp":"2026-11-25T01:49:45+06:00","filename":"backup_universal_pos_20261125_014945.dump","filePath":"/backups/daily/backup_universal_pos_20261125_014945.dump","sizeBytes":493053,"encrypted":false,"offServerConfigured":false,"offServerWarning":"ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি","warning":"ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি","checksum":"540ec0b8c3945c83e3c8bf1918417f869179bc6dc1d1ed6a51b356d280a538d7","tableCount":54}
+    tableCount=54, tables=[tenants, products, sales] verified
+    ```
+
+#### 4. Reference Verification Across All Five Sections (10 Online Checks)
+
+1. `node scripts/verify-report-refs.cjs "## Phase 1D, fixes" docs/overnight-report.md`:
+```text
+Checking section: ## Phase 1D, fixes (11038 chars)
+Found 14 unique commit hash(es) and 14 unique run ID(s).
+--- Verification Summary ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
+```
+
+2. `node scripts/verify-report-refs.cjs "## Phase 1D, fixes" docs/overnight-log.md`:
+```text
+Checking section: ## Phase 1D, fixes (20598 chars)
+Found 15 unique commit hash(es) and 13 unique run ID(s).
+--- Verification Summary ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
+```
+
+3. `node scripts/verify-report-refs.cjs "## Phase 1D, fixes follow-up" docs/overnight-report.md`:
+```text
+Checking section: ## Phase 1D, fixes follow-up (6315 chars)
+Found 4 unique commit hash(es) and 4 unique run ID(s).
+--- Verification Summary ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
+```
+
+4. `node scripts/verify-report-refs.cjs "## Phase 1D, fixes follow-up" docs/overnight-log.md`:
+```text
+Checking section: ## Phase 1D, fixes follow-up (6919 chars)
+Found 8 unique commit hash(es) and 4 unique run ID(s).
+--- Verification Summary ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
+```
+
+5. `node scripts/verify-report-refs.cjs "## Phase 1E" docs/overnight-report.md`:
+```text
+Checking section: ## Phase 1E (20532 chars)
+Found 14 unique commit hash(es) and 14 unique run ID(s).
+--- Verification Summary ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
+```
+
+6. `node scripts/verify-report-refs.cjs "## Phase 1E" docs/overnight-log.md`:
+```text
+Checking section: ## Phase 1E (32804 chars)
+Found 14 unique commit hash(es) and 14 unique run ID(s).
+--- Verification Summary ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
+```
+
+7. `node scripts/verify-report-refs.cjs "## Phase 1F" docs/overnight-report.md`:
+```text
+Checking section: ## Phase 1F (21606 chars)
+Found 18 unique commit hash(es) and 18 unique run ID(s).
+--- Verification Summary ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
+```
+
+8. `node scripts/verify-report-refs.cjs "## Phase 1F" docs/overnight-log.md`:
+```text
+Checking section: ## Phase 1F (33164 chars)
+Found 22 unique commit hash(es) and 20 unique run ID(s).
+--- Verification Summary ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
+```
+
+9. `node scripts/verify-report-refs.cjs "## Phase 1F, follow-up" docs/overnight-report.md`:
+```text
+Checking section: ## Phase 1F, follow-up (16651 chars)
+Found 12 unique commit hash(es) and 12 unique run ID(s).
+--- Verification Summary ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
+```
+
+10. `node scripts/verify-report-refs.cjs "## Phase 1F, follow-up" docs/overnight-log.md`:
+```text
+Checking section: ## Phase 1F, follow-up (47267 chars)
+Found 15 unique commit hash(es) and 12 unique run ID(s).
+--- Verification Summary ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
+```
+
 
 
 

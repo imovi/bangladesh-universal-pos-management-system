@@ -487,6 +487,7 @@ jobs:
         env:
           CI: true
           NODE_ENV: test
+          LOAD_TEST_DURATION_MS: 120000
           AUTH_THROTTLE_LIMIT: 50000
           RATE_LIMIT_LIMIT: 50000
           REFRESH_THROTTLE_LIMIT: 50000

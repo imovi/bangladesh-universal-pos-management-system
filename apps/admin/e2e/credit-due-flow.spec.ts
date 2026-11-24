@@ -125,14 +125,14 @@ test.describe("Milestone C2: Credit & Due Sales, Customer Ledger, Collection Flo
 
     // Handle shift in use dialog by switching register if needed
     const switchBtn = page.locator('[data-testid="switch-register-btn"]');
-    if (await switchBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+    if (await switchBtn.waitFor({ state: "visible", timeout: 1500 }).then(() => true).catch(() => false)) {
       await switchBtn.click();
       await expect(switchBtn).toBeHidden({ timeout: 3000 });
     }
 
     // Ensure shift is open
     const openShiftBtn = page.locator('[data-testid="open-shift-button"]');
-    if (await openShiftBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await openShiftBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
       await openShiftBtn.click();
       await page.fill('[data-testid="opening-cash-input"]', "1000");
       await page.click('[data-testid="confirm-open-shift-button"]');
@@ -162,7 +162,7 @@ test.describe("Milestone C2: Credit & Due Sales, Customer Ledger, Collection Flo
 
     // If variant picker opened, click first in-stock variant
     const variantCell = page.locator('[data-testid^="variant-cell-"]').first();
-    if (await variantCell.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await variantCell.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
       await variantCell.click();
     }
 

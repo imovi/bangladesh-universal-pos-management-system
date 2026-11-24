@@ -59,7 +59,7 @@ test.describe("Global Data Integrity Guard: No NaN, undefined, null, Invalid Dat
         // Switch language if needed
         if (locale === "en") {
           const enBtn = page.locator('header button:has-text("EN"), button:has-text("EN")').first();
-          if (await enBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+          if (await enBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
             await enBtn.click();
             await page.waitForTimeout(300);
           }
@@ -67,7 +67,7 @@ test.describe("Global Data Integrity Guard: No NaN, undefined, null, Invalid Dat
 
         // Wait for any loading spinners or "লোড হচ্ছে..." / "Loading..." text to disappear
         const loadingIndicator = page.locator('text="লোড হচ্ছে...", text="খোঁজা হচ্ছে...", text="Loading..."').first();
-        if (await loadingIndicator.isVisible({ timeout: 1000 }).catch(() => false)) {
+        if (await loadingIndicator.waitFor({ state: "visible", timeout: 1000 }).then(() => true).catch(() => false)) {
           await loadingIndicator.waitFor({ state: "detached", timeout: 10000 }).catch(() => {});
         }
 
@@ -99,7 +99,7 @@ test.describe("Global Data Integrity Guard: No NaN, undefined, null, Invalid Dat
 
       if (locale === "en") {
         const enBtn = page.locator('header button:has-text("EN"), button:has-text("EN")').first();
-        if (await enBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        if (await enBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
           await enBtn.click();
           await page.waitForTimeout(300);
         }
@@ -107,7 +107,7 @@ test.describe("Global Data Integrity Guard: No NaN, undefined, null, Invalid Dat
 
       // Check if any return link exists
       const returnRowLink = page.locator('tbody tr a[href*="/sales/returns/"]').first();
-      if (await returnRowLink.isVisible({ timeout: 3000 }).catch(() => false)) {
+      if (await returnRowLink.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
         await returnRowLink.click();
         await page.waitForLoadState("domcontentloaded");
         await page.waitForTimeout(500);
@@ -121,7 +121,7 @@ test.describe("Global Data Integrity Guard: No NaN, undefined, null, Invalid Dat
 
         // Click into the associated sale detail
         const saleLink = page.locator('a[href*="/sales/"]:not([href*="/returns/"])').first();
-        if (await saleLink.isVisible({ timeout: 2000 }).catch(() => false)) {
+        if (await saleLink.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
           await saleLink.click();
           await page.waitForLoadState("domcontentloaded");
           await page.waitForTimeout(500);

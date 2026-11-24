@@ -78,7 +78,7 @@ test.describe("Phase 1E: Mandatory Visual Artifacts & Screenshots (e2, e3, e4)",
 
     // Click first product card if available
     const productCard = page.locator('[data-testid="product-grid"] button, [data-testid="pos-product-card"]').first();
-    if (await productCard.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await productCard.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
       await productCard.click();
       await page.waitForTimeout(300);
     }
@@ -113,7 +113,7 @@ test.describe("Phase 1E: Mandatory Visual Artifacts & Screenshots (e2, e3, e4)",
     // E3 Coupon Field - Desktop (1440px)
     await page.setViewportSize({ width: 1440, height: 900 });
     const couponInput = page.locator('[data-testid="pos-coupon-input"], input[placeholder*="কুপন"], input[placeholder*="Coupon"]').first();
-    if (await couponInput.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await couponInput.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
       // Invalid Coupon test
       await couponInput.fill("INVALID_CODE_999");
       const applyBtn = page.locator('[data-testid="pos-apply-coupon-btn"], button:has-text("প্রয়োগ"), button:has-text("Apply")').first();
@@ -177,7 +177,7 @@ test.describe("Phase 1E: Mandatory Visual Artifacts & Screenshots (e2, e3, e4)",
     await page.waitForTimeout(500);
 
     const firstSaleRow = page.locator('table tbody tr').first();
-    if (await firstSaleRow.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await firstSaleRow.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
       await firstSaleRow.click();
       await page.waitForTimeout(500);
 

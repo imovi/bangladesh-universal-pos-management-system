@@ -192,11 +192,11 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
 
     // Switch register or open shift if required while online
     const startShiftHeaderBtn = page.locator('button:has-text("শিফট শুরু করুন"), button:has-text("Start Shift")');
-    if (await startShiftHeaderBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await startShiftHeaderBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
       await startShiftHeaderBtn.click();
     }
     const confirmOpenBtn = page.locator('[data-testid="confirm-open-shift-button"]');
-    if (await confirmOpenBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await confirmOpenBtn.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
       await page.fill('[data-testid="opening-cash-input"]', "1000");
       await confirmOpenBtn.click();
       await expect(confirmOpenBtn).toBeHidden({ timeout: 10000 });
@@ -229,7 +229,7 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
 
     // If variant picker opened, click first available
     const variantCell = page.locator('[data-testid^="variant-cell-"]').first();
-    if (await variantCell.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await variantCell.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
       await variantCell.click();
     }
 
@@ -266,7 +266,7 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
     if (await secondProduct.isVisible().catch(() => false)) {
       await secondProduct.click();
       const secondVariant = page.locator('[data-testid^="variant-cell-"]').first();
-      if (await secondVariant.isVisible({ timeout: 1500 }).catch(() => false)) {
+      if (await secondVariant.waitFor({ state: "visible", timeout: 1500 }).then(() => true).catch(() => false)) {
         await secondVariant.click();
       }
     } else {
@@ -319,24 +319,23 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(1000);
 
-    // Wait until service worker is activated and controlling the page
-    await page.evaluate(async () => {
-      if ("serviceWorker" in navigator) {
-        await Promise.race([
-          navigator.serviceWorker.ready,
-          new Promise((resolve) => setTimeout(resolve, 5000)),
-        ]);
-        if (!navigator.serviceWorker.controller) {
-          await new Promise<void>((resolve) => {
-            navigator.serviceWorker.addEventListener("controllerchange", () => resolve());
-            setTimeout(resolve, 3000);
-          });
-        }
+    // Wait until service worker is activated, controlling the page, and has cached the shell
+    await page.waitForFunction(async () => {
+      if (!("serviceWorker" in navigator)) return false;
+      const reg = await navigator.serviceWorker.ready;
+      if (!reg || !reg.active || !navigator.serviceWorker.controller) return false;
+      const cacheNames = await caches.keys();
+      for (const name of cacheNames) {
+        const c = await caches.open(name);
+        const keys = await c.keys();
+        if (keys.some((k) => k.url.includes("/pos"))) return true;
       }
-    });
+      return false;
+    }, undefined, { timeout: 15000 });
+
     // Reload once while online under active service worker controller to ensure document is cached
     await page.reload({ waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(1000);
+    await page.waitForFunction(() => !!navigator.serviceWorker?.controller, undefined, { timeout: 10000 });
 
     // Go OFFLINE and reload
     await context.setOffline(true);
@@ -468,7 +467,7 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
 
     // Check if any open flags exist to resolve
     const resolveBtn = page.locator('[data-testid="resolve-flag-button"]').first();
-    if (await resolveBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await resolveBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
       await resolveBtn.click();
       const resolveModal = page.locator('[data-testid="resolve-flag-modal"]');
       await expect(resolveModal).toBeVisible({ timeout: 5000 });
@@ -545,7 +544,7 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
     const tab2Checkout = page2.locator('[data-testid="pos-checkout-button"]');
     const tab2Lockout = page2.locator('[data-testid="tab-lockout-banner"]');
 
-    if (await tab2Lockout.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await tab2Lockout.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
       await expect(tab2Lockout).toBeVisible();
     }
     await expect(tab2Checkout).toBeDisabled();
@@ -569,7 +568,7 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
     const firstProduct = page.locator('[data-testid^="product-card-"]').first();
     await firstProduct.click();
     const variantCell = page.locator('[data-testid^="variant-cell-"]').first();
-    if (await variantCell.isVisible({ timeout: 1500 }).catch(() => false)) {
+    if (await variantCell.waitFor({ state: "visible", timeout: 1500 }).then(() => true).catch(() => false)) {
       await variantCell.click();
     }
     const checkoutBtn = page.locator('[data-testid="pos-checkout-button"]');
@@ -630,13 +629,13 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
 
     // Sell item offline at current price
     const prodCard = page.locator(`[data-testid="product-card-${targetVariant.productId}"]`);
-    if (await prodCard.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await prodCard.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
       await prodCard.click();
     } else {
       await page.locator('[data-testid^="product-card-"]').first().click();
     }
     const varCell = page.locator('[data-testid^="variant-cell-"]').first();
-    if (await varCell.isVisible({ timeout: 1500 }).catch(() => false)) {
+    if (await varCell.waitFor({ state: "visible", timeout: 1500 }).then(() => true).catch(() => false)) {
       await varCell.click();
     }
 
@@ -704,7 +703,7 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
       const prod = page.locator('[data-testid^="product-card-"]').nth(i);
       await prod.click();
       const varCell = page.locator('[data-testid^="variant-cell-"]').first();
-      if (await varCell.isVisible({ timeout: 1500 }).catch(() => false)) {
+      if (await varCell.waitFor({ state: "visible", timeout: 1500 }).then(() => true).catch(() => false)) {
         await varCell.click();
       }
 
@@ -810,7 +809,7 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
 
     // Ensure open shift on POS screen
     const openShiftBtn = page.locator('[data-testid="open-shift-button"], button:has-text("শিফট শুরু করুন"), button:has-text("Start Shift")');
-    if (await openShiftBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await openShiftBtn.waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false)) {
       await openShiftBtn.click();
       const confirmOpenBtn = page.locator('[data-testid="confirm-open-shift-button"]');
       await expect(confirmOpenBtn).toBeVisible({ timeout: 5000 });
@@ -835,7 +834,7 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
     const prod = page.locator('[data-testid^="product-card-"]').first();
     await prod.click();
     const varCell = page.locator('[data-testid^="variant-cell-"]').first();
-    if (await varCell.isVisible({ timeout: 1500 }).catch(() => false)) {
+    if (await varCell.waitFor({ state: "visible", timeout: 1500 }).then(() => true).catch(() => false)) {
       await varCell.click();
     }
     await page.locator('[data-testid="pos-checkout-button"]').click();
@@ -911,7 +910,7 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
 
     // Ensure open shift
     const openShiftBtn = page.locator('[data-testid="open-shift-button"], button:has-text("শিফট শুরু করুন"), button:has-text("Start Shift")');
-    if (await openShiftBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await openShiftBtn.waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false)) {
       await openShiftBtn.click();
       const confirmOpenBtn = page.locator('[data-testid="confirm-open-shift-button"]');
       await expect(confirmOpenBtn).toBeVisible({ timeout: 5000 });
@@ -943,7 +942,7 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
     const firstProd = page.locator('[data-testid^="product-card-"]').first();
     await firstProd.click();
     const varCell1 = page.locator('[data-testid^="variant-cell-"]').first();
-    if (await varCell1.isVisible({ timeout: 1500 }).catch(() => false)) {
+    if (await varCell1.waitFor({ state: "visible", timeout: 1500 }).then(() => true).catch(() => false)) {
       await varCell1.click();
     }
     await page.locator('[data-testid="pos-checkout-button"]').click();
@@ -961,7 +960,7 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
     const sale2ClientTime = Date.now();
     await firstProd.click();
     const varCell2 = page.locator('[data-testid^="variant-cell-"]').first();
-    if (await varCell2.isVisible({ timeout: 1500 }).catch(() => false)) {
+    if (await varCell2.waitFor({ state: "visible", timeout: 1500 }).then(() => true).catch(() => false)) {
       await varCell2.click();
     }
     await page.locator('[data-testid="pos-checkout-button"]').click();
@@ -1033,7 +1032,7 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
 
     // Ensure open shift
     const openShiftBtn = page.locator('[data-testid="open-shift-button"], button:has-text("শিফট শুরু করুন"), button:has-text("Start Shift")');
-    if (await openShiftBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await openShiftBtn.waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false)) {
       await openShiftBtn.click();
       const confirmOpenBtn = page.locator('[data-testid="confirm-open-shift-button"]');
       await expect(confirmOpenBtn).toBeVisible({ timeout: 5000 });
@@ -1063,7 +1062,7 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
     const firstProd = page.locator('[data-testid^="product-card-"]').first();
     await firstProd.click();
     const varCell = page.locator('[data-testid^="variant-cell-"]').first();
-    if (await varCell.isVisible({ timeout: 1500 }).catch(() => false)) {
+    if (await varCell.waitFor({ state: "visible", timeout: 1500 }).then(() => true).catch(() => false)) {
       await varCell.click();
     }
     await page.locator('[data-testid="pos-checkout-button"]').click();

@@ -114,7 +114,7 @@ test.describe("Step 2 (Item 1): POS Keyboard Shortcuts Flow (F2, F4, F6, F8, F9,
 
     // Ensure shift is open so returns and payments are enabled
     const startShiftBtn = page.locator('button:has-text("শিফট শুরু করুন"), [data-testid="open-shift-button"]');
-    if (await startShiftBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await startShiftBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
       await startShiftBtn.click();
       const confirmOpenShiftBtn = page.locator('[data-testid="confirm-open-shift-button"]');
       await expect(confirmOpenShiftBtn).toBeVisible({ timeout: 5000 });

@@ -175,7 +175,7 @@ test.describe("Milestone C2 Screenshots Capture", () => {
     await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
     await page.fill('[data-testid="customer-search-input"]', custPhone);
     const searchResultItem = page.locator(`button:has-text("${custPhone}")`);
-    if (await searchResultItem.isVisible({ timeout: 5000 })) {
+    if (await searchResultItem.waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false)) {
       await searchResultItem.click();
       await page.waitForTimeout(400);
     }
@@ -189,7 +189,7 @@ test.describe("Milestone C2 Screenshots Capture", () => {
     if (await firstProduct.isVisible()) {
       await firstProduct.click();
       const variantCell = page.locator('[data-testid^="variant-cell-"]').first();
-      if (await variantCell.isVisible({ timeout: 2000 }).catch(() => false)) {
+      if (await variantCell.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
         await variantCell.click();
       }
     }
@@ -245,7 +245,7 @@ test.describe("Milestone C2 Screenshots Capture", () => {
         await page.waitForTimeout(1000);
         await page.setViewportSize({ width: 450, height: 700 });
         const receipt = page.locator('[data-testid="pos-thermal-receipt"], [data-testid="receipt-view"]').first();
-        if (await receipt.isVisible({ timeout: 5000 }).catch(() => false)) {
+        if (await receipt.waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false)) {
           await receipt.screenshot({
             path: path.join(screenshotsDir, "credit-sale-thermal-receipt.png"),
           });

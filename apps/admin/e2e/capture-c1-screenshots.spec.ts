@@ -3,7 +3,11 @@ import path from "path";
 import fs from "fs";
 import { v7 as uuidv7 } from "uuid";
 
-const screenshotsDir = path.resolve(process.cwd(), "docs/screenshots/c1");
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const screenshotsDir = path.resolve(__dirname, "../../../docs/screenshots/c1");
 
 test.describe("Milestone C1: Capture Required Screenshots", () => {
   let token: string;
@@ -79,7 +83,11 @@ test.describe("Milestone C1: Capture Required Screenshots", () => {
     const v2 = v2Obj.id;
     const v1Price = Number(v1Obj.priceMinor);
     const v2Price = Number(v2Obj.priceMinor);
-    const totalMinor = v1Price * 2 + v2Price;
+    const v1RateBp = Number((prodList[0] as any).taxClass?.rateBp ?? 0);
+    const v2RateBp = Number(((prodList[1] || prodList[0]) as any).taxClass?.rateBp ?? 0);
+    const v1TaxMinor = Math.round((v1Price * 2 * v1RateBp) / 10000);
+    const v2TaxMinor = Math.round((v2Price * 1 * v2RateBp) / 10000);
+    const totalMinor = v1Price * 2 + v2Price + v1TaxMinor + v2TaxMinor;
 
     // Adjust stock up
     for (const p of prodList.slice(0, 3)) {

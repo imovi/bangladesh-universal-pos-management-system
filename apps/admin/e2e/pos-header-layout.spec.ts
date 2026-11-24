@@ -233,9 +233,14 @@ test.describe("Step 1: POS Header Layout, Text Node Overlap & Overflow Verificat
       expect(unhandledClipping).toEqual([]);
 
       // Capture Bangla Light Screenshot at each width
-      await header.screenshot({
-        path: path.join(screenshotsDir, `header-${width}-bn-light.png`),
-      });
+      try {
+        await header.screenshot({
+          path: path.join(screenshotsDir, `header-${width}-bn-light.png`),
+        });
+      } catch {
+        const buf = await header.screenshot();
+        fs.writeFileSync(path.join(screenshotsDir, `header-${width}-bn-light.png`), buf);
+      }
     }
 
     // Capture 1920px Dark Mode Screenshot
@@ -245,9 +250,14 @@ test.describe("Step 1: POS Header Layout, Text Node Overlap & Overflow Verificat
       await themeBtn.click();
       await page.waitForTimeout(300);
     }
-    await header.screenshot({
-      path: path.join(screenshotsDir, "header-1920-bn-dark.png"),
-    });
+    try {
+      await header.screenshot({
+        path: path.join(screenshotsDir, "header-1920-bn-dark.png"),
+      });
+    } catch {
+      const buf = await header.screenshot();
+      fs.writeFileSync(path.join(screenshotsDir, "header-1920-bn-dark.png"), buf);
+    }
 
     // Toggle back to light
     if (await themeBtn.isVisible()) {
@@ -545,7 +555,11 @@ test.describe("Step 1: POS Header Layout, Text Node Overlap & Overflow Verificat
       await page.waitForTimeout(200);
 
       // (a) Online state check
-      await expect(connPill).toContainText(/অনলাইন|Online/);
+      await page.evaluate(() => {
+        window.dispatchEvent(new Event("online"));
+        (window as any).__checkServerHealth?.();
+      });
+      await expect(connPill).toContainText(/অনলাইন|Online/, { timeout: 10000 });
       if (width >= 768) {
         const box = await header.boundingBox();
         expect(box!.height).toBeLessThanOrEqual(60);
@@ -554,9 +568,11 @@ test.describe("Step 1: POS Header Layout, Text Node Overlap & Overflow Verificat
 
       // (b) Offline state check
       await context.setOffline(true);
-      await page.waitForTimeout(200);
-
-      await expect(connPill).toContainText(/অফলাইন|Offline/);
+      await page.evaluate(() => {
+        window.dispatchEvent(new Event("offline"));
+        (window as any).__checkServerHealth?.();
+      });
+      await expect(connPill).toContainText(/অফলাইন|Offline/, { timeout: 10000 });
       if (width >= 768) {
         const box = await header.boundingBox();
         expect(box!.height).toBeLessThanOrEqual(60);
@@ -573,8 +589,11 @@ test.describe("Step 1: POS Header Layout, Text Node Overlap & Overflow Verificat
 
       // (c) Restore online
       await context.setOffline(false);
-      await page.waitForTimeout(200);
-      await expect(connPill).toContainText(/অনলাইন|Online/);
+      await page.evaluate(() => {
+        window.dispatchEvent(new Event("online"));
+        (window as any).__checkServerHealth?.();
+      });
+      await expect(connPill).toContainText(/অনলাইন|Online/, { timeout: 10000 });
 
       // (d) Syncing state check
       await page.evaluate(async () => {

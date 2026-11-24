@@ -71,7 +71,7 @@ test.describe("Milestone C4: Barcode Label Generation, Print Modal & Scan Back V
 
     // Click on the first product row link
     const targetRow = page.locator('table tbody tr:has-text("Kids Denim")').first();
-    if (await targetRow.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await targetRow.waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false)) {
       await targetRow.click();
     } else {
       await page.locator('table tbody tr').first().click();
@@ -95,7 +95,7 @@ test.describe("Milestone C4: Barcode Label Generation, Print Modal & Scan Back V
 
     // If any item is missing barcode, click "বারকোড তৈরি" button to generate
     const generateAllBtn = modal.locator('button:has-text("বারকোড তৈরি")');
-    if (await generateAllBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await generateAllBtn.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
       await generateAllBtn.click();
       await expect(modal.locator('svg[data-testid^="barcode-svg-"]').first()).toBeVisible({ timeout: 10000 });
     }
@@ -189,10 +189,20 @@ test.describe("Milestone C4: Barcode Label Generation, Print Modal & Scan Back V
     await page.goto("http://localhost:3000/pos");
     await page.waitForLoadState("networkidle");
 
-    const openShiftSubmit = page.locator('button:has-text("শিফট শুরু করুন"), button:has-text("Open Shift")');
-    if (await openShiftSubmit.isVisible({ timeout: 2500 }).catch(() => false)) {
+    const switchBtn = page.locator('[data-testid="switch-register-btn"]');
+    if (await switchBtn.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
+      await switchBtn.click();
+      await expect(switchBtn).toBeHidden({ timeout: 5000 });
+    }
+    const openShiftSubmit = page.locator('button:has-text("শিফট শুরু করুন"), button:has-text("Open Shift"), [data-testid="open-shift-button"]');
+    if (await openShiftSubmit.waitFor({ state: "visible", timeout: 2500 }).then(() => true).catch(() => false)) {
       await openShiftSubmit.click();
-      await page.waitForTimeout(1000);
+      const confirmShift = page.locator('[data-testid="confirm-open-shift-button"]');
+      if (await confirmShift.waitFor({ state: "visible", timeout: 2500 }).then(() => true).catch(() => false)) {
+        await page.fill('[data-testid="opening-cash-input"]', "500");
+        await confirmShift.click();
+        await expect(confirmShift).toBeHidden({ timeout: 5000 });
+      }
     }
 
     // 12. Scan / type the generated EAN-13 barcode into the POS search input

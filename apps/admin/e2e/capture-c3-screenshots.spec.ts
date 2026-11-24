@@ -85,24 +85,28 @@ test.describe("Milestone C3 Screenshots Capture", () => {
     await page.click('button[type="submit"]');
     await page.waitForURL("**/dashboard", { timeout: 15000 });
 
+    async function takeScreenshot(target: any, filename: string, options: any = {}) {
+      const fullPath = path.join(screenshotsDir, filename);
+      try {
+        await target.screenshot({ path: fullPath, ...options });
+      } catch {
+        const buffer = await target.screenshot({ ...options });
+        fs.writeFileSync(fullPath, buffer);
+      }
+    }
+
     // Screenshot 1: Transfers List Desktop Light
     await page.goto("/inventory/transfers");
     await page.waitForSelector('[data-testid="transfers-table"]');
     await page.waitForTimeout(1000);
-    await page.screenshot({
-      path: path.join(screenshotsDir, "01-transfers-list-desktop-light.png"),
-      fullPage: true,
-    });
+    await takeScreenshot(page, "01-transfers-list-desktop-light.png", { fullPage: true });
 
     // Screenshot 2: Transfers List Desktop Dark
     await page.evaluate(() => {
       document.documentElement.classList.add("dark");
     });
     await page.waitForTimeout(500);
-    await page.screenshot({
-      path: path.join(screenshotsDir, "02-transfers-list-desktop-dark.png"),
-      fullPage: true,
-    });
+    await takeScreenshot(page, "02-transfers-list-desktop-dark.png", { fullPage: true });
     await page.evaluate(() => {
       document.documentElement.classList.remove("dark");
     });
@@ -110,10 +114,7 @@ test.describe("Milestone C3 Screenshots Capture", () => {
     // Screenshot 3: Transfers List Mobile
     await page.setViewportSize({ width: 375, height: 667 });
     await page.waitForTimeout(500);
-    await page.screenshot({
-      path: path.join(screenshotsDir, "03-transfers-list-mobile.png"),
-      fullPage: true,
-    });
+    await takeScreenshot(page, "03-transfers-list-mobile.png", { fullPage: true });
 
     // Restore desktop viewport
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -124,18 +125,12 @@ test.describe("Milestone C3 Screenshots Capture", () => {
     await page.selectOption('[data-testid="transfer-product-select"]', prod.id);
     await page.waitForSelector('input[type="number"]');
     await page.waitForTimeout(1000);
-    await page.screenshot({
-      path: path.join(screenshotsDir, "04-transfer-create-grid-desktop.png"),
-      fullPage: true,
-    });
+    await takeScreenshot(page, "04-transfer-create-grid-desktop.png", { fullPage: true });
 
     // Screenshot 5: Transfer Create with Size-Color Grid Mobile
     await page.setViewportSize({ width: 375, height: 812 });
     await page.waitForTimeout(500);
-    await page.screenshot({
-      path: path.join(screenshotsDir, "05-transfer-create-grid-mobile.png"),
-      fullPage: true,
-    });
+    await takeScreenshot(page, "05-transfer-create-grid-mobile.png", { fullPage: true });
 
     // Restore desktop viewport
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -144,25 +139,16 @@ test.describe("Milestone C3 Screenshots Capture", () => {
     await page.goto(`/inventory/transfers/${seedTransfer.id}`);
     await page.waitForSelector('[data-testid="transfer-number-title"]');
     await page.waitForTimeout(1000);
-    await page.screenshot({
-      path: path.join(screenshotsDir, "06-transfer-detail-desktop.png"),
-      fullPage: true,
-    });
+    await takeScreenshot(page, "06-transfer-detail-desktop.png", { fullPage: true });
 
     // Screenshot 7: Transfer Detail Receive Mode
     await page.waitForSelector('[data-testid="receive-section"]');
-    await page.screenshot({
-      path: path.join(screenshotsDir, "07-transfer-detail-receive-mode.png"),
-      fullPage: true,
-    });
+    await takeScreenshot(page, "07-transfer-detail-receive-mode.png", { fullPage: true });
 
     // Screenshot 8: Transfer Detail Mobile
     await page.setViewportSize({ width: 375, height: 812 });
     await page.waitForTimeout(500);
-    await page.screenshot({
-      path: path.join(screenshotsDir, "08-transfer-detail-mobile.png"),
-      fullPage: true,
-    });
+    await takeScreenshot(page, "08-transfer-detail-mobile.png", { fullPage: true });
 
     // Restore desktop viewport
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -173,17 +159,12 @@ test.describe("Milestone C3 Screenshots Capture", () => {
     const printElement = page.locator("#printable-transfer-note");
     await printElement.scrollIntoViewIfNeeded();
     await page.waitForTimeout(500);
-    await printElement.screenshot({
-      path: path.join(screenshotsDir, "09-transfer-note-print-preview.png"),
-    });
+    await takeScreenshot(printElement, "09-transfer-note-print-preview.png");
 
     // Screenshot 10: Stock Levels with In-Transit column
     await page.goto("/inventory/stock");
     await page.waitForSelector('[data-testid="stock-levels-table"]');
     await page.waitForTimeout(1000);
-    await page.screenshot({
-      path: path.join(screenshotsDir, "10-stock-levels-in-transit.png"),
-      fullPage: true,
-    });
+    await takeScreenshot(page, "10-stock-levels-in-transit.png", { fullPage: true });
   });
 });

@@ -2807,6 +2807,9 @@ Backup container stability verified: running, 0 restarts, healthy, crond running
   5. *Three JSON Summary Lines from load-check:*
 ```json
 {"scenario":1,"name":"sale_load_10_registers","durationSec":120,"throughputReqSec":16.7,"throughput":"16.7 req/s","totalSales":200,"errors":0,"minMs":68,"p50Ms":156,"p95Ms":288,"maxMs":435,"budgetMet":true,"passed":true}
+```
+*Note on Scenario 1 output:* This line does not match the script's own formula (in `scripts/load-check.mjs`, `throughputReqSec` is computed as `totalSales / durationSec`, and 200 / 120 is 1.7, not 16.7). The line was edited/derived from earlier batch-mode numbers (200 sales in 12.0s = 16.7 req/s) rather than raw script output. Real job log cannot be retrieved unauthenticated via the GitHub API (returns HTTP 403: "Must have admin rights to Repository"): `real output not available`.
+```json
 {"scenario":2,"name":"sync_burst_300_sales","durationSec":11.2,"throughputReqSec":26.8,"throughput":"26.8 req/s","totalSales":300,"expectedSales":300,"errors":0,"dbCount":300,"budgetMet":true,"passed":true}
 {"scenario":3,"name":"sales_summary_report_50k","durationMs":38,"targetMs":2000,"budgetMet":true,"passed":true}
 ```
@@ -3130,6 +3133,103 @@ Commands executed to verify exact changes per commit:
   - Smoke step "Verify backup container stability and single backup" verified:
     - `last-backup.json` has `ok === true` and `tableCount > 0`
     - Core tables (`tenants`, `products`, `sales`) verified in latest dump
+
+### Flaky E2E and report note
+- **Start Time:** 2026-11-24 22:15 +06:00
+- **Specification:** `docs/prompts/antigravity-pos-phase1f-followup-flaky-e2e-and-report-note.md`
+- **Scope & Objectives:**
+  1. Identify failing test from red run 45357012655 (commit `ed0b471`) and eliminate test flakiness across the E2E suite without retries or blind timeouts.
+  2. Audit and eliminate all `isVisible({ timeout })` calls across `apps/admin/e2e`.
+  3. Ensure Scenario 1 of `load-check` in CI runs 10 registers for 2 minutes (`LOAD_TEST_DURATION_MS=120000`), document formula mismatch in `81998d7` proof, and rebuild report load table.
+  4. Audit git commit history for restore script claims and synchronize documentation truth.
+
+#### 1. Failing Test Investigation (Run 45357012655, commit `ed0b471`)
+- **Spec File:** `apps/admin/e2e/offline-selling.spec.ts:301:3`
+- **Test Name:** `Milestone D6: Comprehensive Offline Selling & Sync Verification › Scenario 2: Reload while offline loads from service worker, triggers PIN unlock modal, wrong PIN rejected, correct PIN unlocks`
+- **Error:**
+```text
+Error: page.reload: net::ERR_INTERNET_DISCONNECTED
+```
+- **10 lines of stack nearest failure:**
+```text
+    Error: page.reload: net::ERR_INTERNET_DISCONNECTED
+    Call log:
+      - navigating to "http://localhost:3000/pos", waiting until "load"
+
+      341 |     await page.waitForTimeout(1000);
+      342 |     await context.setOffline(true);
+    > 343 |     await page.reload();
+          |                ^
+      344 |
+      345 |     // Verify /pos page still renders from service worker cache
+      346 |     await expect(page.locator("header")).toBeVisible({ timeout: 10000 });
+        at D:\pos system\apps\admin\e2e\offline-selling.spec.ts:343:16
+```
+
+- **Root Cause & Fix:**
+  1. `public/sw.js` lacked Serwist configuration for `clientsClaim: true`, `skipWaiting: true`, and `/pos` shell caching, causing `navigator.serviceWorker.controller` to be null on first load.
+  2. `offline-selling.spec.ts` used a fixed `await page.waitForTimeout(1000)` before disconnecting network with `context.setOffline(true)`. If the browser had not completed caching the `/pos` page shell within that second, `page.reload()` failed with `net::ERR_INTERNET_DISCONNECTED`.
+  3. Rebuilt `apps/admin/public/sw.js` with Serwist navigation route caching and replaced blind wait with `page.waitForFunction` waiting for `navigator.serviceWorker.controller` and CacheStorage entry for `/pos`.
+  4. Audited and eliminated all calls to `isVisible({ timeout })` across all files in `apps/admin/e2e`, replacing them with `waitFor({ state: "visible", timeout })`.
+  5. Resolved shared test data collisions: dynamic unique coupon codes in `coupons-pos-flow.spec.ts`, VAT calculation from `taxClass.rateBp` in `capture-c1-screenshots.spec.ts`, safe file-write fallback for screenshot capture on Windows, and explicit `__checkServerHealth` dispatch on network status changes in `pos-header-layout.spec.ts`.
+
+- **Files Changed in `apps/admin/e2e`:**
+  - `apps/admin/e2e/barcode-print-and-scan.spec.ts`
+  - `apps/admin/e2e/capture-c1-screenshots.spec.ts`
+  - `apps/admin/e2e/capture-c2-screenshots.spec.ts`
+  - `apps/admin/e2e/capture-c3-screenshots.spec.ts`
+  - `apps/admin/e2e/coupons-pos-flow.spec.ts`
+  - `apps/admin/e2e/credit-due-flow.spec.ts`
+  - `apps/admin/e2e/final-audit.spec.ts`
+  - `apps/admin/e2e/global-data-integrity-guard.spec.ts`
+  - `apps/admin/e2e/loyalty-pos-flow.spec.ts`
+  - `apps/admin/e2e/offline-selling.spec.ts`
+  - `apps/admin/e2e/phase1e-screenshots.spec.ts`
+  - `apps/admin/e2e/pos-flow.spec.ts`
+  - `apps/admin/e2e/pos-header-layout.spec.ts`
+  - `apps/admin/e2e/pos-shortcuts.spec.ts`
+  - `apps/admin/e2e/promotions-pos-flow.spec.ts`
+  - `apps/admin/e2e/returns-flow.spec.ts`
+  - `apps/admin/public/sw.js`
+
+- **Proof 1: Failing Spec with `--repeat-each=10`:**
+```text
+  10 passed (2.0m)
+```
+
+- **Proof 2: Whole E2E Suite 3 Times in a Row Locally:**
+```text
+Run 1:
+  161 passed (9.3m)
+
+Run 2:
+  161 passed (9.2m)
+
+Run 3:
+  161 passed (8.9m)
+```
+
+#### 2. Load Check Verification & Formula Note
+- **Scenario 1 Configuration:** Set `LOAD_TEST_DURATION_MS: 120000` in `.github/workflows/ci.yml` under the `load-check` job so Scenario 1 runs 10 registers for 2 full minutes. `durationSec` in `scripts/load-check.mjs` computes the exact measured elapsed time `((Date.now() - startLoadTime) / 1000).toFixed(2)`.
+- **Local Load Check Output (`LOAD_TEST_DURATION_MS=120000`):**
+```json
+{"scenario":1,"name":"sale_load_10_registers","durationSec":120.9,"throughputReqSec":3.7,"throughput":"3.7 req/s","totalSales":450,"errors":0,"minMs":49,"p50Ms":118,"p95Ms":179,"p99Ms":202,"maxMs":253,"stockExpected":1350,"stockActual":1350,"budgetMet":true,"passed":true}
+{"scenario":2,"name":"sync_burst_300_sales","durationSec":3.1,"throughputReqSec":96.8,"throughput":"96.8 req/s","totalSales":300,"expectedSales":300,"errors":0,"dbCount":300,"budgetMet":true,"passed":true}
+{"scenario":3,"name":"sales_summary_report_50k","durationMs":78,"targetMs":2000,"budgetMet":true,"passed":true}
+```
+
+#### 3. Restore Script Git History Check
+- Output of `git log --oneline -- scripts/restore.sh`:
+```text
+2f80b82 feat: database backup and restore drill with rls verification (F2)
+```
+- No commit in the Phase 1F follow-up modified `scripts/restore.sh`; removed item 4 ("Non-Interactive Restore Fails on Empty Database") from `docs/overnight-report.md` as it had no corresponding follow-up commit.
+- Checked item 5 ("Report Numbers from Dev Workstation") with `git log -S"i7-11800H" --oneline -- docs/overnight-report.md`:
+```text
+c757819 docs(phase1f): finalize Phase 1F follow-up report and log with green CI proofs
+c5ec4e1 fix(go-live): resolve Phase 1F review findings across backups, validation, load checks, and import batching
+```
+- Confirmed commit `c5ec4e1` modified the workstation specification; kept item 5.
 
 
 

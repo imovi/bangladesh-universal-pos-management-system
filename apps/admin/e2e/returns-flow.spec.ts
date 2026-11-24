@@ -236,15 +236,23 @@ test.describe("Milestone C1: Returns & Exchanges Flow", () => {
 
     // Handle switch register or open shift if needed
     const switchBtn = page.locator('[data-testid="switch-register-btn"]');
-    if (await switchBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+    if (await switchBtn.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
       await switchBtn.click();
+      await expect(switchBtn).toBeHidden({ timeout: 5000 });
     }
-    const openShiftBtn = page.locator('[data-testid="open-shift-button"]');
-    if (await openShiftBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
-      await openShiftBtn.click();
+    const confirmBtn = page.locator('[data-testid="confirm-open-shift-button"]');
+    if (await confirmBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
       await page.fill('[data-testid="opening-cash-input"]', "1000");
-      await page.click('[data-testid="confirm-open-shift-button"]');
-      await expect(openShiftBtn).toBeHidden({ timeout: 5000 });
+      await confirmBtn.click();
+      await expect(confirmBtn).toBeHidden({ timeout: 5000 });
+    } else {
+      const openShiftBtn = page.locator('[data-testid="open-shift-button"]');
+      if (await openShiftBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
+        await openShiftBtn.click();
+        await page.fill('[data-testid="opening-cash-input"]', "1000");
+        await page.click('[data-testid="confirm-open-shift-button"]');
+        await expect(openShiftBtn).toBeHidden({ timeout: 5000 });
+      }
     }
 
     // 2. Add product to cart
@@ -286,7 +294,7 @@ test.describe("Milestone C1: Returns & Exchanges Flow", () => {
 
     // 3. Open return dialog
     const returnBtn = page.locator('[data-testid="pos-return-button"]');
-    if (await returnBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await returnBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
       await returnBtn.click();
     } else {
       await page.keyboard.press("F6");

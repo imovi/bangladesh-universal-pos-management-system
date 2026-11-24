@@ -100,17 +100,21 @@ test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
   });
 
   async function ensureShiftIsOpen(page: any) {
+    const switchBtn = page.locator('[data-testid="switch-register-btn"]');
+    if (await switchBtn.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
+      await switchBtn.click();
+      await expect(switchBtn).toBeHidden({ timeout: 5000 });
+    }
     const confirmBtn = page.locator('[data-testid="confirm-open-shift-button"]');
-    if (await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await confirmBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
       await page.fill('[data-testid="opening-cash-input"]', "500");
       await confirmBtn.click();
       await expect(confirmBtn).toBeHidden({ timeout: 5000 });
     } else {
       const openShiftBtn = page.locator('[data-testid="open-shift-button"], button:has-text("শিফট শুরু করুন")');
-      if (await openShiftBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      if (await openShiftBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
         await openShiftBtn.click();
-        await page.waitForTimeout(300);
-        if (await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        if (await confirmBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
           await page.fill('[data-testid="opening-cash-input"]', "500");
           await confirmBtn.click();
           await expect(confirmBtn).toBeHidden({ timeout: 5000 });
@@ -220,7 +224,7 @@ test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
 
     // F6 Return: Open return dialog
     const returnBtn = page.locator('[data-testid="pos-return-button"]');
-    if (await returnBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await returnBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
       await returnBtn.click();
     } else {
       await page.keyboard.press("F6");
@@ -313,7 +317,7 @@ test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
     await prodCard.click();
 
     const varCell = page.locator('[data-testid^="variant-cell-"]').first();
-    if (await varCell.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await varCell.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
       await varCell.click();
     }
 

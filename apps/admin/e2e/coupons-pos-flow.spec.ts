@@ -4,7 +4,7 @@ import { v7 as uuidv7 } from "uuid";
 test.describe("Milestone E3: Coupons POS Flow E2E Test", () => {
   let token: string;
   let promoId: string;
-  let couponCode = "EID500";
+  let couponCode = `EID${Math.floor(1000 + Math.random() * 9000)}`;
 
   test.beforeAll(async ({ request }) => {
     // 1. Authenticate with API as Owner
@@ -138,16 +138,16 @@ test.describe("Milestone E3: Coupons POS Flow E2E Test", () => {
 
   async function ensureShiftIsOpen(page: any) {
     const confirmBtn = page.locator('[data-testid="confirm-open-shift-button"]');
-    if (await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await confirmBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
       await page.fill('[data-testid="opening-cash-input"]', "500");
       await confirmBtn.click();
       await expect(confirmBtn).toBeHidden({ timeout: 5000 });
     } else {
       const openShiftBtn = page.locator('[data-testid="open-shift-button"], button:has-text("শিফট শুরু করুন")');
-      if (await openShiftBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      if (await openShiftBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
         await openShiftBtn.click();
         await page.waitForTimeout(300);
-        if (await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        if (await confirmBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
           await page.fill('[data-testid="opening-cash-input"]', "500");
           await confirmBtn.click();
           await expect(confirmBtn).toBeHidden({ timeout: 5000 });

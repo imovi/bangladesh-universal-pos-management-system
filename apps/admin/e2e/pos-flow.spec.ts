@@ -71,7 +71,7 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
 
     // Handle shift in use dialog by switching register if needed
     const switchBtn = page.locator('button:has-text("অন্য রেজিস্টার বেছে নিন"), [data-testid="switch-register-btn"]');
-    if (await switchBtn.isVisible({ timeout: 4000 }).catch(() => false)) {
+    if (await switchBtn.waitFor({ state: "visible", timeout: 4000 }).then(() => true).catch(() => false)) {
       await switchBtn.click();
       await expect(switchBtn).toBeHidden({ timeout: 5000 });
       await page.waitForTimeout(500);
@@ -79,13 +79,13 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
 
     // Open shift if closed
     const confirmBtn = page.locator('[data-testid="confirm-open-shift-button"]');
-    if (await confirmBtn.isVisible({ timeout: 2500 }).catch(() => false)) {
+    if (await confirmBtn.waitFor({ state: "visible", timeout: 2500 }).then(() => true).catch(() => false)) {
       await page.fill('[data-testid="opening-cash-input"]', "500");
       await confirmBtn.click();
       await expect(confirmBtn).toBeHidden({ timeout: 5000 });
     } else {
       const openShiftBtn = page.locator('[data-testid="open-shift-button"]');
-      if (await openShiftBtn.isVisible({ timeout: 2500 }).catch(() => false)) {
+      if (await openShiftBtn.waitFor({ state: "visible", timeout: 2500 }).then(() => true).catch(() => false)) {
         await openShiftBtn.click();
         await page.fill('[data-testid="opening-cash-input"]', "500");
         await page.click('[data-testid="confirm-open-shift-button"]');
@@ -100,7 +100,7 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
 
     // If variant picker opened, click first in-stock variant
     const variantCell = page.locator('[data-testid^="variant-cell-"]').first();
-    if (await variantCell.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await variantCell.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
       await variantCell.click();
     }
 
@@ -156,7 +156,7 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
 
     // Dismiss any shift in use dialog by switching register if needed
     const switchBtn = page.locator('[data-testid="switch-register-btn"]');
-    if (await switchBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+    if (await switchBtn.waitFor({ state: "visible", timeout: 1500 }).then(() => true).catch(() => false)) {
       await switchBtn.click();
       await expect(switchBtn).toBeHidden({ timeout: 3000 });
     }
@@ -207,7 +207,7 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
     if (await secondProduct.isVisible()) {
       await secondProduct.click();
       const secondVariantCell = page.locator('[data-testid^="variant-cell-"]').first();
-      if (await secondVariantCell.isVisible({ timeout: 2000 }).catch(() => false)) {
+      if (await secondVariantCell.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
         await secondVariantCell.click();
       }
     }
@@ -312,14 +312,14 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
 
     // Dismiss any shift in use dialog by switching register if needed
     const switchBtn = page.locator('[data-testid="switch-register-btn"]');
-    if (await switchBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+    if (await switchBtn.waitFor({ state: "visible", timeout: 1500 }).then(() => true).catch(() => false)) {
       await switchBtn.click();
       await expect(switchBtn).toBeHidden({ timeout: 3000 });
     }
 
     // Open shift if not open
     const openBtn = page.locator('[data-testid="open-shift-button"]');
-    if (await openBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await openBtn.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
       await openBtn.click();
       await page.fill('[data-testid="opening-cash-input"]', "1000");
       await page.click('[data-testid="confirm-open-shift-button"]');
@@ -331,7 +331,7 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
     if (await firstProduct.isVisible()) {
       await firstProduct.click();
       const variantCell = page.locator('[data-testid^="variant-cell-"]').first();
-      if (await variantCell.isVisible({ timeout: 1500 }).catch(() => false)) {
+      if (await variantCell.waitFor({ state: "visible", timeout: 1500 }).then(() => true).catch(() => false)) {
         await variantCell.click();
       }
     }
@@ -369,12 +369,12 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
 
     // Close shift if open so next tests start cleanly
     const closeShiftBtn = page.locator('[data-testid="close-shift-button"]');
-    if (await closeShiftBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+    if (await closeShiftBtn.waitFor({ state: "visible", timeout: 1500 }).then(() => true).catch(() => false)) {
       await closeShiftBtn.click();
       await page.fill('[data-testid="counted-cash-input"]', "1000");
       await page.click('[data-testid="confirm-close-shift-button"]');
       const doneBtn = page.locator('[data-testid="done-close-shift-btn"]');
-      if (await doneBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      if (await doneBtn.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
         await doneBtn.click();
       }
     }
@@ -393,7 +393,7 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
 
     // Dismiss any shift in use dialog by switching register if needed
     const switchBtn = page.locator('[data-testid="switch-register-btn"]');
-    if (await switchBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+    if (await switchBtn.waitFor({ state: "visible", timeout: 1500 }).then(() => true).catch(() => false)) {
       await switchBtn.click();
       await expect(switchBtn).toBeHidden({ timeout: 3000 });
     }
@@ -409,7 +409,7 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
     if (await firstProduct.isVisible()) {
       await firstProduct.click();
       const variantCell = page.locator('[data-testid^="variant-cell-"]').first();
-      if (await variantCell.isVisible({ timeout: 1000 }).catch(() => false)) {
+      if (await variantCell.waitFor({ state: "visible", timeout: 1000 }).then(() => true).catch(() => false)) {
         await variantCell.click();
       }
     }
@@ -445,7 +445,7 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
 
     // Dismiss any shift in use dialog by switching register if needed
     const switchBtn = page.locator('[data-testid="switch-register-btn"]');
-    if (await switchBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+    if (await switchBtn.waitFor({ state: "visible", timeout: 1500 }).then(() => true).catch(() => false)) {
       await switchBtn.click();
       await expect(switchBtn).toBeHidden({ timeout: 3000 });
     }
@@ -457,7 +457,7 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
     // Ensure shift is open
     const openShiftBtn = page.locator('[data-testid="open-shift-button"]');
     const cashMoveBtn = page.locator('[data-testid="cash-movement-button"]');
-    if (await openShiftBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await openShiftBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
       await openShiftBtn.click();
       await page.fill('[data-testid="opening-cash-input"]', "1000");
       await page.click('[data-testid="confirm-open-shift-button"]');

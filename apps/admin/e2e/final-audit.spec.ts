@@ -103,7 +103,7 @@ test.describe("Milestone A9: Final Hardening, WCAG 2.2 AA Audit & Responsive Scr
     await page.goto("/pos");
     await page.waitForLoadState("networkidle");
     const openShiftBtn = page.locator('[data-testid="open-shift-submit-btn"]');
-    if (await openShiftBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await openShiftBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
       const startFloatInput = page.locator('[data-testid="opening-cash-input"]');
       if (await startFloatInput.isVisible().catch(() => false)) {
         await startFloatInput.fill("1000");
@@ -112,7 +112,7 @@ test.describe("Milestone A9: Final Hardening, WCAG 2.2 AA Audit & Responsive Scr
       await page.waitForTimeout(500);
     }
     const barcodeInput = page.locator('[data-testid="pos-barcode-input"]');
-    if (await barcodeInput.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await barcodeInput.waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false)) {
       await page.keyboard.press("F2");
       await expect(barcodeInput).toBeFocused();
     }
@@ -141,6 +141,16 @@ test.describe("Milestone A9: Final Hardening, WCAG 2.2 AA Audit & Responsive Scr
   test("4. Capture comprehensive final screenshot set into docs/screenshots/final/", async ({
     page,
   }) => {
+    async function takeScreenshot(filename: string, options: any = {}) {
+      const fullPath = path.join(screenshotsDir, filename);
+      try {
+        await page.screenshot({ path: fullPath, ...options });
+      } catch {
+        const buffer = await page.screenshot({ ...options });
+        fs.writeFileSync(fullPath, buffer);
+      }
+    }
+
     // Desktop 1440x900 Light (Bangla)
     await page.setViewportSize({ width: 1440, height: 900 });
     await loginAsOwner(page);
@@ -148,72 +158,72 @@ test.describe("Milestone A9: Final Hardening, WCAG 2.2 AA Audit & Responsive Scr
     // 1. Dashboard
     await page.goto("/dashboard");
     await page.waitForSelector('[data-testid="dashboard-total-sales"]', { state: "visible" });
-    await page.screenshot({ path: path.join(screenshotsDir, "final-desktop-dashboard.png") });
+    await takeScreenshot("final-desktop-dashboard.png");
 
     // 2. Catalog Products
     await page.goto("/catalog/products");
     await page.waitForSelector("table", { state: "visible" });
-    await page.screenshot({ path: path.join(screenshotsDir, "final-desktop-catalog-products.png") });
+    await takeScreenshot("final-desktop-catalog-products.png");
 
     // 3. Inventory Stock
     await page.goto("/inventory/stock");
     await page.waitForSelector("table", { state: "visible" });
-    await page.screenshot({ path: path.join(screenshotsDir, "final-desktop-inventory-stock.png") });
+    await takeScreenshot("final-desktop-inventory-stock.png");
 
     // 4. Purchasing Orders
     await page.goto("/purchasing/orders");
     await page.waitForSelector("table", { state: "visible" });
-    await page.screenshot({ path: path.join(screenshotsDir, "final-desktop-purchasing-orders.png") });
+    await takeScreenshot("final-desktop-purchasing-orders.png");
 
     // 5. Sales & History
     await page.goto("/sales");
     await page.waitForSelector("table", { state: "visible" });
-    await page.screenshot({ path: path.join(screenshotsDir, "final-desktop-sales-history.png") });
+    await takeScreenshot("final-desktop-sales-history.png");
 
     // 6. Reports Sales Analytics
     await page.goto("/reports/sales");
     await page.waitForLoadState("networkidle");
-    await page.screenshot({ path: path.join(screenshotsDir, "final-desktop-reports-sales.png") });
+    await takeScreenshot("final-desktop-reports-sales.png");
 
     // 7. Settings Shop
     await page.goto("/settings/shop");
     await page.waitForSelector('[data-testid="shop-receipt-header"]', { state: "visible" });
-    await page.screenshot({ path: path.join(screenshotsDir, "final-desktop-settings-shop.png") });
+    await takeScreenshot("final-desktop-settings-shop.png");
 
     // 8. Settings Roles
     await page.goto("/settings/roles");
     await page.waitForSelector("table", { state: "visible" });
-    await page.screenshot({ path: path.join(screenshotsDir, "final-desktop-settings-roles.png") });
+    await takeScreenshot("final-desktop-settings-roles.png");
 
     // 9. Counter POS Screen (1366x768)
     await page.setViewportSize({ width: 1366, height: 768 });
     await page.goto("/pos");
     await page.waitForLoadState("networkidle");
-    await page.screenshot({ path: path.join(screenshotsDir, "final-desktop-pos.png") });
+    await takeScreenshot("final-desktop-pos.png");
 
     // 10. Tablet (1024x768)
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.goto("/dashboard");
     await page.waitForSelector('[data-testid="dashboard-total-sales"]', { state: "visible" });
-    await page.screenshot({ path: path.join(screenshotsDir, "final-tablet-dashboard.png") });
+    await takeScreenshot("final-tablet-dashboard.png");
 
     await page.goto("/pos");
     await page.waitForLoadState("networkidle");
-    await page.screenshot({ path: path.join(screenshotsDir, "final-tablet-pos.png") });
+    await takeScreenshot("final-tablet-pos.png");
 
     // 11. Mobile (375x812)
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto("/dashboard");
     await page.waitForSelector('[data-testid="dashboard-total-sales"]', { state: "visible" });
-    await page.screenshot({ path: path.join(screenshotsDir, "final-mobile-dashboard.png") });
+    await takeScreenshot("final-mobile-dashboard.png");
 
     await page.goto("/sales");
     await page.waitForSelector("table", { state: "visible" });
-    await page.screenshot({ path: path.join(screenshotsDir, "final-mobile-sales.png") });
+    await takeScreenshot("final-mobile-sales.png");
 
     await page.goto("/pos");
     await page.waitForLoadState("networkidle");
-    await page.screenshot({ path: path.join(screenshotsDir, "final-mobile-pos.png") });
+    await takeScreenshot("final-mobile-pos.png");
 
     // 12. Dark Theme Desktop (1440x900)
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -222,15 +232,15 @@ test.describe("Milestone A9: Final Hardening, WCAG 2.2 AA Audit & Responsive Scr
     if (await themeBtn.isVisible()) {
       await themeBtn.click();
       await page.waitForTimeout(400);
-      await page.screenshot({ path: path.join(screenshotsDir, "final-dark-dashboard.png") });
+      await takeScreenshot("final-dark-dashboard.png");
 
       await page.goto("/pos");
       await page.waitForLoadState("networkidle");
-      await page.screenshot({ path: path.join(screenshotsDir, "final-dark-pos.png") });
+      await takeScreenshot("final-dark-pos.png");
 
       await page.goto("/settings/roles");
       await page.waitForSelector("table", { state: "visible" });
-      await page.screenshot({ path: path.join(screenshotsDir, "final-dark-settings.png") });
+      await takeScreenshot("final-dark-settings.png");
 
       // Revert theme
       await page.goto("/dashboard");
@@ -247,11 +257,11 @@ test.describe("Milestone A9: Final Hardening, WCAG 2.2 AA Audit & Responsive Scr
     if (await langBtn.isVisible()) {
       await langBtn.click();
       await page.waitForTimeout(400);
-      await page.screenshot({ path: path.join(screenshotsDir, "final-english-dashboard.png") });
+      await takeScreenshot("final-english-dashboard.png");
 
       await page.goto("/pos");
       await page.waitForLoadState("networkidle");
-      await page.screenshot({ path: path.join(screenshotsDir, "final-english-pos.png") });
+      await takeScreenshot("final-english-pos.png");
     }
   });
 });

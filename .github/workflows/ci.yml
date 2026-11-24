@@ -289,14 +289,16 @@ jobs:
             exit 1
           fi
 
-          DAILY_COUNT=$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production exec -T backup sh -c 'ls -1 /backups/daily 2>/dev/null | wc -l')
+          DAILY_DUMP_COUNT=$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production exec -T backup sh -c 'ls -1 /backups/daily/backup_*.dump* 2>/dev/null | wc -l' | tr -d '[:space:]')
+          DAILY_TOTAL_COUNT=$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production exec -T backup sh -c 'ls -1 /backups/daily 2>/dev/null | wc -l' | tr -d '[:space:]')
           DAILY_FILES=$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production exec -T backup sh -c 'ls -1 /backups/daily 2>/dev/null')
-          echo "Daily backup files count: $DAILY_COUNT"
+          echo "Daily backup dumps count: $DAILY_DUMP_COUNT"
+          echo "Daily total files count: $DAILY_TOTAL_COUNT"
           echo "Files in daily/:"
           echo "$DAILY_FILES"
 
-          if [ "$DAILY_COUNT" -ne 1 ]; then
-            echo "FAILED: Expected exactly 1 file in daily/ backup directory, but found $DAILY_COUNT (potential restart loop)"
+          if [ "$DAILY_DUMP_COUNT" -ne 1 ]; then
+            echo "FAILED: Expected exactly 1 backup dump file in daily/ backup directory, but found $DAILY_DUMP_COUNT (potential restart loop)"
             exit 1
           fi
           echo "Backup container stability verified: running, 0 restarts, healthy, crond running, 1 daily backup."
@@ -308,14 +310,15 @@ jobs:
           echo "=== Checking /backups/last-backup.json inside backup container ==="
           STATUS_JSON=$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production exec -T backup cat /backups/last-backup.json)
           echo "$STATUS_JSON"
-          node -e "
-            const data = JSON.parse(process.argv[1]);
+          echo "$STATUS_JSON" | node -e "
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync(0, 'utf8'));
             if (data.ok !== true) {
               console.error('FAILED: last-backup.json ok is not true:', data);
               process.exit(1);
             }
             console.log('last-backup.json verified: ok === true');
-          " "$STATUS_JSON"
+          "
 
       - name: Verify database runtime role hardening
         run: |

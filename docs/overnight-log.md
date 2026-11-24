@@ -3121,6 +3121,17 @@ Commands executed to verify exact changes per commit:
   {"scenario":3,"name":"sales_summary_report_50k","durationMs":77,"targetMs":2000,"budgetMet":true,"passed":true}
   ```
 
+#### 6. Commit & CI Execution
+- **Commit:** `3711d03` (`fix(backup): resolve empty backup race condition, crond logging, and report corrections`)
+- CI: `3711d03` → run `45354570875` → completed success
+  - `test` job (ID: 138313411036): completed success
+  - `load-check` job (ID: 138313757422): completed success
+  - `smoke-prod` job (ID: 138313757501): completed success
+  - Smoke step "Verify backup container stability and single backup" verified:
+    - `last-backup.json` has `ok === true` and `tableCount > 0`
+    - Core tables (`tenants`, `products`, `sales`) verified in latest dump
+
+
 
 
 

@@ -301,6 +301,7 @@ jobs:
             exit 1
           fi
           echo "Backup container stability verified: running, 0 restarts, healthy, crond running, 1 daily backup."
+          echo "::notice title=smoke-prod backup::status=running, restarts=$RESTARTS, health=$HEALTH, crond=running (PID $CROND_PID), daily_dumps=$DAILY_DUMP_COUNT"
 
       - name: Verify backup container logs and volume status
         run: |
@@ -309,6 +310,8 @@ jobs:
           echo "=== Checking /backups/last-backup.json inside backup container ==="
           STATUS_JSON=$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production exec -T backup cat /backups/last-backup.json)
           echo "$STATUS_JSON"
+          STATUS_ONELINE=$(echo "$STATUS_JSON" | tr -d '\n\r' | sed 's/  */ /g')
+          echo "::notice title=smoke-prod backup::$STATUS_ONELINE"
           echo "$STATUS_JSON" | node -e "
             const fs = require('fs');
             const data = JSON.parse(fs.readFileSync(0, 'utf8'));
@@ -342,6 +345,7 @@ jobs:
             echo "Core table verified in dump: ${tbl}"
           done
           echo "All core tables (tenants, products, sales) present in backup dump."
+          echo "::notice title=smoke-prod backup::tableCount=$TABLE_COUNT, tables=[tenants, products, sales] verified"
 
       - name: Verify database runtime role hardening
         run: |

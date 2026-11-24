@@ -315,6 +315,9 @@ async function runSmokeTest() {
   const backupStatusJson = readBackupStatusFromVolume();
   console.log(`[BACKUP_CONTAINER] Backup container first backup finished successfully.`);
   console.log(`[BACKUP_STATUS_JSON] ${JSON.stringify(backupStatusJson, null, 2)}`);
+  if (process.env.GITHUB_ACTIONS === "true" || process.env.GITHUB_ACTIONS === true) {
+    console.log(`::notice title=smoke-prod backup::${JSON.stringify(backupStatusJson)}`);
+  }
   console.log(`[BACKUPS_API_RESPONSE] ${JSON.stringify(backupApiResponse, null, 2)}`);
 
   // Assert volume status file exists and contains valid filename

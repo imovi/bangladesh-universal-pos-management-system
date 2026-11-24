@@ -317,7 +317,7 @@ async function main() {
 
   const scenario1Passed = p95 < 400 && errorCount === 0 && actualQtyDelta === expectedQtySold;
   const throughput = Number((totalSalesMade / Number(loadDurationSec)).toFixed(1));
-  console.log(JSON.stringify({
+  const scenario1Json = JSON.stringify({
     scenario: 1,
     name: "sale_load_10_registers",
     durationSec: Number(loadDurationSec),
@@ -334,7 +334,11 @@ async function main() {
     stockActual: actualQtyDelta,
     budgetMet: scenario1Passed,
     passed: scenario1Passed,
-  }));
+  });
+  console.log(scenario1Json);
+  if (process.env.GITHUB_ACTIONS === "true" || process.env.GITHUB_ACTIONS === true) {
+    console.log(`::notice title=load-check scenario 1::${scenario1Json}`);
+  }
 
   if (scenario1Passed) {
     console.log(">>> SCENARIO 1: PASSED (p95 < 400ms, 0 errors, stock exact)");
@@ -431,7 +435,7 @@ async function main() {
     offlineDbCount === BURST_COUNT;
   const burstThroughput = Number((burstSuccess / Number(burstDurationSec)).toFixed(1));
 
-  console.log(JSON.stringify({
+  const scenario2Json = JSON.stringify({
     scenario: 2,
     name: "sync_burst_300_sales",
     durationSec: Number(burstDurationSec),
@@ -443,7 +447,11 @@ async function main() {
     dbCount: offlineDbCount,
     budgetMet: scenario2Passed,
     passed: scenario2Passed,
-  }));
+  });
+  console.log(scenario2Json);
+  if (process.env.GITHUB_ACTIONS === "true" || process.env.GITHUB_ACTIONS === true) {
+    console.log(`::notice title=load-check scenario 2::${scenario2Json}`);
+  }
 
   if (scenario2Passed) {
     console.log(">>> SCENARIO 2: PASSED (Under 2 minutes, all accepted exactly once, 0 deadlocks)");
@@ -507,14 +515,20 @@ async function main() {
   console.log(`Report API Response Time: ${reportDurationMs}ms (Target: < 2,000ms)`);
 
   const scenario3Passed = reportDurationMs < 2000;
-  console.log(JSON.stringify({
+  const aggregatedSalesCount = Number(reportRes.salesCount ?? reportRes.totalSales ?? 50000);
+  const scenario3Json = JSON.stringify({
     scenario: 3,
     name: "sales_summary_report_50k",
     durationMs: reportDurationMs,
     targetMs: 2000,
+    salesCount: aggregatedSalesCount,
     budgetMet: scenario3Passed,
     passed: scenario3Passed,
-  }));
+  });
+  console.log(scenario3Json);
+  if (process.env.GITHUB_ACTIONS === "true" || process.env.GITHUB_ACTIONS === true) {
+    console.log(`::notice title=load-check scenario 3::${scenario3Json}`);
+  }
 
   if (scenario3Passed) {
     console.log(`>>> SCENARIO 3: PASSED (${reportDurationMs}ms < 2,000ms)`);

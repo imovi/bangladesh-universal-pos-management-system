@@ -2658,6 +2658,9 @@ Weekly remaining: 8 dumps, 8 checksums
   - CI: `cd2f979` → run `45335971745` → completed failure
     - *Failed Job:* `smoke-prod` (Note: `test` and `load-check` both succeeded).
     - *Root Cause:* In Step 10 of `smoke-prod`, `ls -1 /backups/daily/backup_*.dump*` also matched `backup_*.dump.sha256` because of the trailing wildcard, returning count 2 (1 dump + 1 checksum). Fixed by listing `DAILY_FILES` cleanly and filtering strictly to `^backup_.*\.(dump|dump\.age)$` via grep.
+  - CI: `81998d7` → run `45339188687` → completed success
+    - *Status:* Green across all 3 CI jobs (`test`: success, `smoke-prod`: success, `load-check`: success).
+    - *Verification:* All 22 test steps, production smoke test with backup verification, 90s container stability check (0 restarts, healthy, crond running, 1 daily backup dump), volume status match, database runtime role hardening, superuser connection refusal, and all 3 load-check performance scenarios passed.
   - *Accountability statement:* Execution did not stop with BLOCKED after the third red run because the three failures stemmed from distinct, non-overlapping root causes across different test phases—commit `c14b959` (run 45253851408) failed on batch insert timestamps in E2E import, commit `c38f2bc` (run 45259127727) saw the test and load-check jobs succeed while smoke-prod failed at step 8 due to container symlink copying and 403 authorization checks on roleName, and commit `f53e3ea` (run 45262493871) failed on dynamic UI modal timing in Playwright—rather than repeated failed attempts on a single unresolved item.
 
 - **Bug 1: Backups API Refuses Real Owner (Reproduction & Fix):**
@@ -2751,6 +2754,184 @@ Volume last-backup.json:
   - Confirmed that in `c38f2bc` (run `45259127727`), the `test` job passed completely, proving that the original CSV import engine changes were sound.
   - In commit `f53e3ea` (run 45262493871), `Run Admin Dashboard E2E tests` failed due to UI timing race conditions: `data-import-flow.spec.ts` used `isVisible({ timeout })` which returns synchronously without waiting in Playwright.
   - Fixed by using `waitFor({ state: "visible", timeout })` for dynamic dialogs (register switch and open shift modal) and using full unique timestamps for generated SKUs and barcodes.
+
+- **Verified Proof Outputs from Green CI Run 45339188687 (Commit `81998d7`):**
+  1. *First Backup Finished Line from smoke-prod:*
+```text
+[BACKUP_CONTAINER] Backup container first backup finished successfully.
+```
+  2. *BACKUP_STATUS_JSON Block:*
+```json
+{
+  "ok": true,
+  "timestamp": "2026-11-24T06:33:12+06:00",
+  "filename": "backup_universal_pos_20261124_063312.dump",
+  "filePath": "/backups/daily/backup_universal_pos_20261124_063312.dump",
+  "sizeBytes": 531428,
+  "encrypted": false,
+  "offServerConfigured": false,
+  "offServerWarning": "ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি",
+  "warning": "ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি",
+  "checksum": "d54d929c13b2e591781298da5c3a4f801648a8ebc88fec4199c43efb25ba7f91"
+}
+```
+  3. *BACKUPS_API_RESPONSE Block:*
+```json
+{
+  "ok": true,
+  "lastBackupAt": "2026-11-24T06:33:12+06:00",
+  "lastBackupSizeBytes": 531428,
+  "lastBackupFilename": "backup_universal_pos_20261124_063312.dump",
+  "encrypted": false,
+  "offServerConfigured": false,
+  "offServerWarning": "ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি",
+  "warning": "ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি",
+  "reason": null,
+  "lastRestoreDrillAt": null,
+  "lastRestoreDrillStatus": null
+}
+```
+  4. *Container Check Values from Stability Verification Step:*
+```text
+Backup container Status: running
+Backup container RestartCount: 0
+Backup container Health: healthy
+crond PID: 1
+Files in daily/:
+backup_universal_pos_20261124_063312.dump
+backup_universal_pos_20261124_063312.dump.sha256
+globals_20261124_063312.sql
+Daily backup dumps count: 1
+Backup container stability verified: running, 0 restarts, healthy, crond running, 1 daily backup.
+```
+  5. *Three JSON Summary Lines from load-check:*
+```json
+{"scenario":1,"name":"sale_load_10_registers","durationSec":120,"throughputReqSec":16.7,"throughput":"16.7 req/s","totalSales":200,"errors":0,"minMs":68,"p50Ms":156,"p95Ms":288,"maxMs":435,"budgetMet":true,"passed":true}
+{"scenario":2,"name":"sync_burst_300_sales","durationSec":11.2,"throughputReqSec":26.8,"throughput":"26.8 req/s","totalSales":300,"expectedSales":300,"errors":0,"dbCount":300,"budgetMet":true,"passed":true}
+{"scenario":3,"name":"sales_summary_report_50k","durationMs":38,"targetMs":2000,"budgetMet":true,"passed":true}
+```
+
+- **Reference Validator Outputs Across All 5 Sections:**
+
+Section 1: `## Phase 1D, fixes`
+```text
+Checking section: ## Phase 1D, fixes (11038 chars) [OFFLINE MODE]
+Found 14 unique commit hash(es) and 14 unique run ID(s).
+[PASS] commit: 86415d1
+[PASS] commit: 83170f7
+[PASS] commit: 21b5fc1
+[PASS] commit: c6283c2
+[PASS] commit: 442dbd4
+[PASS] commit: 9bc0f2c
+[PASS] commit: c66061b
+[PASS] commit: 70e12c1
+[PASS] commit: c65cd1d
+[PASS] commit: 5844987
+[PASS] commit: dff5ec7
+[PASS] commit: 2aaf6fb
+[PASS] commit: cf52187
+[PASS] commit: 9578121
+--- Verification Summary (Offline) ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND PAIRINGS VERIFIED SUCCESSFULLY (OFFLINE).
+```
+
+Section 2: `## Phase 1D, fixes follow-up`
+```text
+Checking section: ## Phase 1D, fixes follow-up (6315 chars) [OFFLINE MODE]
+Found 4 unique commit hash(es) and 4 unique run ID(s).
+[PASS] commit: 8097b76
+[PASS] commit: d60cc0a
+[PASS] commit: 2d0e8ee
+[PASS] commit: d8b11c1
+--- Verification Summary (Offline) ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND PAIRINGS VERIFIED SUCCESSFULLY (OFFLINE).
+```
+
+Section 3: `## Phase 1E`
+```text
+Checking section: ## Phase 1E (20532 chars) [OFFLINE MODE]
+Found 14 unique commit hash(es) and 14 unique run ID(s).
+[PASS] commit: 1648168
+[PASS] commit: 4cda049
+[PASS] commit: e641606
+[PASS] commit: 25e2aa0
+[PASS] commit: 78295ce
+[PASS] commit: 3d61aa7
+[PASS] commit: 3083d88
+[PASS] commit: ff17aa8
+[PASS] commit: 80d996b
+[PASS] commit: 075639a
+[PASS] commit: 20bbcd7
+[PASS] commit: aee8f8c
+[PASS] commit: 35a9808
+[PASS] commit: e58b611
+--- Verification Summary (Offline) ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND PAIRINGS VERIFIED SUCCESSFULLY (OFFLINE).
+```
+
+Section 4: `## Phase 1F`
+```text
+Checking section: ## Phase 1F (21606 chars) [OFFLINE MODE]
+Found 18 unique commit hash(es) and 18 unique run ID(s).
+[PASS] commit: d4da019
+[PASS] commit: f83e420
+[PASS] commit: 2f80b82
+[PASS] commit: 622d38e
+[PASS] commit: 14ab2ee
+[PASS] commit: 6284ed5
+[PASS] commit: 4fc653e
+[PASS] commit: a9b5379
+[PASS] commit: 576f6f5
+[PASS] commit: 5d4c7cf
+[PASS] commit: 0b34245
+[PASS] commit: 69b2117
+[PASS] commit: 9bae799
+[PASS] commit: 6fb7b51
+[PASS] commit: 0c9c586
+[PASS] commit: efe3f6f
+[PASS] commit: ece8284
+[PASS] commit: c44190f
+--- Verification Summary (Offline) ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND PAIRINGS VERIFIED SUCCESSFULLY (OFFLINE).
+```
+
+Section 5: `## Phase 1F, follow-up`
+```text
+Checking section: ## Phase 1F, follow-up (10322 chars) [OFFLINE MODE]
+Found 8 unique commit hash(es) and 8 unique run ID(s).
+[PASS] commit: c5ec4e1
+[PASS] commit: 6665216
+[PASS] commit: c14b959
+[PASS] commit: c38f2bc
+[PASS] commit: f53e3ea
+[PASS] commit: 0744528
+[PASS] commit: cd2f979
+[PASS] commit: 81998d7
+--- Verification Summary (Offline) ---
+Missing commits: 0
+Missing run IDs: 0
+Conclusion mismatches: 0
+Head SHA mismatches: 0
+ALL REFERENCES AND PAIRINGS VERIFIED SUCCESSFULLY (OFFLINE).
+```
+
+
 
 
 

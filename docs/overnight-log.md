@@ -3231,6 +3231,18 @@ c5ec4e1 fix(go-live): resolve Phase 1F review findings across backups, validatio
 ```
 - Confirmed commit `c5ec4e1` modified the workstation specification; kept item 5.
 
+#### 4. Commit & CI Execution
+- **Commit:** `e3234f9` (`fix(e2e): eliminate isVisible timeouts, stabilize offline reload and configure load check duration`)
+- CI: `e3234f9` → run `45449661170` → completed success
+  - `test` job (ID: 138642938725): completed success (12m 25s, all 161 E2E tests and all unit tests passed)
+  - `smoke-prod` job (ID: 138651057668): completed success (3m 28s)
+  - `load-check` job (ID: 138651057639): completed success (3m 40s, step 10 ran for 137s covering 120s soak)
+- CI run status verified via mechanical checker `scripts/ci-status.cjs` and jobs API:
+```text
+45449661170 e3234f9 completed success
+```
+
+
 
 
 

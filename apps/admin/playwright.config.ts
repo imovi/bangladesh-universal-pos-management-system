@@ -9,7 +9,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: 1,
   reporter: process.env.CI
-    ? [["list"], ["html", { open: "never", outputFolder: "playwright-report" }]]
+    ? [["list"], ["github"], ["html", { open: "never", outputFolder: "playwright-report" }]]
     : "html",
   use: {
     baseURL: process.env.ADMIN_URL || "http://localhost:3000",

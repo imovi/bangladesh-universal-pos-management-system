@@ -10,7 +10,6 @@ coverage/
 .next/
 **/.next/
 **/out/
-apps/admin/public/sw.js
 
 # Environment files
 .env

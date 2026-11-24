@@ -3330,7 +3330,16 @@ c5ec4e1 fix(go-live): resolve Phase 1F review findings across backups, validatio
   - `smoke-prod` (job 138756774518): skipped
   - `load-check` (job 138756773689): skipped
 
-#### 5. Reference Verification Across All Five Sections (10 Online Checks)
+#### 5. Documentation Commit CI Result (`91d472f`) & Service Worker Re-tracking
+- **Commit:** `91d472f` (`docs(phase1f): record CI failure and verified local E2E suite completion`)
+- CI: `91d472f` → run `45488323826` → completed failure
+- Jobs API status for commit `91d472f` (run `45488323826` failure):
+  - `test` (job 138779579711): completed failure (intermittent E2E runner timeout in step 20 `Run Admin Dashboard E2E tests` at 8m 58s)
+  - `smoke-prod` (job 138787450277): skipped
+  - `load-check` (job 138787449593): skipped
+- **Service Worker Decision:** As instructed by Item 3 ("If they do not pass, leave the file in git and write why"), because E2E tests intermittently timed out on clean CI runners without `public/sw.js` in git, re-tracked `apps/admin/public/sw.js` and removed it from `.gitignore` so the standalone server serves `/sw.js` deterministically. In addition, configured the standard `github` reporter in `apps/admin/playwright.config.ts` so all future test failures emit GitHub Actions error annotations.
+
+#### 6. Reference Verification Across All Five Sections (10 Online Checks)
 
 1. `node scripts/verify-report-refs.cjs "## Phase 1D, fixes" docs/overnight-report.md`:
 ```text
@@ -3430,8 +3439,8 @@ ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
 
 9. `node scripts/verify-report-refs.cjs "## Phase 1F, follow-up" docs/overnight-report.md`:
 ```text
-Checking section: ## Phase 1F, follow-up (16651 chars)
-Found 12 unique commit hash(es) and 12 unique run ID(s).
+Checking section: ## Phase 1F, follow-up (17383 chars)
+Found 14 unique commit hash(es) and 14 unique run ID(s).
 --- Verification Summary ---
 Missing commits: 0
 Missing run IDs: 0
@@ -3442,8 +3451,8 @@ ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
 
 10. `node scripts/verify-report-refs.cjs "## Phase 1F, follow-up" docs/overnight-log.md`:
 ```text
-Checking section: ## Phase 1F, follow-up (47267 chars)
-Found 15 unique commit hash(es) and 12 unique run ID(s).
+Checking section: ## Phase 1F, follow-up (54789 chars)
+Found 18 unique commit hash(es) and 15 unique run ID(s).
 --- Verification Summary ---
 Missing commits: 0
 Missing run IDs: 0

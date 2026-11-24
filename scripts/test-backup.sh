@@ -13,16 +13,13 @@ export POSTGRES_USER="${POSTGRES_USER:-pos_admin}"
 export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-pos_secret}"
 export POSTGRES_DB="universal_pos_restore_check"
 
-# Ensure universal_pos_restore_check database exists
-export PGPASSWORD="${POSTGRES_PASSWORD}"
-if command -v psql >/dev/null 2>&1; then
-    psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'universal_pos_restore_check'" | grep -q 1 || \
-    psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -d postgres -c "CREATE DATABASE universal_pos_restore_check;"
-fi
-
-# Fallback pg_dump wrapper if native pg_dump not on host PATH but Docker container is running
-if ! command -v pg_dump >/dev/null 2>&1 && command -v docker >/dev/null 2>&1; then
+# Fallback wrappers if native postgres client tools are not on host PATH but Docker container is running
+if (! command -v pg_dump >/dev/null 2>&1 || ! command -v psql >/dev/null 2>&1) && command -v docker >/dev/null 2>&1; then
     TEMP_PG_BIN="$(mktemp -d /tmp/pos-pg-bin-XXXXXX)"
+    cat <<'EOF' > "${TEMP_PG_BIN}/psql"
+#!/bin/bash
+docker exec -i universal_pos_postgres psql "$@"
+EOF
     cat <<'EOF' > "${TEMP_PG_BIN}/pg_dump"
 #!/bin/bash
 docker exec -i universal_pos_postgres pg_dump "$@"
@@ -31,8 +28,39 @@ EOF
 #!/bin/bash
 docker exec -i universal_pos_postgres pg_dumpall "$@"
 EOF
-    chmod +x "${TEMP_PG_BIN}/pg_dump" "${TEMP_PG_BIN}/pg_dumpall"
+    cat <<'EOF' > "${TEMP_PG_BIN}/pg_restore"
+#!/bin/bash
+args=()
+target_file=""
+while [[ $# -gt 0 ]]; do
+    if [[ -f "$1" ]]; then
+        target_file="$1"
+    else
+        args+=("$1")
+    fi
+    shift
+done
+if [[ -n "${target_file}" ]]; then
+    docker exec -i universal_pos_postgres pg_restore "${args[@]}" < "${target_file}"
+else
+    docker exec -i universal_pos_postgres pg_restore "${args[@]}"
+fi
+EOF
+    chmod +x "${TEMP_PG_BIN}/psql" "${TEMP_PG_BIN}/pg_dump" "${TEMP_PG_BIN}/pg_dumpall" "${TEMP_PG_BIN}/pg_restore"
     export PATH="${TEMP_PG_BIN}:${PATH}"
+fi
+
+# Ensure universal_pos_restore_check database exists and has at least one table with data
+export PGPASSWORD="${POSTGRES_PASSWORD}"
+if command -v psql >/dev/null 2>&1; then
+    psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'universal_pos_restore_check'" | grep -q 1 || \
+    psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -d postgres -c "CREATE DATABASE universal_pos_restore_check;"
+    psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -d universal_pos_restore_check -c "CREATE TABLE IF NOT EXISTS test_backup_data (id serial primary key, name text); INSERT INTO test_backup_data (name) VALUES ('seeded') ON CONFLICT DO NOTHING;"
+
+    # Ensure empty check database exists and has zero tables
+    psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'universal_pos_empty_check'" | grep -q 1 && \
+    psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -d postgres -c "DROP DATABASE universal_pos_empty_check;"
+    psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -d postgres -c "CREATE DATABASE universal_pos_empty_check;"
 fi
 
 TEST_BASE="$(mktemp -d /tmp/pos-backup-test-XXXXXX)"
@@ -73,6 +101,10 @@ if ! echo "${STATUS1}" | grep -q 'এনক্রিপ্ট করা নে�
 fi
 if ! echo "${STATUS1}" | grep -q '"offServerConfigured": false'; then
     echo "FAILED: Case 1 last-backup.json offServerConfigured is not false!" >&2
+    exit 1
+fi
+if ! echo "${STATUS1}" | grep -E '"tableCount": [1-9][0-9]*' >/dev/null; then
+    echo "FAILED: Case 1 last-backup.json tableCount is not greater than 0!" >&2
     exit 1
 fi
 echo "[PASS] Case 1: Plain file written and unencrypted warning recorded."
@@ -135,6 +167,10 @@ if ! echo "${STATUS2}" | grep -q '"ok": true'; then
 fi
 if ! echo "${STATUS2}" | grep -q '"encrypted": true'; then
     echo "FAILED: Case 2 last-backup.json encrypted is not true!" >&2
+    exit 1
+fi
+if ! echo "${STATUS2}" | grep -E '"tableCount": [1-9][0-9]*' >/dev/null; then
+    echo "FAILED: Case 2 last-backup.json tableCount is not greater than 0!" >&2
     exit 1
 fi
 echo "[PASS] Case 2: Only .age file exists, zero plain dump left behind."
@@ -250,7 +286,45 @@ if ! echo "${STATUS4}" | grep -q 'সার্ভারের বাইরে �
     echo "FAILED: Case 4 missing offServerWarning on unencrypted backup!" >&2
     exit 1
 fi
+if ! echo "${STATUS4}" | grep -E '"tableCount": [1-9][0-9]*' >/dev/null; then
+    echo "FAILED: Case 4 last-backup.json tableCount is not greater than 0!" >&2
+    exit 1
+fi
 echo "[PASS] Case 4: rclone was never called; unencrypted offServer refused."
+
+# -------------------------------------------------------------------------
+# Test Case 5: Empty Database (0 Tables)
+# Must exit 1, leave no backup_* file in daily/, and write ok: false with Bangla reason.
+# -------------------------------------------------------------------------
+echo -e "\n--- Test Case 5: Empty database (0 tables) ---"
+CASE5_DIR="${TEST_BASE}/case5"
+
+set +e
+POSTGRES_DB="universal_pos_empty_check" BACKUP_DIR="${CASE5_DIR}" BACKUP_AGE_PUBLIC_KEY="" BACKUP_RCLONE_REMOTE="" bash scripts/backup.sh
+EXIT_CODE_5=$?
+set -e
+
+if [[ "${EXIT_CODE_5}" -eq 0 ]]; then
+    echo "FAILED: Case 5 expected exit 1 on empty database, got 0!" >&2
+    exit 1
+fi
+
+if ls -1 "${CASE5_DIR}/daily"/backup_* >/dev/null 2>&1; then
+    echo "FAILED: backup_* file found in daily/ for empty database in Case 5!" >&2
+    exit 1
+fi
+
+STATUS5=$(read_status "${CASE5_DIR}/last-backup.json")
+echo "Case 5 status JSON: ${STATUS5}"
+if ! echo "${STATUS5}" | grep -q '"ok": false'; then
+    echo "FAILED: Case 5 status ok is not false!" >&2
+    exit 1
+fi
+if ! echo "${STATUS5}" | grep -q 'ব্যাকআপে কোনো টেবিল পাওয়া যায়নি'; then
+    echo "FAILED: Case 5 missing Bangla reason 'ব্যাকআপে কোনো টেবিল পাওয়া যায়নি'!" >&2
+    exit 1
+fi
+echo "[PASS] Case 5: Exit 1, no backup files in daily, ok: false with Bangla reason."
 
 # -------------------------------------------------------------------------
 # Retention Test:

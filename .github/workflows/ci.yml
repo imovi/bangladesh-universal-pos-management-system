@@ -316,8 +316,32 @@ jobs:
               console.error('FAILED: last-backup.json ok is not true:', data);
               process.exit(1);
             }
-            console.log('last-backup.json verified: ok === true');
+            if (!data.tableCount || data.tableCount <= 0) {
+              console.error('FAILED: last-backup.json tableCount is not > 0:', data);
+              process.exit(1);
+            }
+            console.log('last-backup.json verified: ok === true, tableCount === ' + data.tableCount);
           "
+
+          echo "=== Checking core tables in latest backup dump ==="
+          DAILY_DUMP=$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production exec -T backup sh -c "ls -1t /backups/daily/backup_*.dump* | head -1")
+          echo "Inspecting dump file: $DAILY_DUMP"
+          RESTORE_LIST=$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production exec -T backup pg_restore -l "$DAILY_DUMP")
+          TABLE_COUNT=$(echo "$RESTORE_LIST" | grep -c "TABLE DATA" || true)
+          echo "TABLE DATA count in dump: $TABLE_COUNT"
+          if [ "$TABLE_COUNT" -le 0 ]; then
+            echo "FAILED: Expected TABLE DATA count > 0, got $TABLE_COUNT"
+            exit 1
+          fi
+
+          for tbl in tenants products sales; do
+            if ! echo "$RESTORE_LIST" | grep -E "TABLE DATA (public )?${tbl} " >/dev/null; then
+              echo "FAILED: Core table '${tbl}' missing from backup dump!"
+              exit 1
+            fi
+            echo "Core table verified in dump: ${tbl}"
+          done
+          echo "All core tables (tenants, products, sales) present in backup dump."
 
       - name: Verify database runtime role hardening
         run: |

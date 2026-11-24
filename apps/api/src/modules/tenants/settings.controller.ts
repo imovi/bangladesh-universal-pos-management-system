@@ -71,6 +71,7 @@ export class SettingsController {
       offServerWarning,
       warning: lastBackup?.warning ?? null,
       reason: lastBackup?.reason ?? null,
+      tableCount: lastBackup?.tableCount ?? null,
       lastRestoreDrillAt: lastRestoreDrill?.timestamp ?? null,
       lastRestoreDrillStatus: lastRestoreDrill?.status ?? null,
     };

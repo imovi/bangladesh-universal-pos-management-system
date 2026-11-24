@@ -43,5 +43,5 @@ chmod 600 /etc/crontabs/root
 echo "[BACKUP-INIT] Cron job scheduled with pattern '${BACKUP_CRON}'."
 echo "[BACKUP-INIT] Starting crond in foreground..."
 
-# Start Busybox crond in foreground as PID 1
-exec crond -f -l 2
+# Start Busybox crond in foreground as PID 1 with logs sent to stdout
+exec crond -f -l 2 -L /dev/stdout

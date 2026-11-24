@@ -2931,6 +2931,198 @@ Head SHA mismatches: 0
 ALL REFERENCES AND PAIRINGS VERIFIED SUCCESSFULLY (OFFLINE).
 ```
 
+### Empty backup note
+- **Start Time:** 2026-11-24 13:50 +06:00
+- **Specification:** `docs/prompts/antigravity-pos-phase1f-followup-empty-backup-note.md`
+- **Scope & Objectives:**
+  1. Fix the empty backup race condition on fresh install (`deploy/docker-compose.prod.yml`, `scripts/backup.sh`, `scripts/test-backup.sh`, `scripts/smoke-prod.mjs`, and `.github/workflows/ci.yml`).
+  2. Fix crond logging in `deploy/backup/entrypoint.sh` using `-L /dev/stdout`.
+  3. Fix filename match error handling in `scripts/smoke-prod.mjs`.
+  4. Run `apps/admin/e2e/data-import-flow.spec.ts` 5 times in a row locally and record proof.
+  5. Correct wrong facts in `docs/overnight-report.md`:
+     - Fix commits for Case 3 PATH bug (`f53e3ea`) and Owner 403 / crash loop / smoke step 8 (`0744528`).
+     - Align top 5 problems with follow-up fix prompt.
+     - Replace unmeasured 20,000-row preview duration with `not measured`.
+     - Align load check table with script reality and explain `throughputReqSec` vs `totalSales`.
+     - Clarify service health in compose status (only services with healthcheck show `(healthy)`).
+     - Add empty backup race condition bug to "Problems found during the run".
+
+#### 1. Empty Backup Race Condition: Reproduction & Fix
+- **Root Cause:** In `deploy/docker-compose.prod.yml`, the `backup` container depended only on `postgres: condition: service_healthy`. When spinning up on a fresh Docker volume, PostgreSQL reports healthy before `migrate` executes Prisma migrations. The backup container ran an initial dump immediately on startup, creating an empty 3,677-byte dump with 0 `TABLE DATA` entries (only public schema default ACLs) while recording `ok: true`.
+- **Local Reproduction Before Fix:**
+  - Started stack on fresh volume via `docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production up -d --build`.
+  - Result:
+    - Backup file: `backup_universal_pos_20261124_135320.dump` (3,677 bytes).
+    - `pg_restore -l` output:
+      ```text
+      ; Selected TOC Entries:
+      3457; 0 0 ACL - SCHEMA public pg_database_owner
+      2040; 826 16391 DEFAULT ACL public DEFAULT PRIVILEGES FOR SEQUENCES pos_admin
+      2039; 826 16390 DEFAULT ACL public DEFAULT PRIVILEGES FOR TABLES pos_admin
+      ```
+    - `TABLE DATA` count: `0`
+    - `last-backup.json`:
+      ```json
+      {
+        "ok": true,
+        "timestamp": "2026-11-24T13:53:20+06:00",
+        "filename": "backup_universal_pos_20261124_135320.dump",
+        "filePath": "/backups/daily/backup_universal_pos_20261124_135320.dump",
+        "sizeBytes": 3677,
+        "encrypted": false
+      }
+      ```
+- **Fix Applied:**
+  1. `deploy/docker-compose.prod.yml`: added `migrate: condition: service_completed_successfully` to `backup` service `depends_on`.
+  2. `scripts/backup.sh`:
+     - Computed `TABLE_COUNT=$(pg_restore -l "${DUMP_FILE}" 2>/dev/null | grep -c "TABLE DATA" || true)`.
+     - If `TABLE_COUNT -eq 0`, outputs error, deletes dump and globals files, writes `ok: false` with Bangla reason `ব্যাকআপে কোনো টেবিল পাওয়া যায়নি`, records `tableCount: 0`, and exits 1.
+     - On successful dump, records `"tableCount": ${TABLE_COUNT}` in `last-backup.json`.
+  3. `apps/api/src/modules/tenants/settings.controller.ts`: exposed `tableCount` in `getBackupsStatus`.
+  4. `scripts/test-backup.sh`:
+     - Added Case 5 testing empty database `universal_pos_empty_check`.
+     - Verified exit 1, no `backup_*` file in `daily/`, and `ok: false` with Bangla reason `ব্যাকআপে কোনো টেবিল পাওয়া যায়নি`.
+     - In Cases 1, 2, 4, asserted `tableCount > 0`.
+  5. `.github/workflows/ci.yml`: in `smoke-prod` job, added verification that the latest daily backup dump contains `tableCount > 0` and core tables `tenants`, `products`, `sales` all appear in `pg_restore -l`.
+- **Local Verification After Fix:**
+  - Started stack on fresh volume via `docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production up -d --build`.
+  - Observation: `backup-1` waited for `migrate-1` to exit successfully before starting.
+  - Result:
+    - Backup file: `backup_universal_pos_20261124_135753.dump` (493,044 bytes).
+    - `pg_restore -l ... | grep -c "TABLE DATA"`: `54`
+    - Core tables check:
+      ```text
+      4344; 0 16622 TABLE DATA public products pos_admin
+      4362; 0 17113 TABLE DATA public sales pos_admin
+      4330; 0 16401 TABLE DATA public tenants pos_admin
+      ```
+    - `last-backup.json`:
+      ```json
+      {
+        "ok": true,
+        "timestamp": "2026-11-24T13:57:54+06:00",
+        "filename": "backup_universal_pos_20261124_135753.dump",
+        "filePath": "/backups/daily/backup_universal_pos_20261124_135753.dump",
+        "sizeBytes": 493044,
+        "encrypted": false,
+        "offServerConfigured": false,
+        "offServerWarning": "ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি",
+        "warning": "ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি",
+        "checksum": "124c1d35f60fa89f952e9d02b9fe00356482de646ba93d38aae6095d7d73fcfa",
+        "tableCount": 54
+      }
+      ```
+
+#### 2. Two Small Fixes: Crond Logging & Smoke Test Filename Check
+1. **Crond Logging (`deploy/backup/entrypoint.sh`):**
+   - Changed `exec crond -f -l 2` to `exec crond -f -l 2 -L /dev/stdout`.
+   - Verified crond start line in `docker compose logs backup`:
+     ```text
+     backup-1  | [BACKUP-INIT] Cron job scheduled with pattern '30 2 * * *'.
+     backup-1  | [BACKUP-INIT] Starting crond in foreground...
+     backup-1  | crond: crond (busybox 1.37.0) started, log level 2
+     backup-1  | crond: user:root entry:30 2 * * * /usr/local/bin/backup.sh > /proc/1/fd/1 2>&1
+     ```
+2. **Smoke Test Filename Check (`scripts/smoke-prod.mjs`):**
+   - Enforced that `backupStatusJson` and `backupStatusJson.filename` must exist and match `backupApiResponse.lastBackupFilename`.
+   - Throws descriptive error if volume status is missing or does not contain a filename, or if filenames do not match.
+
+#### 3. Flaky Import Test Proof (5x Consecutive Runs)
+Ran `npm --workspace=@universal-pos/admin run test:e2e -- --project=chromium --repeat-each=5 data-import-flow.spec.ts` locally against running local stack:
+```text
+> @universal-pos/admin@0.1.0 test:e2e
+> playwright test --project=chromium --repeat-each=5 data-import-flow.spec.ts
+
+Running 5 tests using 1 worker
+
+[1/5] [chromium] › e2e\data-import-flow.spec.ts:8:3 › Milestone F4: Day-One CSV Import E2E Flow › uploads product and opening stock CSV, previews, commits, and verifies product & stock on /pos
+[2/5] [chromium] › e2e\data-import-flow.spec.ts:8:3 › Milestone F4: Day-One CSV Import E2E Flow › uploads product and opening stock CSV, previews, commits, and verifies product & stock on /pos
+[3/5] [chromium] › e2e\data-import-flow.spec.ts:8:3 › Milestone F4: Day-One CSV Import E2E Flow › uploads product and opening stock CSV, previews, commits, and verifies product & stock on /pos
+[4/5] [chromium] › e2e\data-import-flow.spec.ts:8:3 › Milestone F4: Day-One CSV Import E2E Flow › uploads product and opening stock CSV, previews, commits, and verifies product & stock on /pos
+[5/5] [chromium] › e2e\data-import-flow.spec.ts:8:3 › Milestone F4: Day-One CSV Import E2E Flow › uploads product and opening stock CSV, previews, commits, and verifies product & stock on /pos
+  5 passed (2.4m)
+```
+Result: 5/5 passed consecutively with 0 retries.
+
+#### 4. Git Commits Verified for Report Corrections
+Commands executed to verify exact changes per commit:
+- `git show --stat 6665216`:
+  ```text
+  commit 66652163e20d9cc69978267c0f1b692a36890b91
+  Author: Habibur Rahman <ovisardar43@gmail.com>
+  Date:   Tue Nov 24 01:27:05 2026 +0600
+
+      fix(ci): fetch complete git history and install postgresql-client-17 for backup test
+
+   .github/workflows/ci.yml | 15 +++++++++++++--
+   docs/overnight-log.md    |  6 ++++++
+   scripts/bootstrap-db.sh  |  1 +
+   3 files changed, 20 insertions(+), 2 deletions(-)
+  ```
+- `git show --stat f53e3ea`:
+  ```text
+  commit f53e3eaab899adffbedc64c1da1dd16c01d83d0a
+  Author: Habibur Rahman <ovisardar43@gmail.com>
+  Date:   Tue Nov 24 02:42:44 2026 +0600
+
+      fix(backup): configure AGE_BIN and test case 3b without mutating system PATH
+
+   docs/overnight-log.md                              |  68 +++++++++++++-
+   ...antigravity-pos-phase1f-followup-ci-fix-note.md | 101 +++++++++++++++++++++
+   scripts/backup.sh                                  |   5 +-
+   scripts/smoke-prod.mjs                             |   3 +
+   scripts/test-backup.sh                             |  65 +++++++++++--
+   5 files changed, 228 insertions(+), 14 deletions(-)
+  ```
+- `git show --stat c38f2bc`:
+  ```text
+  commit c38f2bc0db967f6c2a6ceed5def82e632d92d8b7
+  Author: Habibur Rahman <ovisardar43@gmail.com>
+  Date:   Tue Nov 24 02:24:43 2026 +0600
+
+      fix(import): update catalog timestamps on batch insert and handle open-shift in E2E
+
+   apps/admin/e2e/data-import-flow.spec.ts       | 19 +++++++++++
+   apps/api/src/modules/import/import.service.ts | 48 ++++++++++++++++++++++++++-
+   docs/overnight-log.md                         |  4 +++
+   3 files changed, 70 insertions(+), 1 deletion(-)
+  ```
+- `git show --stat 0744528`:
+  ```text
+  commit 07445288cae716322f783a7b4ff9f8729bbf58fc
+  Author: Habibur Rahman <ovisardar43@gmail.com>
+  Date:   Tue Nov 24 11:19:37 2026 +0600
+
+      fix(phase1f): resolve backups API 403 authorization and backup container crash loop
+
+   .github/workflows/ci.yml                           |  49 ++++++
+   apps/admin/e2e/data-import-flow.spec.ts            |  12 +-
+   apps/admin/e2e/settings-flow.spec.ts               |  10 ++
+   apps/api/src/common/types/request.ts               |   6 +
+   .../api/src/modules/tenants/settings.controller.ts |  16 +-
+   apps/api/test/settings-backups.spec.ts             | 117 ++++++++++++++
+   deploy/backup/entrypoint.sh                        |  17 +-
+   deploy/docker-compose.prod.yml                     |   6 +
+   docs/overnight-log.md                              | 104 +++++++++++++
+   ...ravity-pos-phase1f-followup-backup-bugs-note.md | 173 +++++++++++++++++++++
+   scripts/smoke-prod.mjs                             |  91 +++++++++--
+   11 files changed, 567 insertions(+), 34 deletions(-)
+  ```
+
+#### 5. Load Check Metrics Explanation (`scripts/load-check.mjs`)
+- `totalSales`: records total count of completed checkout API transactions (`POST /api/v1/sales`).
+- `throughputReqSec`: measures `totalSales / durationSec` (sales processed per second across all 10 registers).
+- In batch mode (20 rounds of 10 concurrent registers = 200 sales), duration was 12.0s with 16.7 req/s throughput.
+- In soak mode (120s duration with 1 sale every ~3s per register), throughput is ~3.5 req/s (~420 total sales).
+- Local run with `LOAD_TEST_DURATION_MS=15000`:
+  ```json
+  {"scenario":1,"name":"sale_load_10_registers","durationSec":16.7,"throughputReqSec":3.6,"throughput":"3.6 req/s","totalSales":60,"errors":0,"minMs":70,"p50Ms":180,"p95Ms":374,"p99Ms":419,"maxMs":419,"stockExpected":180,"stockActual":180,"budgetMet":true,"passed":true}
+  {"scenario":2,"name":"sync_burst_300_sales","durationSec":4.65,"throughputReqSec":64.5,"throughput":"64.5 req/s","totalSales":300,"expectedSales":300,"errors":0,"dbCount":300,"budgetMet":true,"passed":true}
+  {"scenario":3,"name":"sales_summary_report_50k","durationMs":77,"targetMs":2000,"budgetMet":true,"passed":true}
+  ```
+
+
+
 
 
 

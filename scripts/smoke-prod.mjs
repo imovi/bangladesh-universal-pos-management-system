@@ -317,13 +317,21 @@ async function runSmokeTest() {
   console.log(`[BACKUP_STATUS_JSON] ${JSON.stringify(backupStatusJson, null, 2)}`);
   console.log(`[BACKUPS_API_RESPONSE] ${JSON.stringify(backupApiResponse, null, 2)}`);
 
-  // Assert matching filename
-  if (backupStatusJson?.filename && backupApiResponse.lastBackupFilename) {
-    if (backupStatusJson.filename !== backupApiResponse.lastBackupFilename) {
-      throw new Error(
-        `Filename mismatch: API returned '${backupApiResponse.lastBackupFilename}' but volume status JSON has '${backupStatusJson.filename}'`
-      );
-    }
+  // Assert volume status file exists and contains valid filename
+  if (!backupStatusJson || !backupStatusJson.filename) {
+    throw new Error(
+      `Volume status JSON missing or does not contain a filename: ${JSON.stringify(backupStatusJson)}`
+    );
+  }
+  if (backupStatusJson.filename !== backupApiResponse.lastBackupFilename) {
+    throw new Error(
+      `Filename mismatch: API returned '${backupApiResponse.lastBackupFilename}' but volume status JSON has '${backupStatusJson.filename}'`
+    );
+  }
+  if (!backupStatusJson.tableCount || backupStatusJson.tableCount <= 0) {
+    throw new Error(
+      `Backup status JSON tableCount is not greater than 0: ${backupStatusJson.tableCount}`
+    );
   }
 
   console.log(

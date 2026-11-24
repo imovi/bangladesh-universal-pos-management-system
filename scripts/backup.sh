@@ -25,6 +25,7 @@ METADATA_FILE="${BACKUP_DIR}/last-backup.json"
 
 write_failure_status() {
     local reason="$1"
+    local table_count="${2:-null}"
     mkdir -p "${BACKUP_DIR}"
     cat <<EOF > "${METADATA_FILE}"
 {
@@ -37,7 +38,8 @@ write_failure_status() {
   "offServerConfigured": false,
   "offServerWarning": null,
   "reason": "${reason}",
-  "error": "${reason}"
+  "error": "${reason}",
+  "tableCount": ${table_count}
 }
 EOF
 }
@@ -59,6 +61,15 @@ if ! pg_dump -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -
     echo "[BACKUP ERROR] pg_dump database dump failed!" >&2
     rm -f "${DUMP_FILE}" "${GLOBALS_FILE}"
     write_failure_status "pg_dump database dump failed"
+    exit 1
+fi
+
+# Check that dump holds real tables (TABLE DATA entries in pg_restore -l)
+TABLE_COUNT=$(pg_restore -l "${DUMP_FILE}" 2>/dev/null | grep -c "TABLE DATA" || true)
+if [[ "${TABLE_COUNT}" -eq 0 ]]; then
+    echo "[BACKUP ERROR] Database backup contains 0 tables: empty database!" >&2
+    rm -f "${DUMP_FILE}" "${GLOBALS_FILE}"
+    write_failure_status "ব্যাকআপে কোনো টেবিল পাওয়া যায়নি" 0
     exit 1
 fi
 
@@ -167,7 +178,8 @@ cat <<EOF > "${METADATA_FILE}"
   "offServerConfigured": ${OFF_SERVER_CONFIGURED},
   "offServerWarning": $(if [[ -n "${OFF_SERVER_WARNING}" ]]; then echo "\"${OFF_SERVER_WARNING}\""; else echo "null"; fi),
   "warning": $(if [[ -n "${WARNING_MSG}" ]]; then echo "\"${WARNING_MSG}\""; else echo "null"; fi),
-  "checksum": "${CHECKSUM}"
+  "checksum": "${CHECKSUM}",
+  "tableCount": ${TABLE_COUNT}
 }
 EOF
 

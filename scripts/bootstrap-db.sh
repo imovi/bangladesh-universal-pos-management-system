@@ -19,6 +19,9 @@ PGPASSWORD="${POSTGRES_PASSWORD:-pos_secret}" psql -h "$ADMIN_HOST" -p "$ADMIN_P
     SELECT 'CREATE DATABASE universal_pos_restore_check OWNER $ADMIN_USER'
     WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'universal_pos_restore_check')\gexec
 
+    SELECT 'CREATE DATABASE universal_pos_empty_check OWNER $ADMIN_USER'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'universal_pos_empty_check')\gexec
+
     DO \$\$
     BEGIN
         IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'pos_app') THEN

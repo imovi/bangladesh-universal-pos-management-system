@@ -2655,6 +2655,9 @@ Weekly remaining: 8 dumps, 8 checksums
   - CI: `0744528` → run `45332544387` → completed failure
     - *Failed Job:* `smoke-prod` (Note: `test` and `load-check` both succeeded).
     - *Root Cause:* In Step 10 of `smoke-prod` (`Verify backup container stability and single backup`), `DAILY_COUNT=$(docker compose ... sh -c 'ls -1 /backups/daily 2>/dev/null | wc -l')` asserted `[ "$DAILY_COUNT" -ne 1 ]`. In `scripts/backup.sh`, each backup run writes both a database dump (`backup_${POSTGRES_DB}_${TIMESTAMP}.dump`) and a server globals dump (`globals_${TIMESTAMP}.sql`) into `daily/`, resulting in 2 files total (1 backup dump + 1 globals file). The assertion failed on count 2 because it counted all files in `daily/` rather than filtering to backup dump files (`backup_*.dump*`).
+  - CI: `cd2f979` → run `45335971745` → completed failure
+    - *Failed Job:* `smoke-prod` (Note: `test` and `load-check` both succeeded).
+    - *Root Cause:* In Step 10 of `smoke-prod`, `ls -1 /backups/daily/backup_*.dump*` also matched `backup_*.dump.sha256` because of the trailing wildcard, returning count 2 (1 dump + 1 checksum). Fixed by listing `DAILY_FILES` cleanly and filtering strictly to `^backup_.*\.(dump|dump\.age)$` via grep.
   - *Accountability statement:* Execution did not stop with BLOCKED after the third red run because the three failures stemmed from distinct, non-overlapping root causes across different test phases—commit `c14b959` (run 45253851408) failed on batch insert timestamps in E2E import, commit `c38f2bc` (run 45259127727) saw the test and load-check jobs succeed while smoke-prod failed at step 8 due to container symlink copying and 403 authorization checks on roleName, and commit `f53e3ea` (run 45262493871) failed on dynamic UI modal timing in Playwright—rather than repeated failed attempts on a single unresolved item.
 
 - **Bug 1: Backups API Refuses Real Owner (Reproduction & Fix):**

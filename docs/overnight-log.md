@@ -3339,7 +3339,24 @@ c5ec4e1 fix(go-live): resolve Phase 1F review findings across backups, validatio
   - `load-check` (job 138787449593): skipped
 - **Service Worker Decision:** As instructed by Item 3 ("If they do not pass, leave the file in git and write why"), because E2E tests intermittently timed out on clean CI runners without `public/sw.js` in git, re-tracked `apps/admin/public/sw.js` and removed it from `.gitignore` so the standalone server serves `/sw.js` deterministically. In addition, configured the standard `github` reporter in `apps/admin/playwright.config.ts` so all future test failures emit GitHub Actions error annotations.
 
-#### 6. Reference Verification Across All Five Sections (10 Online Checks)
+#### 6. Commit `eb5070e` CI Result (All 3 Jobs Success)
+- **Commit:** `eb5070e` (`fix(ci): re-track sw.js per Item 3 fallback, add playwright github reporter, and verify log refs`)
+- CI: `eb5070e` → run `45491700742` → completed success
+- Jobs API status for commit `eb5070e` (run `45491700742` success):
+  - `test` (job 138791465006): completed success
+  - `smoke-prod` (job 138798561467): completed success
+  - `load-check` (job 138798561406): completed success
+- Public job annotations for run `45491700742`:
+  - `load-check` (job 138798561406):
+    - `{"scenario":1,"name":"sale_load_10_registers","durationSec":122.59,"throughputReqSec":3.8,"throughput":"3.8 req/s","totalSales":460,"errors":0,"minMs":50,"p50Ms":114,"p95Ms":167,"p99Ms":261,"maxMs":308,"stockExpected":1380,"stockActual":1380,"budgetMet":true,"passed":true}`
+    - `{"scenario":2,"name":"sync_burst_300_sales","durationSec":2.77,"throughputReqSec":108.3,"throughput":"108.3 req/s","totalSales":300,"expectedSales":300,"errors":0,"dbCount":300,"budgetMet":true,"passed":true}`
+    - `{"scenario":3,"name":"sales_summary_report_50k","durationMs":98,"targetMs":2000,"salesCount":48333,"budgetMet":true,"passed":true}`
+  - `smoke-prod` (job 138798561467):
+    - `status=running, restarts=, health=healthy, crond=running (PID 1), daily_dumps=1`
+    - `{"ok":true,"timestamp":"2026-11-25T03:44:05+06:00","filename":"backup_universal_pos_20261125_034405.dump","filePath":"/backups/daily/backup_universal_pos_20261125_034405.dump","sizeBytes":493047,"encrypted":false,"offServerConfigured":false,"offServerWarning":"ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি","warning":"ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি","checksum":"73cafe4367922c98c00216eccafe16392610d3c83594ad53abd30e25c5dcde9a","tableCount":54}`
+    - `tableCount=54, tables=[tenants, products, sales] verified`
+
+#### 7. Reference Verification Across All Five Sections (10 Online Checks)
 
 1. `node scripts/verify-report-refs.cjs "## Phase 1D, fixes" docs/overnight-report.md`:
 ```text

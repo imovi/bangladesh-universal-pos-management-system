@@ -1161,6 +1161,7 @@ All issues identified across the Phase 1F follow-up reviews and backup bugs note
 | **Public CI Annotations & sw.js Cleanup** | Add notice annotations for load check & smoke-prod, untrack sw.js, and verify report | **Completed** | [`aac771c`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/aac771c) | [45471519979](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45471519979) (`SUCCESS`) |
 | **Public Load Annotations & CI Verification** | Record public load check annotations, 10 online validator checks (intermittent E2E runner timeout) | **Failed** | [`0e0f1db`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/0e0f1db) | [45479302711](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45479302711) (`FAILURE`) |
 | **Log Verification & Flaky E2E Timeout** | Document prior CI failure, verified 161/161 passing local E2E suite | **Failed** | [`91d472f`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/91d472f) | [45488323826](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45488323826) (`FAILURE`) |
+| **Service Worker Re-tracking & CI Green** | Re-track sw.js per fallback clause, add Playwright github reporter, all 3 CI jobs green | **Completed** | [`eb5070e`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/eb5070e) | [45491700742](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45491700742) (`SUCCESS`) |
 
 ---
 
@@ -1262,5 +1263,5 @@ CI Runner (`LOAD_TEST_DURATION_MS=120000`, [`aac771c`](https://github.com/imovi/
 
 ---
 
-Phase 1F closed at [`aac771c`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/aac771c), run [45471519979](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45471519979), all three jobs success.
+Phase 1F closed at [`eb5070e`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/eb5070e), run [45491700742](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45491700742), all three jobs success.
 

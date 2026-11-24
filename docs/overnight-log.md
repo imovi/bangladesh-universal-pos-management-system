@@ -3322,7 +3322,15 @@ c5ec4e1 fix(go-live): resolve Phase 1F review findings across backups, validatio
     tableCount=54, tables=[tenants, products, sales] verified
     ```
 
-#### 4. Reference Verification Across All Five Sections (10 Online Checks)
+#### 4. Documentation Commit CI Result (`0e0f1db`)
+- **Commit:** `0e0f1db` (`docs(phase1f): record public load annotations, 10 online validator proofs, and close Phase 1F`)
+- CI: `0e0f1db` → run `45479302711` → completed failure
+- Jobs API status for commit `0e0f1db` (run `45479302711` failure):
+  - `test` (job 138747821746): completed failure (intermittent E2E runner timeout in step 20 `Run Admin Dashboard E2E tests` at 9m 43s; verified 161/161 passed locally in 8.8m)
+  - `smoke-prod` (job 138756774518): skipped
+  - `load-check` (job 138756773689): skipped
+
+#### 5. Reference Verification Across All Five Sections (10 Online Checks)
 
 1. `node scripts/verify-report-refs.cjs "## Phase 1D, fixes" docs/overnight-report.md`:
 ```text

@@ -3346,7 +3346,7 @@ c5ec4e1 fix(go-live): resolve Phase 1F review findings across backups, validatio
   - `test` (job 138791465006): completed success
   - `smoke-prod` (job 138798561467): completed success
   - `load-check` (job 138798561406): completed success
-- Public job annotations for run `45491700742`:
+- Public job annotations for commit `eb5070e` (run `45491700742`):
   - `load-check` (job 138798561406):
     - `{"scenario":1,"name":"sale_load_10_registers","durationSec":122.59,"throughputReqSec":3.8,"throughput":"3.8 req/s","totalSales":460,"errors":0,"minMs":50,"p50Ms":114,"p95Ms":167,"p99Ms":261,"maxMs":308,"stockExpected":1380,"stockActual":1380,"budgetMet":true,"passed":true}`
     - `{"scenario":2,"name":"sync_burst_300_sales","durationSec":2.77,"throughputReqSec":108.3,"throughput":"108.3 req/s","totalSales":300,"expectedSales":300,"errors":0,"dbCount":300,"budgetMet":true,"passed":true}`
@@ -3356,7 +3356,15 @@ c5ec4e1 fix(go-live): resolve Phase 1F review findings across backups, validatio
     - `{"ok":true,"timestamp":"2026-11-25T03:44:05+06:00","filename":"backup_universal_pos_20261125_034405.dump","filePath":"/backups/daily/backup_universal_pos_20261125_034405.dump","sizeBytes":493047,"encrypted":false,"offServerConfigured":false,"offServerWarning":"ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি","warning":"ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি","checksum":"73cafe4367922c98c00216eccafe16392610d3c83594ad53abd30e25c5dcde9a","tableCount":54}`
     - `tableCount=54, tables=[tenants, products, sales] verified`
 
-#### 7. Reference Verification Across All Five Sections (10 Online Checks)
+#### 7. Final Documentation Commit `4a4a964` CI Result (All 3 Jobs Success)
+- **Commit:** `4a4a964` (`docs(phase1f): record CI all-green results and close Phase 1F`)
+- CI: `4a4a964` → run `45495091861` → completed success
+- Jobs API status for commit `4a4a964` (run `45495091861` success):
+  - `test` (job 138803337340): completed success
+  - `smoke-prod` (job 138810176460): completed success
+  - `load-check` (job 138810177107): completed success
+
+#### 8. Reference Verification Across All Five Sections (10 Online Checks)
 
 1. `node scripts/verify-report-refs.cjs "## Phase 1D, fixes" docs/overnight-report.md`:
 ```text
@@ -3456,8 +3464,8 @@ ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
 
 9. `node scripts/verify-report-refs.cjs "## Phase 1F, follow-up" docs/overnight-report.md`:
 ```text
-Checking section: ## Phase 1F, follow-up (17383 chars)
-Found 14 unique commit hash(es) and 14 unique run ID(s).
+Checking section: ## Phase 1F, follow-up (18116 chars)
+Found 16 unique commit hash(es) and 16 unique run ID(s).
 --- Verification Summary ---
 Missing commits: 0
 Missing run IDs: 0
@@ -3468,8 +3476,8 @@ ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
 
 10. `node scripts/verify-report-refs.cjs "## Phase 1F, follow-up" docs/overnight-log.md`:
 ```text
-Checking section: ## Phase 1F, follow-up (54789 chars)
-Found 18 unique commit hash(es) and 15 unique run ID(s).
+Checking section: ## Phase 1F, follow-up (57159 chars)
+Found 20 unique commit hash(es) and 17 unique run ID(s).
 --- Verification Summary ---
 Missing commits: 0
 Missing run IDs: 0

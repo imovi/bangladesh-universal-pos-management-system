@@ -8,9 +8,9 @@ test.describe("Milestone F4: Day-One CSV Import E2E Flow", () => {
   test("uploads product and opening stock CSV, previews, commits, and verifies product & stock on /pos", async ({
     page,
   }) => {
-    const uniqueSuffix = Date.now().toString().slice(-4);
+    const uniqueSuffix = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const sku = `IMP-SKU-${uniqueSuffix}`;
-    const barcode = `89099${uniqueSuffix.padStart(7, "0")}`;
+    const barcode = `89099${Date.now().toString().slice(-7)}`;
     const productName = `ইমপোর্ট সিল্ক পাঞ্জাবি ${uniqueSuffix}`;
 
     // 1. Sign in as Owner
@@ -94,23 +94,23 @@ test.describe("Milestone F4: Day-One CSV Import E2E Flow", () => {
 
     // If active register has another cashier's shift, dismiss by choosing other register
     const switchBtn = page.locator('[data-testid="switch-register-btn"]');
-    if (await switchBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await switchBtn.waitFor({ state: "visible", timeout: 4000 }).then(() => true).catch(() => false)) {
       await switchBtn.click();
       await expect(switchBtn).toBeHidden({ timeout: 5000 });
     }
 
     // Ensure shift is open if open-shift dialog appears
     const confirmShiftBtn = page.locator('[data-testid="confirm-open-shift-button"]');
-    if (await confirmShiftBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await confirmShiftBtn.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
       await page.fill('[data-testid="opening-cash-input"]', "500");
       await confirmShiftBtn.click();
       await expect(confirmShiftBtn).toBeHidden({ timeout: 5000 });
     } else {
       const openShiftBtn = page.locator('[data-testid="open-shift-button"], button:has-text("শিফট শুরু করুন")');
-      if (await openShiftBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+      if (await openShiftBtn.waitFor({ state: "visible", timeout: 2000 }).then(() => true).catch(() => false)) {
         await openShiftBtn.click();
         await page.waitForTimeout(300);
-        if (await confirmShiftBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        if (await confirmShiftBtn.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
           await page.fill('[data-testid="opening-cash-input"]', "500");
           await confirmShiftBtn.click();
           await expect(confirmShiftBtn).toBeHidden({ timeout: 5000 });

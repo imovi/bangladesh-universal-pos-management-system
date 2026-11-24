@@ -95,12 +95,18 @@ services:
       BACKUP_AGE_PUBLIC_KEY: ${BACKUP_AGE_PUBLIC_KEY:-}
       BACKUP_RCLONE_REMOTE: ${BACKUP_RCLONE_REMOTE:-}
       RCLONE_CONFIG_DATA: ${RCLONE_CONFIG_DATA:-}
+      BACKUP_CRON: ${BACKUP_CRON:-30 2 * * *}
       TZ: Asia/Dhaka
     volumes:
       - backups:/backups
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "pgrep", "crond"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   admin:
     build:

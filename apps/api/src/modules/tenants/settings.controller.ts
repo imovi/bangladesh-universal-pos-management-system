@@ -16,6 +16,7 @@ import { PermissionsGuard } from "../../common/guards/permissions.guard.js";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator.js";
 import { TenantsService } from "./tenants.service.js";
 import { PERMISSIONS, SYSTEM_ROLES, UpdateTenantSettingsSchema } from "@universal-pos/shared";
+import type { AuthenticatedRequest } from "../../common/types/request.js";
 
 @Controller("settings")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -24,8 +25,11 @@ export class SettingsController {
 
   @Get("backups")
   @RequirePermission(PERMISSIONS.TENANT_READ)
-  async getBackupsStatus(@Req() req: any) {
-    if (req.user.roleName !== SYSTEM_ROLES.OWNER) {
+  async getBackupsStatus(@Req() req: AuthenticatedRequest) {
+    const isOwner =
+      Boolean(req.user.isOwner) ||
+      Boolean(req.user.roles?.includes(SYSTEM_ROLES.OWNER));
+    if (!isOwner) {
       throw new ForbiddenException("Only Owner can view backup status");
     }
     const backupDir =
@@ -74,7 +78,7 @@ export class SettingsController {
 
   @Get("pos")
   @RequirePermission(PERMISSIONS.SALE_CREATE)
-  async getPosSettings(@Req() req: any) {
+  async getPosSettings(@Req() req: AuthenticatedRequest) {
     const data = await this.tenantsService.getSettings(req.user.tenantId);
     const s = (data.settings as Record<string, any>) || {};
     return {
@@ -90,14 +94,14 @@ export class SettingsController {
 
   @Get()
   @RequirePermission(PERMISSIONS.TENANT_READ)
-  async getSettings(@Req() req: any) {
+  async getSettings(@Req() req: AuthenticatedRequest) {
     return this.tenantsService.getSettings(req.user.tenantId);
   }
 
   @Patch()
   @RequirePermission(PERMISSIONS.TENANT_UPDATE)
   async updateSettings(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Body() body: unknown,
     @Ip() ip: string,
   ) {
@@ -110,7 +114,7 @@ export class SettingsController {
     }
 
     const { name, ...settings } = parse.data;
-    const actorUserId = req.user.sub || req.user.userId || req.user.id;
+    const actorUserId = req.user.sub;
     return this.tenantsService.updateSettings(
       req.user.tenantId,
       settings,

@@ -160,5 +160,15 @@ test.describe("Milestone A8: Settings, Staff, Roles & Audit Flow", () => {
     await expect(page.locator('[role="dialog"]')).toBeVisible();
     await expect(page.locator(':text("পূর্বের মান"), :text("Before State")')).toBeVisible();
     await page.keyboard.press("Escape");
+
+    // 8. Verify Backups Card on /settings (Owner only)
+    const [backupsRes] = await Promise.all([
+      page.waitForResponse((res) => res.url().includes("/settings/backups")),
+      page.goto("/settings"),
+    ]);
+    expect(backupsRes.status()).toBe(200);
+    const backupsCard = page.locator('[data-testid="backups-card"]');
+    await expect(backupsCard).toBeVisible({ timeout: 10000 });
+    await expect(backupsCard).not.toContainText("Loading backup status...");
   });
 });

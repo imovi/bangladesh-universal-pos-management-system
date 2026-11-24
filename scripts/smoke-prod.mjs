@@ -15,6 +15,9 @@
  */
 
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+import child_process from "child_process";
 
 // Allow self-signed certificates when testing against Caddy internal TLS on localhost
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -39,15 +42,51 @@ async function apiRequest(endpoint, options = {}) {
   try {
     json = JSON.parse(text);
   } catch {
-    throw new Error(`HTTP ${res.status} from ${endpoint}: Invalid JSON response: ${text.slice(0, 200)}`);
+    const err = new Error(`HTTP ${res.status} from ${endpoint}: Invalid JSON response: ${text.slice(0, 200)}`);
+    err.status = res.status;
+    err.body = text;
+    throw err;
   }
 
   if (!res.ok || json.success === false) {
     const errorMsg = json.error?.message || json.message || JSON.stringify(json);
-    throw new Error(`API error HTTP ${res.status} on ${endpoint}: ${errorMsg}`);
+    const err = new Error(`API error HTTP ${res.status} on ${endpoint}: ${errorMsg}`);
+    err.status = res.status;
+    err.body = json;
+    throw err;
   }
 
   return json.data !== undefined ? json.data : json;
+}
+
+function readBackupStatusFromVolume() {
+  if (process.env.BACKUP_DIR) {
+    const localStatus = path.join(process.env.BACKUP_DIR, "last-backup.json");
+    if (fs.existsSync(localStatus)) {
+      try {
+        return JSON.parse(fs.readFileSync(localStatus, "utf8"));
+      } catch {}
+    }
+  }
+  // Try docker compose exec or docker exec
+  try {
+    const envArg = fs.existsSync("deploy/.env.production") ? " --env-file deploy/.env.production" : "";
+    const out = child_process.execSync(
+      `docker compose -f deploy/docker-compose.prod.yml${envArg} exec -T backup cat /backups/last-backup.json`,
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+    );
+    return JSON.parse(out.trim());
+  } catch {
+    try {
+      const out = child_process.execSync(
+        `docker exec universal-pos-prod-backup-1 cat /backups/last-backup.json`,
+        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+      );
+      return JSON.parse(out.trim());
+    } catch {
+      return null;
+    }
+  }
 }
 
 async function runSmokeTest() {
@@ -237,35 +276,59 @@ async function runSmokeTest() {
 
   // 8. Verify automated backup container first run & /settings/backups
   console.log(`[8/8] Verifying backup container first run & /settings/backups status...`);
-  let backupStatus = null;
+  let backupApiResponse = null;
+  let lastError = null;
   for (let attempt = 1; attempt <= 15; attempt++) {
     try {
-      backupStatus = await apiRequest("/settings/backups", {
+      backupApiResponse = await apiRequest("/settings/backups", {
         method: "GET",
         token,
       });
-      if (backupStatus?.lastBackupAt && (backupStatus.ok === true || backupStatus.ok === undefined)) {
+      if (backupApiResponse?.lastBackupAt && (backupApiResponse.ok === true || backupApiResponse.ok === undefined)) {
         break;
       }
-    } catch {
+    } catch (err) {
+      lastError = err;
+      if (err.status === 401 || err.status === 403) {
+        throw new Error(
+          `Immediate failure on HTTP ${err.status} accessing /settings/backups: ${err.message}\nAPI Response Body: ${JSON.stringify(err.body, null, 2)}`
+        );
+      }
       // Backup service may still be performing initial dump
     }
     await new Promise((r) => setTimeout(r, 2000));
   }
 
-  if (!backupStatus || !backupStatus.lastBackupAt) {
-    throw new Error("Backup service did not complete initial backup within 30 seconds");
+  if (!backupApiResponse || !backupApiResponse.lastBackupAt) {
+    if (lastError) {
+      console.error(`Last error received from /settings/backups (HTTP ${lastError.status}):`, lastError.body);
+    }
+    throw new Error(`Backup service did not complete initial backup within 30 seconds. Last error: ${lastError?.message}`);
   }
-  if (backupStatus.ok === false) {
-    throw new Error(`Backup service reported failure: ${backupStatus.reason}`);
+  if (backupApiResponse.ok === false) {
+    throw new Error(`Backup service reported failure: ${backupApiResponse.reason}`);
   }
-  if (!backupStatus.lastBackupFilename || !backupStatus.lastBackupSizeBytes) {
+  if (!backupApiResponse.lastBackupFilename || !backupApiResponse.lastBackupSizeBytes) {
     throw new Error("Backup status missing valid filename or size in bytes");
   }
+
+  const backupStatusJson = readBackupStatusFromVolume();
   console.log(`[BACKUP_CONTAINER] Backup container first backup finished successfully.`);
-  console.log(`[BACKUP_STATUS_JSON] ${JSON.stringify(backupStatus, null, 2)}`);
-  console.log(`[BACKUPS_API_RESPONSE] ${JSON.stringify(backupStatus, null, 2)}`);
-  console.log(`  -> Initial backup verified: File: ${backupStatus.lastBackupFilename}, Size: ${backupStatus.lastBackupSizeBytes} B, Timestamp: ${backupStatus.lastBackupAt}`);
+  console.log(`[BACKUP_STATUS_JSON] ${JSON.stringify(backupStatusJson, null, 2)}`);
+  console.log(`[BACKUPS_API_RESPONSE] ${JSON.stringify(backupApiResponse, null, 2)}`);
+
+  // Assert matching filename
+  if (backupStatusJson?.filename && backupApiResponse.lastBackupFilename) {
+    if (backupStatusJson.filename !== backupApiResponse.lastBackupFilename) {
+      throw new Error(
+        `Filename mismatch: API returned '${backupApiResponse.lastBackupFilename}' but volume status JSON has '${backupStatusJson.filename}'`
+      );
+    }
+  }
+
+  console.log(
+    `  -> Initial backup verified: File: ${backupApiResponse.lastBackupFilename}, Size: ${backupApiResponse.lastBackupSizeBytes} B, Timestamp: ${backupApiResponse.lastBackupAt}`
+  );
 
   console.log(`\n=== [SUCCESS] All 8 production smoke test steps completed successfully! ===\n`);
 }

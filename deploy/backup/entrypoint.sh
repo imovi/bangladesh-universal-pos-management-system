@@ -32,15 +32,16 @@ else
     echo "[BACKUP-INIT] Initial backup returned non-zero (tables may be undergoing initial migration)" >&2
 fi
 
-# Configure cron schedule (02:30 Asia/Dhaka daily)
-mkdir -p /var/spool/cron/crontabs /etc/crontabs
-cat <<'EOF' > /var/spool/cron/crontabs/root
-30 2 * * * /usr/local/bin/backup.sh > /proc/1/fd/1 2>&1
+# Configure cron schedule
+BACKUP_CRON="${BACKUP_CRON:-30 2 * * *}"
+mkdir -p /etc/crontabs
+cat <<EOF > /etc/crontabs/root
+${BACKUP_CRON} /usr/local/bin/backup.sh > /proc/1/fd/1 2>&1
 EOF
-cp /var/spool/cron/crontabs/root /etc/crontabs/root
+chmod 600 /etc/crontabs/root
 
-echo "[BACKUP-INIT] Cron job scheduled for 02:30 Asia/Dhaka daily."
+echo "[BACKUP-INIT] Cron job scheduled with pattern '${BACKUP_CRON}'."
 echo "[BACKUP-INIT] Starting crond in foreground..."
 
-# Start Busybox crond in foreground, logging to stdout
-exec crond -f -l 2 -L /dev/stdout
+# Start Busybox crond in foreground as PID 1
+exec crond -f -l 2

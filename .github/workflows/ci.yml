@@ -252,6 +252,55 @@ jobs:
         run: |
           API_URL=https://localhost/api/v1 node scripts/smoke-prod.mjs
 
+      - name: Verify backup container stability and single backup
+        run: |
+          echo "Waiting 90 seconds to verify backup container stability..."
+          sleep 90
+
+          CONTAINER_ID=$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production ps -q backup)
+          STATUS=$(docker inspect --format '{{.State.Status}}' "$CONTAINER_ID")
+          RESTART_COUNT=$(docker inspect --format '{{.RestartCount}}' "$CONTAINER_ID")
+          HEALTH=$(docker inspect --format '{{.State.Health.Status}}' "$CONTAINER_ID")
+
+          echo "Backup container Status: $STATUS"
+          echo "Backup container RestartCount: $RESTART_COUNT"
+          echo "Backup container Health: $HEALTH"
+
+          if [ "$STATUS" != "running" ]; then
+            echo "FAILED: Backup container Status is '$STATUS', expected 'running'"
+            exit 1
+          fi
+
+          if [ "$RESTART_COUNT" != "0" ]; then
+            echo "FAILED: Backup container RestartCount is '$RESTART_COUNT', expected 0"
+            exit 1
+          fi
+
+          if [ "$HEALTH" != "healthy" ]; then
+            echo "FAILED: Backup container Health is '$HEALTH', expected 'healthy'"
+            exit 1
+          fi
+
+          echo "Checking crond process in backup container..."
+          CROND_PID=$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production exec -T backup pgrep crond)
+          echo "crond PID: $CROND_PID"
+          if [ -z "$CROND_PID" ]; then
+            echo "FAILED: crond process not found in backup container"
+            exit 1
+          fi
+
+          DAILY_COUNT=$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production exec -T backup sh -c 'ls -1 /backups/daily 2>/dev/null | wc -l')
+          DAILY_FILES=$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production exec -T backup sh -c 'ls -1 /backups/daily 2>/dev/null')
+          echo "Daily backup files count: $DAILY_COUNT"
+          echo "Files in daily/:"
+          echo "$DAILY_FILES"
+
+          if [ "$DAILY_COUNT" -ne 1 ]; then
+            echo "FAILED: Expected exactly 1 file in daily/ backup directory, but found $DAILY_COUNT (potential restart loop)"
+            exit 1
+          fi
+          echo "Backup container stability verified: running, 0 restarts, healthy, crond running, 1 daily backup."
+
       - name: Verify backup container logs and volume status
         run: |
           echo "=== Checking backup container logs ==="

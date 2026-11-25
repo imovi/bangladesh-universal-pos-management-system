@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { formatBusinessDate } from "@universal-pos/shared";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
@@ -44,9 +45,8 @@ test.describe("Milestone E5: Reports & Dashboard Flow with API Assertions", () =
     const loginData = await loginRes.json();
     const token = loginData.data.accessToken;
 
-    // 2. Fetch API Sales Summary for today
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    // 2. Fetch API Sales Summary for today (Dhaka time zone matching dashboard)
+    const todayStr = formatBusinessDate(new Date(), "Asia/Dhaka");
     const summaryRes = await request.get(
       `http://localhost:4000/api/v1/reports/sales-summary?startDate=${todayStr}&endDate=${todayStr}`,
       { headers: { Authorization: `Bearer ${token}` } }

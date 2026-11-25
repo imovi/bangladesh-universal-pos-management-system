@@ -3759,6 +3759,12 @@ GitHub token support tooling task closed at [`a8104aa`](https://github.com/imovi
   - `load-check` (job 139484128645): completed success
 - Playwright Run Summary annotation:
   - `::notice title=🎭 Playwright Run Summary::  161 passed (8.3m)`
+- CI: `3b5fbec` → run `45694721413` → completed failure
+- Jobs API status for commit `3b5fbec` (run `45694721413` failure):
+  - `test` (job 139489001848): completed failure
+  - `smoke-prod` (job 139496410135): skipped
+  - `load-check` (job 139496410531): skipped
+- Failure Diagnosis: `e2e/reports-promotions-loyalty.spec.ts:29:3` failed with `Expected substring: "৳ 0.00", Received string: "৳ 3,140.00"`. In CI runner (UTC), `now.getFullYear()`, `now.getDate()` queried UTC date `2026-11-25`, while dashboard UI queried `formatBusinessDate(new Date(), "Asia/Dhaka")` (`2026-11-26`). Fixed by using `formatBusinessDate(new Date(), "Asia/Dhaka")` from `@universal-pos/shared` in `reports-promotions-loyalty.spec.ts`.
 
 #### 1. Reproduction vs CI Error
 The reproduced error is not the CI error.

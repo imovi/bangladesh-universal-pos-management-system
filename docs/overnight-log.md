@@ -3577,6 +3577,32 @@ ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
 
 Phase 1F closed at [`31ee28b`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/31ee28b), run [45562469861](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45562469861), all three jobs success.
 
+---
+
+## Tooling, GitHub token support
+
+- **Specification:** `docs/prompts/antigravity-pos-github-token-support-note.md`
+- **What Was Built:**
+  1. **Shared GitHub Request Helper (`scripts/lib/github-api.cjs`):**
+     - Single reusable `githubGet(apiPath)` function built with Node's native `https` module.
+     - Automatically sends standard headers: `User-Agent: UniversalPOS-CI-Scripts` and `Accept: application/vnd.github+json`.
+     - Environment-driven authentication: reads `GITHUB_TOKEN` (or `GH_TOKEN`), sending `Authorization: Bearer <token>` when present. Falls back cleanly to anonymous access when unset.
+     - Security guarantees: zero tokens written to disk or command lines; headers and error strings sanitize token references; rejects invalid tokens with exact message `GitHub token rejected (401). Check GITHUB_TOKEN.` on HTTP 401 without printing token data.
+     - Rate-limit handling: captures HTTP 403/429 with `x-ratelimit-remaining: 0` and preserves structured rate limit reset responses (`RATE_LIMITED reset=<epoch>`).
+     - Includes `printAuthStatus()` printing `GitHub API: authenticated` or `GitHub API: anonymous (60 requests/hour)` to `stderr` at start of each script.
+  2. **Script Integration (`scripts/ci-status.cjs` & `scripts/verify-report-refs.cjs`):**
+     - `scripts/ci-status.cjs`: refactored to use `githubGet` across primary and fallback runs queries, preserving exact CLI output formats.
+     - `scripts/verify-report-refs.cjs`: replaced `curl.exe` shell calls with `githubGet`, while storing run results in an in-memory `Map` cache (`cachedRuns`) across the run to prevent duplicate network calls.
+  3. **Documentation:**
+     - Added `### GitHub API token (optional)` to `README.md` with instructions for using `gh auth login` and setting `$env:GITHUB_TOKEN`.
+  4. **CI Polling Rate Rule:**
+     - When waiting for CI from now on:
+       1. Wait about 12 minutes after a push;
+       2. Then check once;
+       3. Then check at most once every 5 minutes;
+       4. Never loop faster than that.
+
+
 
 
 

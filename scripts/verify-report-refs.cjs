@@ -1,6 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { githubGet, printAuthStatus } = require('./lib/github-api.cjs');
+
+printAuthStatus();
 
 const isOffline = process.argv.includes('--offline');
 const nonFlagArgs = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
@@ -267,116 +270,118 @@ if (isOffline) {
 }
 
 // Online mode: verify with GitHub API
-const cachedRuns = new Map();
-if (process.env.VERIFY_MOCK_RUNS) {
-  try {
-    const parsed = JSON.parse(process.env.VERIFY_MOCK_RUNS);
-    for (const [k, v] of Object.entries(parsed)) {
-      cachedRuns.set(String(k), v);
-    }
-  } catch (e) {
-    console.error('Failed to parse VERIFY_MOCK_RUNS JSON');
-  }
-} else {
-  // Fetch the recent 100 runs in a single call to conserve public rate limit
-  try {
-    const batchRes = execSync(
-      'curl.exe -s -A "UniversalPOS-E2E" "https://api.github.com/repos/imovi/bangladesh-universal-pos-management-system/actions/runs?per_page=100"',
-      { maxBuffer: 10 * 1024 * 1024 }
-    ).toString();
-    const batchData = JSON.parse(batchRes);
-    if (batchData.message && batchData.message.includes('API rate limit exceeded')) {
-      console.error('RATE_LIMITED by GitHub API');
-      process.exit(2);
-    }
-    if (Array.isArray(batchData.workflow_runs)) {
-      for (const r of batchData.workflow_runs) {
-        cachedRuns.set(String(r.id), r);
+async function runOnlineCheck() {
+  const cachedRuns = new Map();
+  if (process.env.VERIFY_MOCK_RUNS) {
+    try {
+      const parsed = JSON.parse(process.env.VERIFY_MOCK_RUNS);
+      for (const [k, v] of Object.entries(parsed)) {
+        cachedRuns.set(String(k), v);
       }
+    } catch (e) {
+      console.error('Failed to parse VERIFY_MOCK_RUNS JSON');
     }
-  } catch (e) {}
-}
-
-let missingRuns = 0;
-let conclusionMismatches = 0;
-
-for (const entry of runEntries) {
-  const { runId, pairedCommit, lineText, writtenConclusion, lineNumber } = entry;
-  try {
-    let data = cachedRuns.get(String(runId));
-    if (!data && !process.env.VERIFY_MOCK_RUNS) {
-      const res = execSync(
-        `curl.exe -s -A "UniversalPOS-E2E" "https://api.github.com/repos/imovi/bangladesh-universal-pos-management-system/actions/runs/${runId}"`,
-        { maxBuffer: 10 * 1024 * 1024 }
-      ).toString();
-      data = JSON.parse(res);
-      if (data.message && data.message.includes('API rate limit exceeded')) {
+  } else {
+    // Fetch the recent 100 runs in a single call to conserve public rate limit
+    try {
+      const batchData = await githubGet('/repos/imovi/bangladesh-universal-pos-management-system/actions/runs?per_page=100');
+      if (batchData.rateLimited || (batchData.message && batchData.message.includes('API rate limit exceeded'))) {
         console.error('RATE_LIMITED by GitHub API');
         process.exit(2);
       }
-    }
+      if (Array.isArray(batchData.workflow_runs)) {
+        for (const r of batchData.workflow_runs) {
+          cachedRuns.set(String(r.id), r);
+        }
+      }
+    } catch (e) {}
+  }
 
-    if (!data || !data.id || String(data.id) !== String(runId)) {
-      console.error(`[FAIL] run ${runId} not found in GitHub Actions API (${data?.message || 'unknown error'})`);
+  let missingRuns = 0;
+  let conclusionMismatches = 0;
+
+  for (const entry of runEntries) {
+    const { runId, pairedCommit, lineText, writtenConclusion, lineNumber } = entry;
+    try {
+      let data = cachedRuns.get(String(runId));
+      if (!data && !process.env.VERIFY_MOCK_RUNS) {
+        data = await githubGet(`/repos/imovi/bangladesh-universal-pos-management-system/actions/runs/${runId}`);
+        if (data.rateLimited || (data.message && data.message.includes('API rate limit exceeded'))) {
+          console.error('RATE_LIMITED by GitHub API');
+          process.exit(2);
+        }
+        if (data && data.id) {
+          cachedRuns.set(String(runId), data);
+        }
+      }
+
+      if (!data || !data.id || String(data.id) !== String(runId)) {
+        console.error(`[FAIL] run ${runId} not found in GitHub Actions API (${data?.message || 'unknown error'})`);
+        missingRuns++;
+        continue;
+      }
+
+      const realConclusion = data.conclusion || (data.status === 'in_progress' ? 'in_progress' : data.status);
+      console.log(`[PASS] run: ${runId} (status: ${data.status}, conclusion: ${data.conclusion})`);
+
+      // Verify Head SHA matches the commit on the same line
+      if (!pairedCommit) {
+        console.error(`[FAIL] Run ${runId} on line ${lineNumber} has no commit hash on the same line`);
+        console.error(`  Line: ${lineText}`);
+      } else {
+        const actualSha = data.head_sha ? data.head_sha.toLowerCase() : '';
+        if (!actualSha.startsWith(pairedCommit.toLowerCase())) {
+          console.error(`[FAIL] Head SHA mismatch for run ${runId} on line ${lineNumber}: expected commit '${pairedCommit}' but run head_sha is '${actualSha.slice(0, 7)}'`);
+          console.error(`  Line: ${lineText}`);
+          shaMismatches++;
+        } else {
+          console.log(`  [PASS] Head SHA matches commit: ${pairedCommit}`);
+        }
+      }
+
+      if (writtenConclusion) {
+        const normalizedReal =
+          realConclusion === 'success'
+            ? 'success'
+            : realConclusion === 'failure'
+            ? 'failure'
+            : realConclusion === 'cancelled'
+            ? 'cancelled'
+            : realConclusion === 'in_progress'
+            ? 'in_progress'
+            : realConclusion;
+
+        if (writtenConclusion !== normalizedReal) {
+          console.error(`[FAIL] Conclusion mismatch for run ${runId}: written '${writtenConclusion}' vs actual '${normalizedReal}'`);
+          console.error(`  Line: ${lineText}`);
+          conclusionMismatches++;
+        } else {
+          console.log(`  [PASS] Conclusion matches: ${writtenConclusion}`);
+        }
+      } else {
+        console.warn(`  [WARN] No explicit conclusion word found on line for run ${runId}: "${lineText}"`);
+      }
+    } catch (err) {
+      console.error(`[FAIL] error verifying run ${runId}:`, err.message);
       missingRuns++;
-      continue;
     }
+  }
 
-    const realConclusion = data.conclusion || (data.status === 'in_progress' ? 'in_progress' : data.status);
-    console.log(`[PASS] run: ${runId} (status: ${data.status}, conclusion: ${data.conclusion})`);
+  console.log('--- Verification Summary ---');
+  console.log(`Missing commits: ${missingCommits}`);
+  console.log(`Missing run IDs: ${missingRuns}`);
+  console.log(`Conclusion mismatches: ${conclusionMismatches}`);
+  console.log(`Head SHA mismatches: ${shaMismatches}`);
 
-    // Verify Head SHA matches the commit on the same line
-    if (!pairedCommit) {
-      console.error(`[FAIL] Run ${runId} on line ${lineNumber} has no commit hash on the same line`);
-      console.error(`  Line: ${lineText}`);
-    } else {
-      const actualSha = data.head_sha ? data.head_sha.toLowerCase() : '';
-      if (!actualSha.startsWith(pairedCommit.toLowerCase())) {
-        console.error(`[FAIL] Head SHA mismatch for run ${runId} on line ${lineNumber}: expected commit '${pairedCommit}' but run head_sha is '${actualSha.slice(0, 7)}'`);
-        console.error(`  Line: ${lineText}`);
-        shaMismatches++;
-      } else {
-        console.log(`  [PASS] Head SHA matches commit: ${pairedCommit}`);
-      }
-    }
-
-    if (writtenConclusion) {
-      const normalizedReal =
-        realConclusion === 'success'
-          ? 'success'
-          : realConclusion === 'failure'
-          ? 'failure'
-          : realConclusion === 'cancelled'
-          ? 'cancelled'
-          : realConclusion === 'in_progress'
-          ? 'in_progress'
-          : realConclusion;
-
-      if (writtenConclusion !== normalizedReal) {
-        console.error(`[FAIL] Conclusion mismatch for run ${runId}: written '${writtenConclusion}' vs actual '${normalizedReal}'`);
-        console.error(`  Line: ${lineText}`);
-        conclusionMismatches++;
-      } else {
-        console.log(`  [PASS] Conclusion matches: ${writtenConclusion}`);
-      }
-    } else {
-      console.warn(`  [WARN] No explicit conclusion word found on line for run ${runId}: "${lineText}"`);
-    }
-  } catch (err) {
-    console.error(`[FAIL] error verifying run ${runId}:`, err.message);
-    missingRuns++;
+  if (missingCommits > 0 || missingRuns > 0 || conclusionMismatches > 0 || shaMismatches > 0) {
+    process.exit(1);
+  } else {
+    console.log('ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.');
+    process.exit(0);
   }
 }
 
-console.log('--- Verification Summary ---');
-console.log(`Missing commits: ${missingCommits}`);
-console.log(`Missing run IDs: ${missingRuns}`);
-console.log(`Conclusion mismatches: ${conclusionMismatches}`);
-console.log(`Head SHA mismatches: ${shaMismatches}`);
-
-if (missingCommits > 0 || missingRuns > 0 || conclusionMismatches > 0 || shaMismatches > 0) {
+runOnlineCheck().catch((err) => {
+  console.error(err.message || err);
   process.exit(1);
-} else {
-  console.log('ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.');
-  process.exit(0);
-}
+});

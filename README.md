@@ -124,3 +124,14 @@ Tests run against a dedicated test database (`universal_pos_test`). The test sui
 >   WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
 > ```
 
+### GitHub API token (optional)
+
+Without sign-in, GitHub allows 60 API requests per hour per IP. `scripts/ci-status.cjs` and `scripts/verify-report-refs.cjs` can use an optional GitHub token to increase the rate limit to 5,000 requests per hour.
+
+1. Install the GitHub CLI and run `gh auth login`.
+2. In PowerShell, for the current window only: `$env:GITHUB_TOKEN = (gh auth token)`.
+3. Run `node scripts/ci-status.cjs <sha>`. The first line should say `GitHub API: authenticated`.
+
+> **Security Note:** A token is a password. Never paste it into a file, a chat or a commit.
+
+

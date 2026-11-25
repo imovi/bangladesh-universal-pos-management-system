@@ -12,8 +12,10 @@
  *  2: RATE_LIMITED
  */
 
-const https = require("https");
 const { execSync } = require("child_process");
+const { githubGet, printAuthStatus } = require("./lib/github-api.cjs");
+
+printAuthStatus();
 
 const inputSha = process.argv[2];
 if (!inputSha) {
@@ -30,34 +32,14 @@ try {
 
 const shortSha = fullSha.slice(0, 7);
 
-const url = `https://api.github.com/repos/imovi/bangladesh-universal-pos-management-system/actions/runs?head_sha=${fullSha}`;
+async function main() {
+  const url = `/repos/imovi/bangladesh-universal-pos-management-system/actions/runs?head_sha=${fullSha}`;
 
-const options = {
-  headers: {
-    "User-Agent": "CI-Status-Mechanical",
-    Accept: "application/vnd.github.v3+json",
-  },
-};
+  try {
+    const json = await githubGet(url);
 
-https.get(url, options, (res) => {
-  let data = "";
-
-  res.on("data", (chunk) => {
-    data += chunk;
-  });
-
-  res.on("end", () => {
-    let json;
-    try {
-      json = JSON.parse(data);
-    } catch {
-      console.error("Failed to parse API response JSON");
-      process.exit(1);
-    }
-
-    if (json.message && json.message.includes("API rate limit exceeded")) {
-      const reset = res.headers["x-ratelimit-reset"];
-      console.log(`RATE_LIMITED reset=${reset || "unknown"}`);
+    if (json.rateLimited || (json.message && json.message.includes("API rate limit exceeded"))) {
+      console.log(`RATE_LIMITED reset=${json.reset || "unknown"}`);
       process.exit(2);
     }
 
@@ -73,28 +55,25 @@ https.get(url, options, (res) => {
 
     if (runs.length === 0) {
       // Fallback: query recent runs without head_sha filter in case indexing is delayed
-      const fallbackUrl = `https://api.github.com/repos/imovi/bangladesh-universal-pos-management-system/actions/runs?per_page=10`;
-      https.get(fallbackUrl, options, (fbRes) => {
-        let fbData = "";
-        fbRes.on("data", (chunk) => { fbData += chunk; });
-        fbRes.on("end", () => {
-          try {
-            const fbJson = JSON.parse(fbData);
-            const matched = (fbJson.workflow_runs || []).filter(
-              (r) => r.head_sha && (r.head_sha === fullSha || r.head_sha.startsWith(shortSha))
-            );
-            if (matched.length > 0) {
-              for (const r of matched) {
-                console.log(`${r.id} ${shortSha} ${r.status || "unknown"} ${r.conclusion || "in_progress"}`);
-              }
-              process.exit(0);
-            }
-          } catch {}
-          console.log(`NO_RUNS_FOUND ${shortSha}`);
-          process.exit(0);
-        });
-      });
-      return;
+      const fallbackUrl = `/repos/imovi/bangladesh-universal-pos-management-system/actions/runs?per_page=10`;
+      const fbJson = await githubGet(fallbackUrl);
+
+      if (fbJson.rateLimited || (fbJson.message && fbJson.message.includes("API rate limit exceeded"))) {
+        console.log(`RATE_LIMITED reset=${fbJson.reset || "unknown"}`);
+        process.exit(2);
+      }
+
+      const matched = (fbJson.workflow_runs || []).filter(
+        (r) => r.head_sha && (r.head_sha === fullSha || r.head_sha.startsWith(shortSha))
+      );
+      if (matched.length > 0) {
+        for (const r of matched) {
+          console.log(`${r.id} ${shortSha} ${r.status || "unknown"} ${r.conclusion || "in_progress"}`);
+        }
+        process.exit(0);
+      }
+      console.log(`NO_RUNS_FOUND ${shortSha}`);
+      process.exit(0);
     }
 
     for (const r of runs) {
@@ -103,8 +82,11 @@ https.get(url, options, (res) => {
       const conclusion = r.conclusion || "in_progress";
       console.log(`${runId} ${shortSha} ${status} ${conclusion}`);
     }
-  });
-}).on("error", (err) => {
-  console.error(`Network error: ${err.message}`);
-  process.exit(1);
-});
+    process.exit(0);
+  } catch (err) {
+    console.error(`Network error: ${err.message}`);
+    process.exit(1);
+  }
+}
+
+main();

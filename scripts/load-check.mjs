@@ -484,6 +484,11 @@ async function main() {
   console.log(" Target: Query execution in under 2 seconds (< 2,000ms).");
   console.log("==================================================================");
 
+  console.log(`[SEED] Clearing any sales from earlier scenarios so Scenario 3 measures exactly the 50,000 seeded sales...`);
+  await prisma.salePayment.deleteMany({ where: { sale: { tenantId } } });
+  await prisma.saleItem.deleteMany({ where: { sale: { tenantId } } });
+  await prisma.sale.deleteMany({ where: { tenantId } });
+
   console.log(`[SEED] Seeding 50,000 synthetic sales directly into database via bulk insert...`);
   const seedBatchSize = 5000;
   const now = process.env.LOAD_CHECK_FAKENOW ? new Date(process.env.LOAD_CHECK_FAKENOW).getTime() : Date.now();

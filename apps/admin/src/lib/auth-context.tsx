@@ -154,17 +154,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Initial session restoration on mount
   useEffect(() => {
-    let isMounted = true;
+    let isActive = true;
     async function restoreSession() {
       setIsLoading(true);
       const token = await executeRefreshToken();
-      if (token && isMounted) {
+      if (token && isActive) {
         await fetchUserProfile(token);
       } else if (typeof window !== "undefined" && !navigator.onLine) {
         // Offline session restoration from IndexedDB
         try {
           const cachedUser = await db.session.get("currentUser");
-          if (cachedUser && cachedUser.value && isMounted) {
+          if (cachedUser && cachedUser.value && isActive) {
             setUser(cachedUser.value);
             const cachedBranch = await db.session.get("currentBranch");
             if (cachedBranch?.value) {
@@ -173,13 +173,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } catch {}
       }
-      if (isMounted) {
+      if (isActive) {
         setIsLoading(false);
       }
     }
     restoreSession();
     return () => {
-      isMounted = false;
+      isActive = false;
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     };
   }, []);

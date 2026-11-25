@@ -281,11 +281,6 @@ export default function PosPage() {
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const [selectedProductForVariants, setSelectedProductForVariants] = useState<PosProduct | null>(null);
   const [isWideScreen, setIsWideScreen] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1813,8 +1808,6 @@ export default function PosPage() {
 
   return (
     <div
-      data-testid="pos-root"
-      data-hydrated={isMounted ? "true" : "false"}
       className="flex flex-col h-screen w-screen overflow-hidden bg-background"
     >
       {/* 1. POS Top Bar */}
@@ -1876,9 +1869,8 @@ export default function PosPage() {
             <button
               type="button"
               data-testid="cashier-name-block"
-              disabled={!isMounted}
               onClick={() => setIsCashierMenuOpen((prev) => !prev)}
-              className="flex items-center gap-1 sm:gap-1.5 h-8 px-2 sm:px-2.5 rounded-full border text-xs font-medium w-full max-w-full transition-colors bg-muted/40 hover:bg-muted/70 border-border/60 text-left min-w-0 shrink overflow-hidden disabled:opacity-50 disabled:pointer-events-none"
+              className="flex items-center gap-1 sm:gap-1.5 h-8 px-2 sm:px-2.5 rounded-full border text-xs font-medium w-full max-w-full transition-colors bg-muted/40 hover:bg-muted/70 border-border/60 text-left min-w-0 shrink overflow-hidden"
               title={`${activeShift ? (locale === "bn" ? "শিফট চলমান" : "Shift Open") : (locale === "bn" ? "শিফট বন্ধ" : "Shift Closed")} · ${user.name}`}
             >
               {activeShift ? (

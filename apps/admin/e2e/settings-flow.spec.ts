@@ -115,9 +115,6 @@ test.describe("Milestone A8: Settings, Staff, Roles & Audit Flow", () => {
 
     // Verify 5% discount limit on POS screen (inside cashier menu)
     if (page.url().includes("/pos")) {
-      await expect(page.locator('[data-testid="pos-root"]')).toHaveAttribute("data-hydrated", "true", {
-        timeout: 10000,
-      });
       const switchBtn = page.locator('button:has-text("অন্য রেজিস্টার বেছে নিন"), [data-testid="switch-register-btn"]');
       if (await switchBtn.waitFor({ state: "visible", timeout: 4000 }).then(() => true).catch(() => false)) {
         await switchBtn.click();

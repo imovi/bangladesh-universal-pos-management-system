@@ -223,4 +223,34 @@ test.describe("Milestone C1: Capture Required Screenshots", () => {
     await expect(page.locator("h1")).toBeVisible({ timeout: 10000 });
     await page.screenshot({ path: path.join(screenshotsDir, "sale-detail-with-return-history-desktop-bn.png") });
   });
+
+  test.afterAll(async ({ request }) => {
+    try {
+      const loginRes = await request.post("http://localhost:4000/api/v1/auth/login", {
+        data: {
+          tenantSlug: "artisan-apparel",
+          email: "owner@artisan.com",
+          password: "Password123!",
+        },
+      });
+      if (loginRes.ok()) {
+        const token = (await loginRes.json()).data?.accessToken;
+        if (token) {
+          const shiftsRes = await request.get("http://localhost:4000/api/v1/shifts?status=open&limit=100", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (shiftsRes.ok()) {
+            const shiftsData = await shiftsRes.json();
+            const openShifts = Array.isArray(shiftsData.data) ? shiftsData.data : (shiftsData.data?.items || []);
+            for (const s of openShifts) {
+              await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
+                headers: { Authorization: `Bearer ${token}` },
+                data: { closingCashMinor: Number(s.openingCashMinor || 50000) },
+              }).catch(() => {});
+            }
+          }
+        }
+      }
+    } catch {}
+  });
 });

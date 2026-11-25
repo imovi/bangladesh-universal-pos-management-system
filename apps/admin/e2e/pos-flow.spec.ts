@@ -12,35 +12,51 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
   test.use({ viewport: { width: 1366, height: 768 } });
 
   async function cleanupLingeringShifts(request: any) {
-    try {
-      const loginRes = await request.post("http://localhost:4000/api/v1/auth/login", {
-        data: {
-          tenantSlug: "artisan-apparel",
-          email: "owner@artisan.com",
-          password: "Password123!",
-        },
+    const loginRes = await request.post("http://localhost:4000/api/v1/auth/login", {
+      data: {
+        tenantSlug: "artisan-apparel",
+        email: "owner@artisan.com",
+        password: "Password123!",
+      },
+    });
+    if (!loginRes.ok()) {
+      const errBody = await loginRes.text();
+      throw new Error(`[cleanupLingeringShifts] Login failed with status ${loginRes.status()}: ${errBody}`);
+    }
+    const loginData = await loginRes.json();
+    const token = loginData.data?.accessToken;
+    if (!token) {
+      throw new Error(`[cleanupLingeringShifts] Missing accessToken in login response: ${JSON.stringify(loginData)}`);
+    }
+
+    while (true) {
+      const shiftsRes = await request.get("http://localhost:4000/api/v1/shifts?status=open&limit=100", {
+        headers: { Authorization: `Bearer ${token}` },
       });
-      if (loginRes.ok()) {
-        const loginData = await loginRes.json();
-        const token = loginData.data?.accessToken;
-        if (token) {
-          const shiftsRes = await request.get("http://localhost:4000/api/v1/shifts?status=open", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (shiftsRes.ok()) {
-            const shiftsData = await shiftsRes.json();
-            const openShifts = Array.isArray(shiftsData.data) ? shiftsData.data : (shiftsData.data?.items || []);
-            for (const s of openShifts) {
-              await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
-                headers: { Authorization: `Bearer ${token}` },
-                data: { closingCashMinor: Number(s.openingCashMinor || 50000) },
-              }).catch(() => {});
-            }
-          }
-        }
+      if (!shiftsRes.ok()) {
+        const errBody = await shiftsRes.text();
+        throw new Error(`[cleanupLingeringShifts] List open shifts failed with status ${shiftsRes.status()}: ${errBody}`);
       }
-    } catch {
-      // Ignore if offline
+
+      const shiftsData = await shiftsRes.json();
+      const openShifts = Array.isArray(shiftsData.data) ? shiftsData.data : (shiftsData.data?.items || []);
+      if (openShifts.length === 0) break;
+
+      console.log(`[cleanupLingeringShifts] found ${openShifts.length} open shift(s)`);
+
+      for (const s of openShifts) {
+        const closeRes = await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
+          headers: { Authorization: `Bearer ${token}` },
+          data: {
+            closingCashMinor: Number(s.openingCashMinor || 50000),
+          },
+        });
+        if (!closeRes.ok()) {
+          const errBody = await closeRes.text();
+          throw new Error(`[cleanupLingeringShifts] Close shift ${s.id} failed with status ${closeRes.status()}: ${errBody}`);
+        }
+        console.log(`[cleanupLingeringShifts] closed shift ${s.id}`);
+      }
     }
   }
 
@@ -49,6 +65,10 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
       fs.mkdirSync(screenshotsDir, { recursive: true });
     }
     // Clean up any lingering shifts from previous tests to guarantee pristine starting state
+    await cleanupLingeringShifts(request);
+  });
+
+  test.afterAll(async ({ request }) => {
     await cleanupLingeringShifts(request);
   });
 
@@ -65,18 +85,6 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
     // Requirement: Cashier lands on /pos directly after sign-in
     await page.waitForURL("**/pos", { timeout: 15000 });
     expect(page.url()).toContain("/pos");
-
-    let cdpClient: any = null;
-    if (process.env.CPU_THROTTLE) {
-      try {
-        cdpClient = await page.context().newCDPSession(page);
-        await cdpClient.send("Emulation.setCPUThrottlingRate", { rate: Number(process.env.CPU_THROTTLE) });
-      } catch {}
-    }
-
-    await expect(page.locator('[data-testid="pos-root"]')).toHaveAttribute("data-hydrated", "true", {
-      timeout: 40000,
-    });
 
     // Handle shift in use dialog by switching register if needed
     const switchBtn = page.locator('button:has-text("অন্য রেজিস্টার বেছে নিন"), [data-testid="switch-register-btn"]');
@@ -98,12 +106,6 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
     await expect(page.locator("text=5%")).toBeVisible({ timeout: 5000 });
     await cashierBlock.click();
     await expect(cashierDropdown).toBeHidden({ timeout: 5000 });
-
-    if (cdpClient) {
-      try {
-        await cdpClient.send("Emulation.setCPUThrottlingRate", { rate: 1 });
-      } catch {}
-    }
 
     // Open shift if closed
     const confirmBtn = page.locator('[data-testid="confirm-open-shift-button"]');

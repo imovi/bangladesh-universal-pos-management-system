@@ -281,6 +281,11 @@ export default function PosPage() {
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const [selectedProductForVariants, setSelectedProductForVariants] = useState<PosProduct | null>(null);
   const [isWideScreen, setIsWideScreen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1807,7 +1812,11 @@ export default function PosPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-background">
+    <div
+      data-testid="pos-root"
+      data-hydrated={isMounted ? "true" : "false"}
+      className="flex flex-col h-screen w-screen overflow-hidden bg-background"
+    >
       {/* 1. POS Top Bar */}
       <header className="h-14 border-b border-border bg-card px-2.5 sm:px-4 flex items-center justify-between shrink-0 select-none overflow-hidden flex-nowrap gap-2">
         {/* Left Zone: Shop, Branch, Register */}
@@ -1867,8 +1876,9 @@ export default function PosPage() {
             <button
               type="button"
               data-testid="cashier-name-block"
+              disabled={!isMounted}
               onClick={() => setIsCashierMenuOpen((prev) => !prev)}
-              className="flex items-center gap-1 sm:gap-1.5 h-8 px-2 sm:px-2.5 rounded-full border text-xs font-medium w-full max-w-full transition-colors bg-muted/40 hover:bg-muted/70 border-border/60 text-left min-w-0 shrink overflow-hidden"
+              className="flex items-center gap-1 sm:gap-1.5 h-8 px-2 sm:px-2.5 rounded-full border text-xs font-medium w-full max-w-full transition-colors bg-muted/40 hover:bg-muted/70 border-border/60 text-left min-w-0 shrink overflow-hidden disabled:opacity-50 disabled:pointer-events-none"
               title={`${activeShift ? (locale === "bn" ? "শিফট চলমান" : "Shift Open") : (locale === "bn" ? "শিফট বন্ধ" : "Shift Closed")} · ${user.name}`}
             >
               {activeShift ? (

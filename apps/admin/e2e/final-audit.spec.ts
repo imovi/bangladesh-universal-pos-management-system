@@ -94,6 +94,7 @@ test.describe("Milestone A9: Final Hardening, WCAG 2.2 AA Audit & Responsive Scr
     // B. Login and test modal dialog keyboard accessibility (Esc dismiss)
     await loginAsOwner(page);
     await page.goto("/settings/branches");
+    await expect(page.locator('[data-testid="create-branch-button"]')).toBeVisible({ timeout: 10000 });
     await page.click('[data-testid="create-branch-button"]');
     await expect(page.locator('[role="dialog"]')).toBeVisible();
     await page.keyboard.press("Escape");

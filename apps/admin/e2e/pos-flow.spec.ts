@@ -11,11 +11,7 @@ const screenshotsDir = path.resolve(
 test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
   test.use({ viewport: { width: 1366, height: 768 } });
 
-  test.beforeAll(async ({ request }) => {
-    if (!fs.existsSync(screenshotsDir)) {
-      fs.mkdirSync(screenshotsDir, { recursive: true });
-    }
-    // Clean up any lingering shifts from previous tests to guarantee pristine starting state
+  async function cleanupLingeringShifts(request: any) {
     try {
       const loginRes = await request.post("http://localhost:4000/api/v1/auth/login", {
         data: {
@@ -46,6 +42,14 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
     } catch {
       // Ignore if offline
     }
+  }
+
+  test.beforeAll(async ({ request }) => {
+    if (!fs.existsSync(screenshotsDir)) {
+      fs.mkdirSync(screenshotsDir, { recursive: true });
+    }
+    // Clean up any lingering shifts from previous tests to guarantee pristine starting state
+    await cleanupLingeringShifts(request);
   });
 
   test("Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit", async ({
@@ -62,19 +66,43 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
     await page.waitForURL("**/pos", { timeout: 15000 });
     expect(page.url()).toContain("/pos");
 
-    // Check discount limit display (5% inside cashier menu pill)
-    const cashierBlock = page.locator('[data-testid="cashier-name-block"]');
-    await cashierBlock.click();
-    await expect(page.locator('[data-testid="cashier-menu-dropdown"]')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator("text=5%")).toBeVisible({ timeout: 5000 });
-    await cashierBlock.click();
+    let cdpClient: any = null;
+    if (process.env.CPU_THROTTLE) {
+      try {
+        cdpClient = await page.context().newCDPSession(page);
+        await cdpClient.send("Emulation.setCPUThrottlingRate", { rate: Number(process.env.CPU_THROTTLE) });
+      } catch {}
+    }
+
+    await expect(page.locator('[data-testid="pos-root"]')).toHaveAttribute("data-hydrated", "true", {
+      timeout: 40000,
+    });
 
     // Handle shift in use dialog by switching register if needed
     const switchBtn = page.locator('button:has-text("অন্য রেজিস্টার বেছে নিন"), [data-testid="switch-register-btn"]');
     if (await switchBtn.waitFor({ state: "visible", timeout: 4000 }).then(() => true).catch(() => false)) {
       await switchBtn.click();
       await expect(switchBtn).toBeHidden({ timeout: 5000 });
-      await page.waitForTimeout(500);
+      await expect(
+        page.locator('[data-testid="register-select"], [data-testid="open-shift-button"], [data-testid="confirm-open-shift-button"]')
+      ).toBeVisible({ timeout: 5000 });
+    }
+
+    // Check discount limit display (5% inside cashier menu pill)
+    const cashierBlock = page.locator('[data-testid="cashier-name-block"]');
+    await expect(cashierBlock).toBeVisible({ timeout: 20000 });
+    await expect(cashierBlock).toBeEnabled({ timeout: 20000 });
+    await cashierBlock.click();
+    const cashierDropdown = page.locator('[data-testid="cashier-menu-dropdown"]');
+    await expect(cashierDropdown).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("text=5%")).toBeVisible({ timeout: 5000 });
+    await cashierBlock.click();
+    await expect(cashierDropdown).toBeHidden({ timeout: 5000 });
+
+    if (cdpClient) {
+      try {
+        await cdpClient.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+      } catch {}
     }
 
     // Open shift if closed
@@ -121,8 +149,13 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
       await closeShiftBtn.click();
       await page.fill('[data-testid="counted-cash-input"]', "500");
       await page.click('[data-testid="confirm-close-shift-button"]');
-      await expect(page.locator('[data-testid="shift-closed-success-title"]')).toBeVisible({ timeout: 10000 });
-      await page.waitForTimeout(500);
+      const shiftClosedSummary = page.locator('[data-testid="shift-closed-success-title"]');
+      await expect(shiftClosedSummary).toBeVisible({ timeout: 10000 });
+      const doneBtn = page.locator('[data-testid="done-close-shift-btn"]');
+      if (await doneBtn.isVisible()) {
+        await doneBtn.click();
+        await expect(shiftClosedSummary).toBeHidden({ timeout: 5000 });
+      }
     }
 
     // Sign out
@@ -143,6 +176,7 @@ test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
 
     // Navigate to /pos using the "Start selling" link
     const posLink = page.locator('[data-testid="sidebar-pos-link"], [data-testid="header-pos-link"]').first();
+    await expect(posLink).toBeVisible({ timeout: 10000 });
     await posLink.click();
     await page.waitForURL("**/pos", { timeout: 10000 });
 

@@ -115,17 +115,23 @@ test.describe("Milestone A8: Settings, Staff, Roles & Audit Flow", () => {
 
     // Verify 5% discount limit on POS screen (inside cashier menu)
     if (page.url().includes("/pos")) {
-      const switchBtn = page.locator('[data-testid="switch-register-btn"]');
+      await expect(page.locator('[data-testid="pos-root"]')).toHaveAttribute("data-hydrated", "true", {
+        timeout: 10000,
+      });
+      const switchBtn = page.locator('button:has-text("অন্য রেজিস্টার বেছে নিন"), [data-testid="switch-register-btn"]');
       if (await switchBtn.waitFor({ state: "visible", timeout: 4000 }).then(() => true).catch(() => false)) {
         await switchBtn.click();
         await expect(switchBtn).toBeHidden({ timeout: 5000 });
       }
       const cashierBlock = page.locator('[data-testid="cashier-name-block"]');
+      await expect(cashierBlock).toBeVisible({ timeout: 10000 });
+      await expect(cashierBlock).toBeEnabled({ timeout: 5000 });
       await cashierBlock.click();
       const discountLimitBadge = page.locator('[data-testid="cashier-discount-limit"]');
       await expect(discountLimitBadge).toBeVisible({ timeout: 10000 });
       await expect(discountLimitBadge).toContainText("5%");
       await cashierBlock.click();
+      await expect(page.locator('[data-testid="cashier-menu-dropdown"]')).toBeHidden({ timeout: 5000 });
     }
 
     // Verify restricted pages are blocked (Access Denied)

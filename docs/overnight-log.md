@@ -3630,7 +3630,122 @@ Phase 1F closed at [`31ee28b`](https://github.com/imovi/bangladesh-universal-pos
 
 ---
 
-GitHub token support tooling task closed at [`a8104aa`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/a8104aa), run [45603278701](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45603278701), all three jobs success.
+---
+
+## Flaky cashier menu note
+
+- **Prompt:** `docs/prompts/antigravity-pos-flaky-cashier-menu-note.md`
+- **Failing CI Run:** Run `45598833108` (commit `b19d054`), failed at `e2e/pos-flow.spec.ts:68` in `Run Admin Dashboard E2E tests`:
+  ```text
+  [chromium] › e2e/pos-flow.spec.ts:51:3 › Part C: POS Selling Screen & Register Lifecycle Flow
+    › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+  Error: expect(locator).toBeVisible() failed
+  Locator: locator('[data-testid="cashier-menu-dropdown"]')
+    66 |     const cashierBlock = page.locator('[data-testid="cashier-name-block"]');
+    67 |     await cashierBlock.click();
+  > 68 |     await expect(page.locator('[data-testid="cashier-menu-dropdown"]')).toBeVisible({ timeout: 5000 });
+  ```
+
+### 1. Investigation and Root Cause Analysis
+
+1. **Hydration (Cause 1):** Tested with CPU throttling rate 6 (`Emulation.setCPUThrottlingRate`) across 20 repeats. Did not reproduce test failure (0 failures out of 20). In Next.js App Router, `/pos` renders a full-page loading spinner while `isAuthLoading` is true; `user` is null on SSR, so `cashier-name-block` was not present in raw server HTML. However, to eliminate any hydration race condition on slow devices, client mount gating was added.
+2. **Something Covers the Button (Cause 2 - REAL ROOT CAUSE):** Confirmed and reproduced! When an open shift on Register 1 was left open by another user or prior test (e.g. `offline-selling.spec.ts`), `checkRegisterShift()` in `page.tsx` triggered `ShiftInUseAlert` on mount. This renders a modal overlay with `fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4`, intercepting pointer events. In `e2e/pos-flow.spec.ts`, the switch button handling (`switch-register-btn`) was placed *after* the cashier menu click (lines 73-78), so when `ShiftInUseAlert` mounted, it intercepted clicks intended for `cashier-name-block`.
+   - **Reproduction Failure Output:**
+     ```text
+     Error: locator.click: Test timeout of 60000ms exceeded.
+     Call log:
+       - waiting for locator('[data-testid="cashier-name-block"]')
+       - locator resolved to <button ... data-testid="cashier-name-block">...</button>
+       - attempting click action
+         - waiting for element to be visible, enabled and stable
+         - element is visible, enabled and stable
+         - scrolling into view if needed
+         - done scrolling
+         - <div class="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">...</div> intercepts pointer events
+     ```
+3. **Re-render / Second click (Causes 3 & 4):** Checked and verified no duplicate click handler or double-toggle event fires.
+
+### 2. Fixes Applied in Application and E2E Tests
+
+1. **`apps/admin/src/app/pos/page.tsx`:**
+   - Added `isMounted` state initialized to `false` and set to `true` in `useEffect`.
+   - Added `data-testid="pos-root"` with `data-hydrated={isMounted ? "true" : "false"}` on the POS root element.
+   - Added `disabled={!isMounted}` and `disabled:opacity-50 disabled:pointer-events-none` on `[data-testid="cashier-name-block"]`.
+2. **`apps/admin/e2e/pos-flow.spec.ts`:**
+   - Lines 70-79: Added wait for `[data-testid="pos-root"]` to have `data-hydrated="true"`.
+   - Lines 81-88: Moved `switchBtn` handling (`button:has-text("অন্য রেজিস্টার বেছে নিন"), [data-testid="switch-register-btn"]`) to execute *before* clicking `cashier-name-block`.
+   - Lines 91-94: Added assertions `await expect(cashierBlock).toBeVisible({ timeout: 20000 })` and `await expect(cashierBlock).toBeEnabled({ timeout: 20000 })` before clicking.
+   - Line 100: Added assertion `await expect(cashierDropdown).toBeHidden({ timeout: 5000 })` after second click.
+   - Lines 86-88: Replaced `await page.waitForTimeout(500)` after register switch with explicit wait on register selector / open shift elements.
+   - Lines 144-149: Replaced `await page.waitForTimeout(500)` after shift close with click on `done-close-shift-btn` and assertion `await expect(shiftClosedSummary).toBeHidden({ timeout: 5000 })`.
+   - Line 160: Added `await expect(posLink).toBeVisible({ timeout: 10000 })` before `await posLink.click()`.
+3. **`apps/admin/e2e/final-audit.spec.ts`:**
+   - Line 97: Added `await expect(page.locator('[data-testid="create-branch-button"]')).toBeVisible({ timeout: 10000 })` after `page.goto("/settings/branches")` before clicking.
+4. **`apps/admin/e2e/settings-flow.spec.ts`:**
+   - Lines 118-132: Added wait for `pos-root[data-hydrated="true"]`, handled `switchBtn`, and asserted `cashierBlock` is enabled before clicking.
+
+### 3. Proof and Verification
+
+1. **CPU Throttling Rate 6 Run (`e2e/pos-flow.spec.ts` with `--repeat-each=20`):**
+   ```text
+   Running 20 tests using 1 worker
+
+   [1/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [2/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [3/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [4/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [5/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [6/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [7/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [8/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [9/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [10/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [11/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [12/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [13/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [14/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [15/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [16/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [17/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [18/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [19/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+   [20/20] [chromium] › e2e\pos-flow.spec.ts:55:3 › Part C: POS Selling Screen & Register Lifecycle Flow › Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit
+     20 passed (4.6m)
+   ```
+
+2. **Whole Local E2E Suite Run 1 of 3 (`retries: 0`):**
+   ```text
+   > @universal-pos/admin@0.1.0 test:e2e
+   > playwright test --project=chromium
+
+   Running 161 tests using 1 worker
+   ...
+   [161/161] [chromium] › e2e\transfers-flow.spec.ts:47:3 › Milestone C3: Stock Transfers End-to-End Flow › Full Transfer Lifecycle: Create draft -> Send dispatch -> Partial receive with loss reason -> Check stock & transit
+     161 passed (9.3m)
+   ```
+
+3. **Whole Local E2E Suite Run 2 of 3 (`retries: 0`):**
+   ```text
+   > @universal-pos/admin@0.1.0 test:e2e
+   > playwright test --project=chromium
+
+   Running 161 tests using 1 worker
+   ...
+   [161/161] [chromium] › e2e\transfers-flow.spec.ts:47:3 › Milestone C3: Stock Transfers End-to-End Flow › Full Transfer Lifecycle: Create draft -> Send dispatch -> Partial receive with loss reason -> Check stock & transit
+     161 passed (8.8m)
+   ```
+
+4. **Whole Local E2E Suite Run 3 of 3 (`retries: 0`):**
+   ```text
+   > @universal-pos/admin@0.1.0 test:e2e
+   > playwright test --project=chromium
+
+   Running 161 tests using 1 worker
+   ...
+   [161/161] [chromium] › e2e\transfers-flow.spec.ts:47:3 › Milestone C3: Stock Transfers End-to-End Flow › Full Transfer Lifecycle: Create draft -> Send dispatch -> Partial receive with loss reason -> Check stock & transit
+     161 passed (8.7m)
+   ```
+
 
 
 

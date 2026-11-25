@@ -3543,6 +3543,40 @@ ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
     ```
 - All 161 tests passed on attempt 1 in each run.
 
+#### 4. Initial Commit `adb6568` CI Result (Run `45558946439`)
+- **Commit:** `adb6568` (`fix(ci): fix load-check date range timezone, smoke-prod restarts annotation, disable retries, and untrack sw.js`)
+- CI: `adb6568` → run `45558946439` → completed failure
+- **Jobs API Status for commit `adb6568` (run `45558946439`):**
+  - `test` (job 139017698701): completed success (`161 passed (9.1m)` confirmed via Playwright notice annotation).
+  - `smoke-prod` (job 139023203973): completed success (annotations confirmed `status=running, restarts=0, health=healthy, crond=running (PID 1), daily_dumps=1` and `tableCount=54, tables=[tenants, products, sales] verified`).
+  - `load-check` (job 139023203961): completed failure in step `Run performance and load check` with exit code 1.
+- **Load-Check Failure Analysis:** The public notice annotation for Scenario 3 reported:
+  `{"scenario":3,"name":"sales_summary_report_50k","durationMs":71,"targetMs":2000,"salesCount":50760,"expectedSalesCount":50000,"budgetMet":true,"passed":false}`
+  While `formatBusinessDate(..., "Asia/Dhaka")` successfully brought all 50,000 seeded sales into the 30-day range, the database query also matched 460 sales from Scenario 1 and 300 sales from Scenario 2 created earlier in the same run (50,000 + 460 + 300 = 50,760). Because `expectedSalesCount: 50000` enforced exact equality with seeded sales, `passed` was false.
+
+#### 5. Final Fix Commit `31ee28b` CI Result (All 3 Jobs Success)
+- **Commit:** `31ee28b` (`fix(ci): clear prior scenario sales in load-check before seeding 50k sales`)
+- CI: `31ee28b` → run `45562469861` → completed success
+- **Jobs API Status for commit `31ee28b` (run `45562469861`):**
+  - `test` (job 139029217863): completed success
+  - `smoke-prod` (job 139034729660): completed success
+  - `load-check` (job 139034729715): completed success
+- **Public Job Annotations for commit `31ee28b` (run `45562469861`):**
+  - `test` (job 139029217863):
+    - `161 passed (9.2m)` (with 0 retries in CI!)
+  - `smoke-prod` (job 139034729660):
+    - `status=running, restarts=0, health=healthy, crond=running (PID 1), daily_dumps=1`
+    - `tableCount=54, tables=[tenants, products, sales] verified`
+    - `{"ok":true,"timestamp":"2026-11-25T12:57:08+06:00","filename":"backup_universal_pos_20261125_125708.dump","filePath":"/backups/daily/backup_universal_pos_20261125_125708.dump","sizeBytes":493045,"encrypted":false,"offServerConfigured":false,"offServerWarning":"ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি","warning":"ব্যাকআপ এনক্রিপ্ট করা নেই, তাই সার্ভারের বাইরে পাঠানো হয়নি","checksum":"0c635a9d549600e0c68d4e90f96a339aa80d6eab854407b562699e484f4e4120","tableCount":54}`
+  - `load-check` (job 139034729715):
+    - Scenario 1: `{"scenario":1,"name":"sale_load_10_registers","durationSec":122.38,"throughputReqSec":3.8,"throughput":"3.8 req/s","totalSales":460,"errors":0,"minMs":53,"p50Ms":115,"p95Ms":164,"p99Ms":236,"maxMs":277,"stockExpected":1380,"stockActual":1380,"budgetMet":true,"passed":true}`
+    - Scenario 2: `{"scenario":2,"name":"sync_burst_300_sales","durationSec":2.72,"throughputReqSec":110.3,"throughput":"110.3 req/s","totalSales":300,"expectedSales":300,"errors":0,"dbCount":300,"budgetMet":true,"passed":true}`
+    - Scenario 3: `{"scenario":3,"name":"sales_summary_report_50k","durationMs":45,"targetMs":2000,"salesCount":50000,"expectedSalesCount":50000,"budgetMet":true,"passed":true}`
+
+---
+
+Phase 1F closed at [`31ee28b`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/31ee28b), run [45562469861](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45562469861), all three jobs success.
+
 
 
 

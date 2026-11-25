@@ -1163,6 +1163,8 @@ All issues identified across the Phase 1F follow-up reviews and backup bugs note
 | **Log Verification & Flaky E2E Timeout** | Document prior CI failure, verified 161/161 passing local E2E suite | **Failed** | [`91d472f`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/91d472f) | [45488323826](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45488323826) (`FAILURE`) |
 | **Service Worker Re-tracking & CI Green** | Re-track sw.js per fallback clause, add Playwright github reporter, all 3 CI jobs green | **Completed** | [`eb5070e`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/eb5070e) | [45491700742](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45491700742) (`SUCCESS`) |
 | **Phase 1F Closure & CI Job Verification** | Record all 3 CI jobs success for eb5070e, verify 10 online validator checks | **Completed** | [`4a4a964`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/4a4a964) | [45495091861](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45495091861) (`SUCCESS`) |
+| **Final Fix Note: Timezone Bug & Retries** | Fix Scenario 3 date timezone, smoke-prod restarts annotation, disable retries (`retries: 0`), untrack sw.js | **Completed** | [`adb6568`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/adb6568) | [45558946439](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45558946439) (`FAILURE`) |
+| **Scenario 3 Exact 50k Sales & CI Green** | Clear prior scenario sales in load-check before seeding 50k sales, all 3 CI jobs green | **Completed** | [`31ee28b`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/31ee28b) | [45562469861](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45562469861) (`SUCCESS`) |
 
 ---
 
@@ -1195,30 +1197,30 @@ Developer Workstation (`LOAD_TEST_DURATION_MS=120000`, 10 registers for 2 minute
 {"scenario":3,"name":"sales_summary_report_50k","durationMs":46,"targetMs":2000,"salesCount":50000,"expectedSalesCount":50000,"budgetMet":true,"passed":true}
 ```
 
-CI Runner (`LOAD_TEST_DURATION_MS=120000`, [`aac771c`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/aac771c) → run [45471519979](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45471519979) (`SUCCESS`), job 138729092665):
+CI Runner (`LOAD_TEST_DURATION_MS=120000`, [`31ee28b`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/31ee28b) → run [45562469861](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45562469861) (`SUCCESS`), job 139034729715):
 ```json
-{"scenario":1,"name":"sale_load_10_registers","durationSec":120.59,"throughputReqSec":3.8,"throughput":"3.8 req/s","totalSales":460,"errors":0,"minMs":39,"p50Ms":86,"p95Ms":125,"p99Ms":154,"maxMs":189,"stockExpected":1380,"stockActual":1380,"budgetMet":true,"passed":true}
-{"scenario":2,"name":"sync_burst_300_sales","durationSec":1.97,"throughputReqSec":152.3,"throughput":"152.3 req/s","totalSales":300,"expectedSales":300,"errors":0,"dbCount":300,"budgetMet":true,"passed":true}
-{"scenario":3,"name":"sales_summary_report_50k","durationMs":31,"targetMs":2000,"salesCount":48333,"budgetMet":true,"passed":true}
+{"scenario":1,"name":"sale_load_10_registers","durationSec":122.38,"throughputReqSec":3.8,"throughput":"3.8 req/s","totalSales":460,"errors":0,"minMs":53,"p50Ms":115,"p95Ms":164,"p99Ms":236,"maxMs":277,"stockExpected":1380,"stockActual":1380,"budgetMet":true,"passed":true}
+{"scenario":2,"name":"sync_burst_300_sales","durationSec":2.72,"throughputReqSec":110.3,"throughput":"110.3 req/s","totalSales":300,"expectedSales":300,"errors":0,"dbCount":300,"budgetMet":true,"passed":true}
+{"scenario":3,"name":"sales_summary_report_50k","durationMs":45,"targetMs":2000,"salesCount":50000,"expectedSalesCount":50000,"budgetMet":true,"passed":true}
 ```
 
 | Scenario | Metric | Dev Workstation (i7-11800H, 16 GB) | CI Runner (`ubuntu-latest`, 2 vCPU, 7 GB) | Target Budget | Result |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Scenario 1: Concurrent Sale Load** (10 Registers, 2 min soak) | Total Duration | 120.9s | 120.59s | — | **PASSED** |
+| **Scenario 1: Concurrent Sale Load** (10 Registers, 2 min soak) | Total Duration | 120.9s | 122.38s | — | **PASSED** |
 | | Throughput | 3.7 req/s | 3.8 req/s | — | **PASSED** |
-| | Latency p50 | 118 ms | 86 ms | — | **PASSED** |
-| | Latency p95 | 179 ms | 125 ms | < 400 ms | **PASSED** |
-| | Max Latency | 253 ms | 189 ms | — | **PASSED** |
+| | Latency p50 | 118 ms | 115 ms | — | **PASSED** |
+| | Latency p95 | 179 ms | 164 ms | < 400 ms | **PASSED** |
+| | Max Latency | 253 ms | 277 ms | — | **PASSED** |
 | | HTTP / DB Errors | 0 | 0 | 0 | **PASSED** |
 | | Stock Delta Verification | 1350 / 1350 units | 1380 / 1380 units | Exact | **PASSED** |
-| **Scenario 2: Offline Sync Burst** (300 Queued Sales Burst) | Total Duration | 3.1s | 1.97s | < 120s | **PASSED** |
-| | Throughput | 96.8 req/s | 152.3 req/s | — | **PASSED** |
+| **Scenario 2: Offline Sync Burst** (300 Queued Sales Burst) | Total Duration | 3.1s | 2.72s | < 120s | **PASSED** |
+| | Throughput | 96.8 req/s | 110.3 req/s | — | **PASSED** |
 | | Latency Average | not measured | not measured | — | — |
 | | Latency p95 | not measured | not measured | — | — |
 | | Deadlocks / DB Errors | 0 | 0 | 0 | **PASSED** |
 | | Sales in PostgreSQL (`is_offline = true`) | 300 / 300 | 300 / 300 | 300 | **PASSED** |
-| **Scenario 3: 50,000 Sales 30-Day Aggregation Report** | Query Execution Duration | 46 ms | 31 ms | < 2,000 ms | **PASSED** |
-| | Sales Count Aggregated | 50,000 records | 48,333 records | 50,000+ | **PASSED** |
+| **Scenario 3: 50,000 Sales 30-Day Aggregation Report** | Query Execution Duration | 46 ms | 45 ms | < 2,000 ms | **PASSED** |
+| | Sales Count Aggregated | 50,000 records | 50,000 records | 50,000+ | **PASSED** |
 
 \* Note: Scenario 1 total duration target is — (continuous 2-minute soak test; script assertions verify zero HTTP/database errors and exact stock delta).
 
@@ -1241,9 +1243,9 @@ CI Runner (`LOAD_TEST_DURATION_MS=120000`, [`aac771c`](https://github.com/imovi/
 4. **Report Numbers from Dev Workstation (Fixed in [`c5ec4e1`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/c5ec4e1)):** Corrected hardware specifications to 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz, 16 GB RAM, and separated developer numbers from official CI baselines.
 5. **Initial Backup Container Race Condition on Fresh Install (Fixed in [`3711d03`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/3711d03)):** On a fresh Docker volume, the `backup` container previously depended only on `postgres: condition: service_healthy`. Because PostgreSQL reports healthy before migrations finish running, `backup.sh` executed against an empty database, writing an empty 3,677-byte dump with 0 `TABLE DATA` entries while recording `ok: true`. Resolved by adding `migrate: condition: service_completed_successfully` to `backup.depends_on` in `deploy/docker-compose.prod.yml`, and updating `scripts/backup.sh` to verify `TABLE DATA` count > 0 using `pg_restore -l`.
 6. **Earlier Load Numbers Did Not Match Script Output (Fixed in [`e3234f9`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/e3234f9)):** Earlier load numbers in the report and log were edited from batch-mode values rather than copied directly from raw script output; commit [`e3234f9`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/e3234f9) configured `LOAD_TEST_DURATION_MS: 120000` in CI, eliminated formula mismatches, and recorded authentic script JSON outputs.
-7. **Scenario 3 UTC Date Bug:** CI ran between 18:00 and 24:00 UTC, which is the next calendar day in Asia/Dhaka (+06:00). The query used UTC dates, excluding sales dated "now", and returned 48,333 instead of 50,000. Fixed in `scripts/load-check.mjs` by using `formatBusinessDate` in tenant timezone `Asia/Dhaka`, removing fallbacks, asserting `salesCount`, and requiring `salesCount === 50000 && durationMs < 2000`.
-8. **Empty `restarts=` in Smoke-Prod Annotation:** In `.github/workflows/ci.yml`, the notice annotation printed `$RESTARTS` instead of `$RESTART_COUNT`. Fixed by replacing `$RESTARTS` with `$RESTART_COUNT`.
-9. **CI Retries Hiding Potential Flakes:** `apps/admin/playwright.config.ts` had `retries: process.env.CI ? 2 : 0`. Setting `retries: 0` in CI ensures tests fail immediately on any flake. Disabling retries and verifying locally confirmed the 161 tests pass cleanly on attempt 1 across 3 consecutive runs.
+7. **Scenario 3 UTC Date Bug (Fixed in [`adb6568`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/adb6568) & [`31ee28b`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/31ee28b)):** CI ran between 18:00 and 24:00 UTC, which is the next calendar day in Asia/Dhaka (+06:00). The query previously used UTC dates, excluding sales dated "now", and returned 48,333 instead of 50,000. Fixed in `scripts/load-check.mjs` by using `formatBusinessDate` in tenant timezone `Asia/Dhaka`, removing fallbacks, asserting `salesCount`, and requiring `salesCount === 50000 && durationMs < 2000`, with prior scenario sales cleared to measure exactly 50,000 seeded sales.
+8. **Empty `restarts=` in Smoke-Prod Annotation (Fixed in [`adb6568`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/adb6568)):** In `.github/workflows/ci.yml`, the notice annotation printed `$RESTARTS` instead of `$RESTART_COUNT`. Fixed by replacing `$RESTARTS` with `$RESTART_COUNT`.
+9. **CI Retries Hiding Potential Flakes (Fixed in [`adb6568`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/adb6568)):** `apps/admin/playwright.config.ts` had `retries: process.env.CI ? 2 : 0`. Setting `retries: 0` in CI ensures tests fail immediately on any flake. Disabling retries and verifying locally confirmed the 161 tests pass cleanly on attempt 1 across 3 consecutive runs, and all 161 tests passed cleanly with 0 retries in CI.
 
 ---
 
@@ -1267,5 +1269,5 @@ CI Runner (`LOAD_TEST_DURATION_MS=120000`, [`aac771c`](https://github.com/imovi/
 
 ---
 
-Phase 1F closed at [`4a4a964`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/4a4a964), run [45495091861](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45495091861), all three jobs success.
+Phase 1F closed at [`31ee28b`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/31ee28b), run [45562469861](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45562469861), all three jobs success.
 

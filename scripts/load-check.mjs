@@ -14,6 +14,7 @@ import { PrismaClient } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 import { v7 as uuidv7 } from "uuid";
 import crypto from "crypto";
+import { formatBusinessDate } from "@universal-pos/shared";
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
@@ -220,130 +221,138 @@ async function main() {
   console.log(" Target: p95 < 400ms, 0 errors, stock and shift totals exact.");
   console.log("==================================================================");
 
-  const TARGET_DURATION_MS = process.env.LOAD_TEST_DURATION_MS
-    ? parseInt(process.env.LOAD_TEST_DURATION_MS, 10)
-    : 120000; // 2 minutes (120 seconds)
-
-  const latencies = [];
+  let scenario1Passed = true;
+  let p95 = 0;
   let errorCount = 0;
-  let totalSalesMade = 0;
-  let round = 0;
-  const startLoadTime = Date.now();
+  let actualQtyDelta = 0;
 
-  while (Date.now() - startLoadTime < TARGET_DURATION_MS) {
-    round++;
-    const roundPromises = registers.map(async (reg, idx) => {
-      const shift = shifts[idx];
-      const saleId = uuidv7();
-      const t0 = Date.now();
+  if (process.env.SCENARIO_ONLY !== "3") {
+    const TARGET_DURATION_MS = process.env.LOAD_TEST_DURATION_MS
+      ? parseInt(process.env.LOAD_TEST_DURATION_MS, 10)
+      : 120000; // 2 minutes (120 seconds)
 
-      try {
-        await apiRequest("/sales", {
-          token,
-          method: "POST",
-          headers: { "Idempotency-Key": saleId },
-          body: JSON.stringify({
-            id: saleId,
-            branchId,
-            shiftId: shift.id,
-            customerId: null,
-            subtotalMinor: 470000,
-            discountMinor: 47000,
-            taxMinor: 0,
-            totalMinor: 423000,
-            paidMinor: 423000,
-            dueMinor: 0,
-            changeMinor: 0,
-            expectedTotalMinor: 423000,
-            isOffline: false,
-            items: [
-              { variantId: variant1.id, quantity: 1, unitPriceMinor: 150000, discount: { type: "percent", percentBp: 1000 } },
-              { variantId: variant2.id, quantity: 1, unitPriceMinor: 120000, discount: { type: "percent", percentBp: 1000 } },
-              { variantId: variant3.id, quantity: 1, unitPriceMinor: 200000, discount: { type: "percent", percentBp: 1000 } },
-            ],
-            payments: [
-              { paymentMethod: "cash", amountMinor: 223000 },
-              { paymentMethod: "bkash", amountMinor: 200000, transactionRef: `TRX-${round}-${idx}` },
-            ],
-          }),
-        });
+    const latencies = [];
+    let totalSalesMade = 0;
+    let round = 0;
+    const startLoadTime = Date.now();
 
-        const elapsed = Date.now() - t0;
-        latencies.push(elapsed);
-        totalSalesMade++;
-      } catch (err) {
-        errorCount++;
-        console.error(`  [ERR] Register ${reg.code} sale failed: ${err.message}`);
+    while (Date.now() - startLoadTime < TARGET_DURATION_MS) {
+      round++;
+      const roundPromises = registers.map(async (reg, idx) => {
+        const shift = shifts[idx];
+        const saleId = uuidv7();
+        const t0 = Date.now();
+
+        try {
+          await apiRequest("/sales", {
+            token,
+            method: "POST",
+            headers: { "Idempotency-Key": saleId },
+            body: JSON.stringify({
+              id: saleId,
+              branchId,
+              shiftId: shift.id,
+              customerId: null,
+              subtotalMinor: 470000,
+              discountMinor: 47000,
+              taxMinor: 0,
+              totalMinor: 423000,
+              paidMinor: 423000,
+              dueMinor: 0,
+              changeMinor: 0,
+              expectedTotalMinor: 423000,
+              isOffline: false,
+              items: [
+                { variantId: variant1.id, quantity: 1, unitPriceMinor: 150000, discount: { type: "percent", percentBp: 1000 } },
+                { variantId: variant2.id, quantity: 1, unitPriceMinor: 120000, discount: { type: "percent", percentBp: 1000 } },
+                { variantId: variant3.id, quantity: 1, unitPriceMinor: 200000, discount: { type: "percent", percentBp: 1000 } },
+              ],
+              payments: [
+                { paymentMethod: "cash", amountMinor: 223000 },
+                { paymentMethod: "bkash", amountMinor: 200000, transactionRef: `TRX-${round}-${idx}` },
+              ],
+            }),
+          });
+
+          const elapsed = Date.now() - t0;
+          latencies.push(elapsed);
+          totalSalesMade++;
+        } catch (err) {
+          errorCount++;
+          console.error(`  [ERR] Register ${reg.code} sale failed: ${err.message}`);
+        }
+      });
+
+      await Promise.all(roundPromises);
+      if (round % 5 === 0) {
+        const elapsedSec = ((Date.now() - startLoadTime) / 1000).toFixed(0);
+        console.log(`  Completed round ${round} (${totalSalesMade} sales committed, ${elapsedSec}s elapsed)...`);
       }
-    });
-
-    await Promise.all(roundPromises);
-    if (round % 5 === 0) {
-      const elapsedSec = ((Date.now() - startLoadTime) / 1000).toFixed(0);
-      console.log(`  Completed round ${round} (${totalSalesMade} sales committed, ${elapsedSec}s elapsed)...`);
+      // Pace: ~3 seconds per sale across 10 registers
+      await sleep(2500);
     }
-    // Pace: ~3 seconds per sale across 10 registers
-    await sleep(2500);
-  }
 
-  const loadDurationSec = ((Date.now() - startLoadTime) / 1000).toFixed(2);
-  latencies.sort((a, b) => a - b);
-  const p50 = latencies[Math.floor(latencies.length * 0.5)] || 0;
-  const p95 = latencies[Math.floor(latencies.length * 0.95)] || 0;
-  const p99 = latencies[Math.floor(latencies.length * 0.99)] || 0;
-  const minLatency = latencies[0] || 0;
-  const maxLatency = latencies[latencies.length - 1] || 0;
+    const loadDurationSec = ((Date.now() - startLoadTime) / 1000).toFixed(2);
+    latencies.sort((a, b) => a - b);
+    const p50 = latencies[Math.floor(latencies.length * 0.5)] || 0;
+    p95 = latencies[Math.floor(latencies.length * 0.95)] || 0;
+    const p99 = latencies[Math.floor(latencies.length * 0.99)] || 0;
+    const minLatency = latencies[0] || 0;
+    const maxLatency = latencies[latencies.length - 1] || 0;
 
-  console.log("\n--- SCENARIO 1 RESULTS ---");
-  console.log(`Total Sales Processed: ${totalSalesMade}`);
-  console.log(`Total Errors:          ${errorCount}`);
-  console.log(`Total Duration:        ${loadDurationSec}s`);
-  console.log(`Throughput:            ${(totalSalesMade / loadDurationSec).toFixed(1)} req/s`);
-  console.log(`Latency Min:           ${minLatency}ms`);
-  console.log(`Latency p50:           ${p50}ms`);
-  console.log(`Latency p95:           ${p95}ms (Target: < 400ms)`);
-  console.log(`Latency p99:           ${p99}ms`);
-  console.log(`Latency Max:           ${maxLatency}ms`);
+    console.log("\n--- SCENARIO 1 RESULTS ---");
+    console.log(`Total Sales Processed: ${totalSalesMade}`);
+    console.log(`Total Errors:          ${errorCount}`);
+    console.log(`Total Duration:        ${loadDurationSec}s`);
+    console.log(`Throughput:            ${(totalSalesMade / loadDurationSec).toFixed(1)} req/s`);
+    console.log(`Latency Min:           ${minLatency}ms`);
+    console.log(`Latency p50:           ${p50}ms`);
+    console.log(`Latency p95:           ${p95}ms (Target: < 400ms)`);
+    console.log(`Latency p99:           ${p99}ms`);
+    console.log(`Latency Max:           ${maxLatency}ms`);
 
-  // Verify stock movements and shift totals add up exactly in PostgreSQL
-  const stockCheck = await prisma.$queryRaw`
-    SELECT sum(qty_delta)::numeric as net_qty
-    FROM stock_movements
-    WHERE tenant_id = ${tenantId}::uuid AND lower(type) = 'sale'
-  `;
-  const expectedQtySold = totalSalesMade * 3;
-  const actualQtyDelta = Math.abs(Number(stockCheck[0]?.net_qty ?? 0));
-  console.log(`Stock Movement Check: Expected -${expectedQtySold} units, DB recorded -${actualQtyDelta} units.`);
+    // Verify stock movements and shift totals add up exactly in PostgreSQL
+    const stockCheck = await prisma.$queryRaw`
+      SELECT sum(qty_delta)::numeric as net_qty
+      FROM stock_movements
+      WHERE tenant_id = ${tenantId}::uuid AND lower(type) = 'sale'
+    `;
+    const expectedQtySold = totalSalesMade * 3;
+    actualQtyDelta = Math.abs(Number(stockCheck[0]?.net_qty ?? 0));
+    console.log(`Stock Movement Check: Expected -${expectedQtySold} units, DB recorded -${actualQtyDelta} units.`);
 
-  const scenario1Passed = p95 < 400 && errorCount === 0 && actualQtyDelta === expectedQtySold;
-  const throughput = Number((totalSalesMade / Number(loadDurationSec)).toFixed(1));
-  const scenario1Json = JSON.stringify({
-    scenario: 1,
-    name: "sale_load_10_registers",
-    durationSec: Number(loadDurationSec),
-    throughputReqSec: throughput,
-    throughput: `${throughput} req/s`,
-    totalSales: totalSalesMade,
-    errors: errorCount,
-    minMs: minLatency,
-    p50Ms: p50,
-    p95Ms: p95,
-    p99Ms: p99,
-    maxMs: maxLatency,
-    stockExpected: expectedQtySold,
-    stockActual: actualQtyDelta,
-    budgetMet: scenario1Passed,
-    passed: scenario1Passed,
-  });
-  console.log(scenario1Json);
-  if (process.env.GITHUB_ACTIONS === "true" || process.env.GITHUB_ACTIONS === true) {
-    console.log(`::notice title=load-check scenario 1::${scenario1Json}`);
-  }
+    scenario1Passed = p95 < 400 && errorCount === 0 && actualQtyDelta === expectedQtySold;
+    const throughput = Number((totalSalesMade / Number(loadDurationSec)).toFixed(1));
+    const scenario1Json = JSON.stringify({
+      scenario: 1,
+      name: "sale_load_10_registers",
+      durationSec: Number(loadDurationSec),
+      throughputReqSec: throughput,
+      throughput: `${throughput} req/s`,
+      totalSales: totalSalesMade,
+      errors: errorCount,
+      minMs: minLatency,
+      p50Ms: p50,
+      p95Ms: p95,
+      p99Ms: p99,
+      maxMs: maxLatency,
+      stockExpected: expectedQtySold,
+      stockActual: actualQtyDelta,
+      budgetMet: scenario1Passed,
+      passed: scenario1Passed,
+    });
+    console.log(scenario1Json);
+    if (process.env.GITHUB_ACTIONS === "true" || process.env.GITHUB_ACTIONS === true) {
+      console.log(`::notice title=load-check scenario 1::${scenario1Json}`);
+    }
 
-  if (scenario1Passed) {
-    console.log(">>> SCENARIO 1: PASSED (p95 < 400ms, 0 errors, stock exact)");
+    if (scenario1Passed) {
+      console.log(">>> SCENARIO 1: PASSED (p95 < 400ms, 0 errors, stock exact)");
+    } else {
+      console.log(">>> SCENARIO 1: TARGET MISSED");
+    }
   } else {
-    console.log(">>> SCENARIO 1: TARGET MISSED");
+    console.log("[SKIP] SCENARIO 1 skipped (SCENARIO_ONLY=3)");
   }
 
   // -------------------------------------------------------------------------
@@ -356,107 +365,114 @@ async function main() {
   console.log(" Target: Under 2 minutes, accepted exactly once, 0 deadlocks.");
   console.log("==================================================================");
 
-  const burstRegister = registers[0];
-  const burstShift = shifts[0];
-  const BURST_COUNT = 300;
-  const burstPayloads = [];
-
-  for (let i = 1; i <= BURST_COUNT; i++) {
-    const saleId = uuidv7();
-    const invoiceNumber = `R01-O-261122-${i.toString().padStart(4, "0")}`;
-    burstPayloads.push({
-      id: saleId,
-      branchId,
-      shiftId: burstShift.id,
-      customerId: null,
-      subtotalMinor: 150000,
-      discountMinor: 0,
-      taxMinor: 0,
-      totalMinor: 150000,
-      paidMinor: 150000,
-      dueMinor: 0,
-      changeMinor: 0,
-      expectedTotalMinor: 150000,
-      isOffline: true,
-      invoiceNumber: invoiceNumber,
-      occurredAt: new Date(Date.now() - (BURST_COUNT - i) * 1000).toISOString(),
-      items: [
-        { variantId: variant1.id, quantity: 1, unitPriceMinor: 150000, totalMinor: 150000, discountMinor: 0 },
-      ],
-      payments: [{ paymentMethod: "cash", amountMinor: 150000 }],
-    });
-  }
-
-  const burstStart = Date.now();
-  let burstErrors = 0;
+  let scenario2Passed = true;
   let burstSuccess = 0;
+  let burstDurationSec = "0.00";
 
-  // Dispatch in concurrent chunks of 15 requests
-  const CHUNK_SIZE = 15;
-  for (let i = 0; i < burstPayloads.length; i += CHUNK_SIZE) {
-    const chunk = burstPayloads.slice(i, i + CHUNK_SIZE);
-    const chunkPromises = chunk.map(async (sale) => {
-      try {
-        await apiRequest("/sales", {
-          token,
-          method: "POST",
-          headers: { "Idempotency-Key": sale.id },
-          body: JSON.stringify(sale),
-        });
-        burstSuccess++;
-      } catch (err) {
-        burstErrors++;
-        console.error(`  [BURST ERR] ${sale.invoiceNumber}: ${err.message}`);
-      }
+  if (process.env.SCENARIO_ONLY !== "3") {
+    const burstRegister = registers[0];
+    const burstShift = shifts[0];
+    const BURST_COUNT = 300;
+    const burstPayloads = [];
+
+    for (let i = 1; i <= BURST_COUNT; i++) {
+      const saleId = uuidv7();
+      const invoiceNumber = `R01-O-261122-${i.toString().padStart(4, "0")}`;
+      burstPayloads.push({
+        id: saleId,
+        branchId,
+        shiftId: burstShift.id,
+        customerId: null,
+        subtotalMinor: 150000,
+        discountMinor: 0,
+        taxMinor: 0,
+        totalMinor: 150000,
+        paidMinor: 150000,
+        dueMinor: 0,
+        changeMinor: 0,
+        expectedTotalMinor: 150000,
+        isOffline: true,
+        invoiceNumber: invoiceNumber,
+        occurredAt: new Date(Date.now() - (BURST_COUNT - i) * 1000).toISOString(),
+        items: [
+          { variantId: variant1.id, quantity: 1, unitPriceMinor: 150000, totalMinor: 150000, discountMinor: 0 },
+        ],
+        payments: [{ paymentMethod: "cash", amountMinor: 150000 }],
+      });
+    }
+
+    const burstStart = Date.now();
+    let burstErrors = 0;
+
+    // Dispatch in concurrent chunks of 15 requests
+    const CHUNK_SIZE = 15;
+    for (let i = 0; i < burstPayloads.length; i += CHUNK_SIZE) {
+      const chunk = burstPayloads.slice(i, i + CHUNK_SIZE);
+      const chunkPromises = chunk.map(async (sale) => {
+        try {
+          await apiRequest("/sales", {
+            token,
+            method: "POST",
+            headers: { "Idempotency-Key": sale.id },
+            body: JSON.stringify(sale),
+          });
+          burstSuccess++;
+        } catch (err) {
+          burstErrors++;
+          console.error(`  [BURST ERR] ${sale.invoiceNumber}: ${err.message}`);
+        }
+      });
+      await Promise.all(chunkPromises);
+    }
+
+    burstDurationSec = ((Date.now() - burstStart) / 1000).toFixed(2);
+    console.log("\n--- SCENARIO 2 RESULTS ---");
+    console.log(`300 Offline Sales Synced: ${burstSuccess}/${BURST_COUNT}`);
+    console.log(`Sync Burst Errors:        ${burstErrors}`);
+    console.log(`Sync Burst Duration:      ${burstDurationSec}s (Target: < 120s)`);
+
+    // Verify all 300 offline sales exist exactly once
+    const offlineDbCount = await prisma.sale.count({
+      where: {
+        tenantId,
+        isOffline: true,
+        invoiceNumber: { startsWith: "R01-O-261122-" },
+      },
     });
-    await Promise.all(chunkPromises);
-  }
+    console.log(`DB Offline Sales Verified Count: ${offlineDbCount}/${BURST_COUNT}`);
 
-  const burstDurationSec = ((Date.now() - burstStart) / 1000).toFixed(2);
-  console.log("\n--- SCENARIO 2 RESULTS ---");
-  console.log(`300 Offline Sales Synced: ${burstSuccess}/${BURST_COUNT}`);
-  console.log(`Sync Burst Errors:        ${burstErrors}`);
-  console.log(`Sync Burst Duration:      ${burstDurationSec}s (Target: < 120s)`);
+    scenario2Passed =
+      burstSuccess === BURST_COUNT &&
+      burstErrors === 0 &&
+      Number(burstDurationSec) < 120 &&
+      offlineDbCount === BURST_COUNT;
+    const burstThroughput = Number((burstSuccess / Number(burstDurationSec)).toFixed(1));
 
-  // Verify all 300 offline sales exist exactly once
-  const offlineDbCount = await prisma.sale.count({
-    where: {
-      tenantId,
-      isOffline: true,
-      invoiceNumber: { startsWith: "R01-O-261122-" },
-    },
-  });
-  console.log(`DB Offline Sales Verified Count: ${offlineDbCount}/${BURST_COUNT}`);
+    const scenario2Json = JSON.stringify({
+      scenario: 2,
+      name: "sync_burst_300_sales",
+      durationSec: Number(burstDurationSec),
+      throughputReqSec: burstThroughput,
+      throughput: `${burstThroughput} req/s`,
+      totalSales: burstSuccess,
+      expectedSales: BURST_COUNT,
+      errors: burstErrors,
+      dbCount: offlineDbCount,
+      budgetMet: scenario2Passed,
+      passed: scenario2Passed,
+    });
+    console.log(scenario2Json);
+    if (process.env.GITHUB_ACTIONS === "true" || process.env.GITHUB_ACTIONS === true) {
+      console.log(`::notice title=load-check scenario 2::${scenario2Json}`);
+    }
 
-  const scenario2Passed =
-    burstSuccess === BURST_COUNT &&
-    burstErrors === 0 &&
-    Number(burstDurationSec) < 120 &&
-    offlineDbCount === BURST_COUNT;
-  const burstThroughput = Number((burstSuccess / Number(burstDurationSec)).toFixed(1));
-
-  const scenario2Json = JSON.stringify({
-    scenario: 2,
-    name: "sync_burst_300_sales",
-    durationSec: Number(burstDurationSec),
-    throughputReqSec: burstThroughput,
-    throughput: `${burstThroughput} req/s`,
-    totalSales: burstSuccess,
-    expectedSales: BURST_COUNT,
-    errors: burstErrors,
-    dbCount: offlineDbCount,
-    budgetMet: scenario2Passed,
-    passed: scenario2Passed,
-  });
-  console.log(scenario2Json);
-  if (process.env.GITHUB_ACTIONS === "true" || process.env.GITHUB_ACTIONS === true) {
-    console.log(`::notice title=load-check scenario 2::${scenario2Json}`);
-  }
-
-  if (scenario2Passed) {
-    console.log(">>> SCENARIO 2: PASSED (Under 2 minutes, all accepted exactly once, 0 deadlocks)");
+    if (scenario2Passed) {
+      console.log(">>> SCENARIO 2: PASSED (Under 2 minutes, all accepted exactly once, 0 deadlocks)");
+    } else {
+      console.log(">>> SCENARIO 2: TARGET MISSED");
+    }
   } else {
-    console.log(">>> SCENARIO 2: TARGET MISSED");
+    console.log("[SKIP] SCENARIO 2 skipped (SCENARIO_ONLY=3)");
   }
 
   // -------------------------------------------------------------------------
@@ -470,7 +486,8 @@ async function main() {
 
   console.log(`[SEED] Seeding 50,000 synthetic sales directly into database via bulk insert...`);
   const seedBatchSize = 5000;
-  const now = Date.now();
+  const now = process.env.LOAD_CHECK_FAKENOW ? new Date(process.env.LOAD_CHECK_FAKENOW).getTime() : Date.now();
+  const timeZone = "Asia/Dhaka";
 
   for (let b = 0; b < 10; b++) {
     const saleBatch = [];
@@ -502,27 +519,35 @@ async function main() {
     console.log(`  Seeded ${(b + 1) * seedBatchSize} / 50,000 sales...`);
   }
 
-  const startDate = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-  const endDate = new Date(now).toISOString().split("T")[0];
+  const startDate = formatBusinessDate(new Date(now - 30 * 24 * 60 * 60 * 1000), timeZone);
+  const endDate = formatBusinessDate(new Date(now), timeZone);
 
-  console.log(`[REPORT] Fetching 30-day sales report (${startDate} to ${endDate})...`);
+  console.log(`[REPORT] Fetching 30-day sales report (${startDate} to ${endDate}, tz=${timeZone})...`);
   const reportT0 = Date.now();
   const reportRes = await apiRequest(`/reports/sales-summary?startDate=${startDate}&endDate=${endDate}`, { token });
   const reportDurationMs = Date.now() - reportT0;
 
+  if (reportRes.salesCount === undefined || reportRes.salesCount === null) {
+    throw new Error(`Scenario 3 failed: API response missing salesCount property: ${JSON.stringify(reportRes)}`);
+  }
+
+  const aggregatedSalesCount = Number(reportRes.salesCount);
+  const expectedSalesCount = 50000;
+  const budgetMet = reportDurationMs < 2000;
+  const scenario3Passed = budgetMet && aggregatedSalesCount === expectedSalesCount;
+
   console.log("\n--- SCENARIO 3 RESULTS ---");
-  console.log(`Sales in Range (DB):     ${reportRes.salesCount ?? reportRes.totalSales ?? "50,000+"}`);
+  console.log(`Sales in Range (DB):     ${aggregatedSalesCount}`);
   console.log(`Report API Response Time: ${reportDurationMs}ms (Target: < 2,000ms)`);
 
-  const scenario3Passed = reportDurationMs < 2000;
-  const aggregatedSalesCount = Number(reportRes.salesCount ?? reportRes.totalSales ?? 50000);
   const scenario3Json = JSON.stringify({
     scenario: 3,
     name: "sales_summary_report_50k",
     durationMs: reportDurationMs,
     targetMs: 2000,
     salesCount: aggregatedSalesCount,
-    budgetMet: scenario3Passed,
+    expectedSalesCount: expectedSalesCount,
+    budgetMet: budgetMet,
     passed: scenario3Passed,
   });
   console.log(scenario3Json);
@@ -531,9 +556,9 @@ async function main() {
   }
 
   if (scenario3Passed) {
-    console.log(`>>> SCENARIO 3: PASSED (${reportDurationMs}ms < 2,000ms)`);
+    console.log(`>>> SCENARIO 3: PASSED (${aggregatedSalesCount}/${expectedSalesCount} sales, ${reportDurationMs}ms < 2,000ms)`);
   } else {
-    console.log(`>>> SCENARIO 3: TARGET MISSED (${reportDurationMs}ms >= 2,000ms)`);
+    console.log(`>>> SCENARIO 3: TARGET MISSED (salesCount=${aggregatedSalesCount}/${expectedSalesCount}, duration=${reportDurationMs}ms, budgetMet=${budgetMet})`);
   }
 
   console.log("\n==================================================================");

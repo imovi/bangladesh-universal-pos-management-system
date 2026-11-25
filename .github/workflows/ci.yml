@@ -301,7 +301,7 @@ jobs:
             exit 1
           fi
           echo "Backup container stability verified: running, 0 restarts, healthy, crond running, 1 daily backup."
-          echo "::notice title=smoke-prod backup::status=running, restarts=$RESTARTS, health=$HEALTH, crond=running (PID $CROND_PID), daily_dumps=$DAILY_DUMP_COUNT"
+          echo "::notice title=smoke-prod backup::status=running, restarts=$RESTART_COUNT, health=$HEALTH, crond=running (PID $CROND_PID), daily_dumps=$DAILY_DUMP_COUNT"
 
       - name: Verify backup container logs and volume status
         run: |

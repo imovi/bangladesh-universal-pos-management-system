@@ -3326,18 +3326,18 @@ c5ec4e1 fix(go-live): resolve Phase 1F review findings across backups, validatio
 - **Commit:** `0e0f1db` (`docs(phase1f): record public load annotations, 10 online validator proofs, and close Phase 1F`)
 - CI: `0e0f1db` → run `45479302711` → completed failure
 - Jobs API status for commit `0e0f1db` (run `45479302711` failure):
-  - `test` (job 138747821746): completed failure (intermittent E2E runner timeout in step 20 `Run Admin Dashboard E2E tests` at 9m 43s; verified 161/161 passed locally in 8.8m)
+  - `test` (job 138747821746): completed failure in step 20 `Run Admin Dashboard E2E tests` for commit `0e0f1db`. The step failed with exit code 1. Which test failed is unknown because the `github` reporter was not yet enabled in `playwright.config.ts`. No timeout was configured in `playwright.config.ts` at the time (the 60-second test timeout was added in a later commit, and the GitHub Actions step timeout was the default 360m). Calling it an "intermittent E2E runner timeout" was an unverified guess. Attempted to download the `playwright-report` artifact to identify the real error: the public artifact list API (`GET /repos/imovi/bangladesh-universal-pos-management-system/actions/runs/<id>/artifacts`) confirms the artifact exists for run `45479302711` and commit `0e0f1db` (artifact ID `14961469514`, name `playwright-report`, size 2,686,607 bytes, expired `false`). However, GitHub's artifact download API requires authentication (HTTP 401 Unauthorized on unauthenticated requests), and public check-run annotations only report that the step exited with exit code 1.
   - `smoke-prod` (job 138756774518): skipped
   - `load-check` (job 138756773689): skipped
 
-#### 5. Documentation Commit CI Result (`91d472f`) & Service Worker Re-tracking
+#### 5. Documentation Commit CI Result (`91d472f`) & Service Worker Decision Correction
 - **Commit:** `91d472f` (`docs(phase1f): record CI failure and verified local E2E suite completion`)
 - CI: `91d472f` → run `45488323826` → completed failure
 - Jobs API status for commit `91d472f` (run `45488323826` failure):
-  - `test` (job 138779579711): completed failure (intermittent E2E runner timeout in step 20 `Run Admin Dashboard E2E tests` at 8m 58s)
+  - `test` (job 138779579711): completed failure in step 20 `Run Admin Dashboard E2E tests`. The step failed with exit code 1. Which test failed is unknown because the `github` reporter was not yet enabled. No timeout was configured in `playwright.config.ts` at the time, and calling it a timeout was an unverified guess. Attempted to download the `playwright-report` artifact: the public artifact list API confirms the artifact exists (artifact ID `14966361584`, name `playwright-report`, size 2,875,605 bytes, expired `false`). However, artifact download requires authentication (HTTP 401 on unauthenticated access), and check-run annotations only report that the step failed with exit code 1.
   - `smoke-prod` (job 138787450277): skipped
   - `load-check` (job 138787449593): skipped
-- **Service Worker Decision:** As instructed by Item 3 ("If they do not pass, leave the file in git and write why"), because E2E tests intermittently timed out on clean CI runners without `public/sw.js` in git, re-tracked `apps/admin/public/sw.js` and removed it from `.gitignore` so the standalone server serves `/sw.js` deterministically. In addition, configured the standard `github` reporter in `apps/admin/playwright.config.ts` so all future test failures emit GitHub Actions error annotations.
+- **Service Worker Decision Correction:** In `eb5070e`, `apps/admin/public/sw.js` was re-tracked under the mistaken assumption that clean CI runners required it in git. Verification confirmed that `next build` generates `apps/admin/public/sw.js` (51,353 bytes) automatically from `src/app/sw.ts` via `@serwist/next` during package builds. Re-tracking a generated build artifact was wrong and created risks of committing stale precache manifests (such as references to deleted files like `sw.js.bak` that caused precache fetch failures). The file has been restored to `.gitignore` and untracked from git via `git rm --cached apps/admin/public/sw.js`. In addition, configured the standard `github` reporter in `apps/admin/playwright.config.ts` so all future test failures emit GitHub Actions annotations.
 
 #### 6. Commit `eb5070e` CI Result (All 3 Jobs Success)
 - **Commit:** `eb5070e` (`fix(ci): re-track sw.js per Item 3 fallback, add playwright github reporter, and verify log refs`)
@@ -3485,6 +3485,63 @@ Conclusion mismatches: 0
 Head SHA mismatches: 0
 ALL REFERENCES AND CONCLUSIONS VERIFIED SUCCESSFULLY.
 ```
+
+### Final fix note
+- **Start Time:** 2026-11-25 11:20 +06:00
+- **Specification:** `docs/prompts/antigravity-pos-phase1f-final-fix-note.md`
+- **Scope & Objectives:**
+  1. Fix Scenario 3 timezone bug in `scripts/load-check.mjs` using `formatBusinessDate(..., "Asia/Dhaka")`, remove fallbacks, assert `salesCount` property, and require `salesCount === 50000 && durationMs < 2000`.
+  2. Fix empty `restarts=` in smoke-prod notice annotation in `.github/workflows/ci.yml` by replacing `$RESTARTS` with `$RESTART_COUNT`.
+  3. Correct log cause for the two red runs `0e0f1db` and `91d472f` to exit code 1 with cause unknown, document artifact download 401 findings and artifact IDs, and correct service worker re-tracking decision.
+  4. Disable Playwright retries in CI (`retries: 0`) and run full E2E suite 3 consecutive times locally.
+  5. Untrack generated `apps/admin/public/sw.js` and add to `.gitignore`.
+
+#### 1. Scenario 3 Date Range & Timezone Bug Resolution
+- **Root Cause Analysis:** `scripts/load-check.mjs` constructed date filters using `.toISOString().split("T")[0]`, which produces UTC calendar dates. However, the reports API (`apps/api/src/modules/reports/reports.service.ts`) parses date filters via `parseDateFilterRange` anchored to tenant timezone `Asia/Dhaka` (UTC+6). When CI executed between 18:00 and 24:00 UTC, the current calendar day in Dhaka was already the next day. Consequently, sales dated "now" (which represents the 30th day in Dhaka) fell outside the UTC date filter range, returning 48,333 instead of 50,000.
+- **Fix Implemented:**
+  - In `scripts/load-check.mjs`, imported `formatBusinessDate` from `@universal-pos/shared`.
+  - Computed `startDate` and `endDate` via `formatBusinessDate(date, "Asia/Dhaka")`.
+  - Removed all fake fallbacks (`?? 50000` and `?? "50,000+"`).
+  - Added strict assertion throwing an error if the API response omits `salesCount`.
+  - Added `expectedSalesCount: 50000` to the output JSON and enforced pass condition `budgetMet && aggregatedSalesCount === expectedSalesCount`.
+- **Local Verification Proofs:**
+  - Local Proof 1 (TZ=UTC):
+    ```json
+    {"scenario":3,"name":"sales_summary_report_50k","durationMs":42,"targetMs":2000,"salesCount":50000,"expectedSalesCount":50000,"budgetMet":true,"passed":true}
+    ```
+  - Local Proof 2 (TZ=Asia/Dhaka):
+    ```json
+    {"scenario":3,"name":"sales_summary_report_50k","durationMs":46,"targetMs":2000,"salesCount":50000,"expectedSalesCount":50000,"budgetMet":true,"passed":true}
+    ```
+  - Local Proof 3 (Fake now in CI window: `LOAD_CHECK_FAKENOW="2026-11-24T20:00:00Z"`):
+    ```json
+    {"scenario":3,"name":"sales_summary_report_50k","durationMs":39,"targetMs":2000,"salesCount":50000,"expectedSalesCount":50000,"budgetMet":true,"passed":true}
+    ```
+
+#### 2. Smoke-Prod Restarts Variable Fix
+- In `.github/workflows/ci.yml` line 304, the notice annotation printed `restarts=$RESTARTS`. The variable was populated on line 262 as `RESTART_COUNT`.
+- Replaced `$RESTARTS` with `$RESTART_COUNT`.
+
+#### 3. Playwright Retries & Local 3x Consecutive Suite Proof
+- In `apps/admin/playwright.config.ts`, changed `retries: process.env.CI ? 2 : 0` to `retries: 0` so flaky tests fail immediately.
+- Discovered and resolved an offline service worker registration issue: a temporary `sw.js.bak` file in `apps/admin/public` had previously been included by Serwist into `precacheEntries`. When deleted, service worker installation failed with HTTP 404 on `/sw.js.bak`. Rebuilt `apps/admin` cleanly and adjusted `apps/admin/e2e/offline-selling.spec.ts` Scenario 2 to verify service worker activation and controller readiness before reloading to cache `/pos`.
+- Executed the full E2E suite 3 consecutive times locally with 0 retries:
+  - **Run 1:**
+    ```text
+    Running 161 tests using 1 worker
+      161 passed (8.9m)
+    ```
+  - **Run 2:**
+    ```text
+    Running 161 tests using 1 worker
+      161 passed (8.8m)
+    ```
+  - **Run 3:**
+    ```text
+    Running 161 tests using 1 worker
+      161 passed (8.8m)
+    ```
+- All 161 tests passed on attempt 1 in each run.
 
 
 

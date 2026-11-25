@@ -48,3 +48,7 @@ blob-report/
 backups/
 *.dump
 
+# Generated service worker
+apps/admin/public/sw.js
+apps/admin/public/sw.js.map
+

@@ -319,11 +319,17 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(1000);
 
-    // Wait until service worker is activated, controlling the page, and has cached the shell
+    // Wait until service worker is activated and controlling the page
     await page.waitForFunction(async () => {
       if (!("serviceWorker" in navigator)) return false;
       const reg = await navigator.serviceWorker.ready;
-      if (!reg || !reg.active || !navigator.serviceWorker.controller) return false;
+      return !!(reg && reg.active && navigator.serviceWorker.controller);
+    }, undefined, { timeout: 15000 });
+
+    // Reload once while online under active service worker controller to ensure document is cached
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(async () => {
+      if (!navigator.serviceWorker?.controller) return false;
       const cacheNames = await caches.keys();
       for (const name of cacheNames) {
         const c = await caches.open(name);
@@ -332,10 +338,6 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
       }
       return false;
     }, undefined, { timeout: 15000 });
-
-    // Reload once while online under active service worker controller to ensure document is cached
-    await page.reload({ waitUntil: "domcontentloaded" });
-    await page.waitForFunction(() => !!navigator.serviceWorker?.controller, undefined, { timeout: 10000 });
 
     // Go OFFLINE and reload
     await context.setOffline(true);

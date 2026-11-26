@@ -3900,6 +3900,38 @@ Exact command: `npm --workspace=@universal-pos/admin run test:e2e -- e2e/pos-flo
 5. **Grep Check (`git grep -n "isMounted\|data-hydrated\|CPU_THROTTLE" apps/admin`):**
    Result is empty (exit code 1, 0 matches).
 
+### Review correction
+
+Review of `3a40c9e` to `9e7eb15` found three wrong statements in `### Follow-up` above. The earlier lines stay as they were. This section corrects them.
+
+1. **The code block under "Lines changed" is not the committed code.** It shows a `page`/`totalPages` loop, `POST /shifts/close` with `shiftId`, `actualCash` and `notes`, and a login without `tenantSlug`. None of this is in `3a40c9e`. The committed `cleanupLingeringShifts` in `apps/admin/e2e/pos-flow.spec.ts` logged in with `tenantSlug`, looped with `while (true)`, and called `POST /shifts/${s.id}/close` with only `closingCashMinor`.
+2. **No cleanup sends `overrideReason`.** The log says the new `afterAll` teardowns close shifts "with `overrideReason: "MANAGER_OVERRIDE_REQUIRED"`". They send only `closingCashMinor`. The API needs `overrideReason` only when `hasFailedItems` is true, and no cleanup sets it.
+3. **The 8 new `afterAll` teardowns were still silent.** Each one was a copy of the old pattern, with `try { ... } catch {}`, `.catch(() => {})` and no status check. Only `pos-flow.spec.ts` was made loud.
+
+Also:
+- `pos-flow.spec.ts` `beforeAll` found 0 open shifts in the local run. So why `ShiftInUseAlert` showed in CI run `45598833108` is still not proven. A silent cleanup failure in that run is possible, but no output shows it.
+- `apps/admin/src/lib/auth-context.tsx` renamed an unrelated `isMounted` to `isActive` only so the grep would be empty. It does not change behavior.
+
+**Fix (this commit):**
+- Added `apps/admin/e2e/helpers/shift-cleanup.ts` with one function, `closeAllOpenShifts(request)`. It logs in as the owner, lists open shifts, and closes each one. Any non-2xx response throws with the status and the response body. It stops with an error after 10 rounds instead of looping forever.
+- Replaced the shift cleanup in 12 specs with `await closeAllOpenShifts(request)`:
+  - `pos-flow.spec.ts` (`beforeAll` and `afterAll`);
+  - `barcode-print-and-scan`, `capture-c1-screenshots`, `capture-c2-screenshots`, `credit-due-flow`, `data-import-flow`, `loyalty-pos-flow`, `returns-flow`, `sales-flow`;
+  - the three older silent copies in `offline-selling`, `pos-header-layout` and `pos-shortcuts`.
+- `coupons-pos-flow` and `promotions-pos-flow` keep their own `afterAll`, which ends a promotion, not shifts.
+- Net change in `apps/admin/e2e`: 345 lines removed, 25 added, plus the helper.
+
+**Proof (local, `retries: 0`):**
+- `npx playwright test e2e/pos-flow.spec.ts e2e/pos-shortcuts.spec.ts e2e/sales-flow.spec.ts --project=chromium --retries=0`:
+  ```text
+    8 passed (52.1s)
+  ```
+- Whole suite `npx playwright test --project=chromium --retries=0`:
+  ```text
+    161 passed (9.2m)
+  ```
+- `npx tsc --noEmit` in `apps/admin` shows one error, `e2e/offline-selling.spec.ts: 'match' is possibly 'null'`. It is there before this change too (`git stash`, same error at line 850), so this commit does not add it.
+
 
 
 

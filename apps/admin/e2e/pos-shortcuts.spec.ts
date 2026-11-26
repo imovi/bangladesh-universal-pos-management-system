@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { closeAllOpenShifts } from "./helpers/shift-cleanup";
 
 test.describe("Step 2 (Item 1): POS Keyboard Shortcuts Flow (F2, F4, F6, F8, F9, Esc, Shortcuts Modal)", () => {
   let token: string;
@@ -71,25 +72,7 @@ test.describe("Step 2 (Item 1): POS Keyboard Shortcuts Flow (F2, F4, F6, F8, F9,
   });
 
   test.afterAll(async ({ request }) => {
-    try {
-      if (token) {
-        const shiftsRes = await request.get("http://localhost:4000/api/v1/shifts?status=open", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (shiftsRes.ok()) {
-          const shiftsData = await shiftsRes.json();
-          const openShifts = Array.isArray(shiftsData.data) ? shiftsData.data : (shiftsData.data?.items || []);
-          for (const s of openShifts) {
-            await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
-              headers: { Authorization: `Bearer ${token}` },
-              data: { closingCashMinor: Number(s.openingCashMinor || 50000) },
-            }).catch(() => {});
-          }
-        }
-      }
-    } catch {
-      // Ignore
-    }
+    await closeAllOpenShifts(request);
   });
 
   test("F2, F4, F6, F8, F9, Esc shortcuts work from body and search box, and shortcuts modal lists all", async ({ page }) => {

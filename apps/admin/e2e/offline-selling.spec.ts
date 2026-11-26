@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import * as path from "node:path";
 import * as fs from "node:fs";
+import { closeAllOpenShifts } from "./helpers/shift-cleanup";
 
 test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verification", () => {
   const screenshotsRoot = path.resolve(process.cwd(), "../../docs/screenshots");
@@ -66,36 +67,7 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
   });
 
   test.afterAll(async ({ request }) => {
-    // Clean up all open shifts so downstream tests start in pristine state
-    try {
-      const loginRes = await request.post("http://localhost:4000/api/v1/auth/login", {
-        data: {
-          tenantSlug: "artisan-apparel",
-          email: "owner@artisan.com",
-          password: "Password123!",
-        },
-      });
-      if (loginRes.ok()) {
-        const token = (await loginRes.json()).data?.accessToken;
-        if (token) {
-          const shiftsRes = await request.get("http://localhost:4000/api/v1/shifts?status=open", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (shiftsRes.ok()) {
-            const shiftsData = await shiftsRes.json();
-            const openShifts = Array.isArray(shiftsData.data) ? shiftsData.data : (shiftsData.data?.items || []);
-            for (const s of openShifts) {
-              await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
-                headers: { Authorization: `Bearer ${token}` },
-                data: { closingCashMinor: Number(s.openingCashMinor || 50000) },
-              }).catch(() => {});
-            }
-          }
-        }
-      }
-    } catch {
-      // Ignore
-    }
+    await closeAllOpenShifts(request);
   });
 
   // Helper to get authenticated API token and set user PIN

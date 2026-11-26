@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { v7 as uuidv7 } from "uuid";
+import { closeAllOpenShifts } from "./helpers/shift-cleanup";
 
 test.describe("Milestone C1: Returns & Exchanges Flow", () => {
   let token: string;
@@ -446,32 +447,6 @@ test.describe("Milestone C1: Returns & Exchanges Flow", () => {
   });
 
   test.afterAll(async ({ request }) => {
-    try {
-      const loginRes = await request.post("http://localhost:4000/api/v1/auth/login", {
-        data: {
-          tenantSlug: "artisan-apparel",
-          email: "owner@artisan.com",
-          password: "Password123!",
-        },
-      });
-      if (loginRes.ok()) {
-        const token = (await loginRes.json()).data?.accessToken;
-        if (token) {
-          const shiftsRes = await request.get("http://localhost:4000/api/v1/shifts?status=open&limit=100", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (shiftsRes.ok()) {
-            const shiftsData = await shiftsRes.json();
-            const openShifts = Array.isArray(shiftsData.data) ? shiftsData.data : (shiftsData.data?.items || []);
-            for (const s of openShifts) {
-              await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
-                headers: { Authorization: `Bearer ${token}` },
-                data: { closingCashMinor: Number(s.openingCashMinor || 50000) },
-              }).catch(() => {});
-            }
-          }
-        }
-      }
-    } catch {}
+    await closeAllOpenShifts(request);
   });
 });

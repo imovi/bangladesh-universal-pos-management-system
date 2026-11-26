@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import path from "path";
 import fs from "fs";
+import { closeAllOpenShifts } from "./helpers/shift-cleanup";
 
 const screenshotsDir = path.resolve(
   process.cwd(),
@@ -11,65 +12,16 @@ const screenshotsDir = path.resolve(
 test.describe("Part C: POS Selling Screen & Register Lifecycle Flow", () => {
   test.use({ viewport: { width: 1366, height: 768 } });
 
-  async function cleanupLingeringShifts(request: any) {
-    const loginRes = await request.post("http://localhost:4000/api/v1/auth/login", {
-      data: {
-        tenantSlug: "artisan-apparel",
-        email: "owner@artisan.com",
-        password: "Password123!",
-      },
-    });
-    if (!loginRes.ok()) {
-      const errBody = await loginRes.text();
-      throw new Error(`[cleanupLingeringShifts] Login failed with status ${loginRes.status()}: ${errBody}`);
-    }
-    const loginData = await loginRes.json();
-    const token = loginData.data?.accessToken;
-    if (!token) {
-      throw new Error(`[cleanupLingeringShifts] Missing accessToken in login response: ${JSON.stringify(loginData)}`);
-    }
-
-    while (true) {
-      const shiftsRes = await request.get("http://localhost:4000/api/v1/shifts?status=open&limit=100", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!shiftsRes.ok()) {
-        const errBody = await shiftsRes.text();
-        throw new Error(`[cleanupLingeringShifts] List open shifts failed with status ${shiftsRes.status()}: ${errBody}`);
-      }
-
-      const shiftsData = await shiftsRes.json();
-      const openShifts = Array.isArray(shiftsData.data) ? shiftsData.data : (shiftsData.data?.items || []);
-      if (openShifts.length === 0) break;
-
-      console.log(`[cleanupLingeringShifts] found ${openShifts.length} open shift(s)`);
-
-      for (const s of openShifts) {
-        const closeRes = await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
-          headers: { Authorization: `Bearer ${token}` },
-          data: {
-            closingCashMinor: Number(s.openingCashMinor || 50000),
-          },
-        });
-        if (!closeRes.ok()) {
-          const errBody = await closeRes.text();
-          throw new Error(`[cleanupLingeringShifts] Close shift ${s.id} failed with status ${closeRes.status()}: ${errBody}`);
-        }
-        console.log(`[cleanupLingeringShifts] closed shift ${s.id}`);
-      }
-    }
-  }
-
   test.beforeAll(async ({ request }) => {
     if (!fs.existsSync(screenshotsDir)) {
       fs.mkdirSync(screenshotsDir, { recursive: true });
     }
     // Clean up any lingering shifts from previous tests to guarantee pristine starting state
-    await cleanupLingeringShifts(request);
+    await closeAllOpenShifts(request);
   });
 
   test.afterAll(async ({ request }) => {
-    await cleanupLingeringShifts(request);
+    await closeAllOpenShifts(request);
   });
 
   test("Flow 1: Counter-only Cashier login lands directly on /pos and enforces discount limit", async ({

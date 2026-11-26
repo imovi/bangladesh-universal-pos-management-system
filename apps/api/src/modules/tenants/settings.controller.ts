@@ -15,13 +15,17 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard.js";
 import { PermissionsGuard } from "../../common/guards/permissions.guard.js";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator.js";
 import { TenantsService } from "./tenants.service.js";
-import { PERMISSIONS, SYSTEM_ROLES, UpdateTenantSettingsSchema } from "@universal-pos/shared";
+import { TenantContextService } from "../../common/database/tenant-context.service.js";
+import { PERMISSIONS, SYSTEM_ROLES, UpdateTenantSettingsSchema, MODULE_KEYS, type ModuleKey } from "@universal-pos/shared";
 import type { AuthenticatedRequest } from "../../common/types/request.js";
 
 @Controller("settings")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SettingsController {
-  constructor(private readonly tenantsService: TenantsService) {}
+  constructor(
+    private readonly tenantsService: TenantsService,
+    private readonly tenantContext: TenantContextService,
+  ) {}
 
   @Get("backups")
   @RequirePermission(PERMISSIONS.TENANT_READ)
@@ -82,6 +86,21 @@ export class SettingsController {
   async getPosSettings(@Req() req: AuthenticatedRequest) {
     const data = await this.tenantsService.getSettings(req.user.tenantId);
     const s = (data.settings as Record<string, any>) || {};
+
+    const flags = await this.tenantContext.runWithTenant(req.user.tenantId, async (tx) => {
+      return tx.featureFlag.findMany({
+        where: {
+          key: { startsWith: "module." },
+          allowed: true,
+          enabled: true,
+        },
+        select: { key: true },
+      });
+    });
+    const activeModules = flags
+      .map((f) => f.key.replace(/^module\./, "") as ModuleKey)
+      .filter((k) => MODULE_KEYS.includes(k));
+
     return {
       shopName: data.name,
       currency: (s.currency as string) ?? "BDT",
@@ -90,6 +109,7 @@ export class SettingsController {
       allowNegativeStock: Boolean(s.allow_negative_stock ?? false),
       receiptHeader: (s.receipt_header as string) ?? "",
       receiptFooter: (s.receipt_footer as string) ?? "",
+      activeModules,
     };
   }
 

@@ -54,6 +54,7 @@ async function main() {
       ...process.env,
       JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET || "test-jwt-access-secret-minimum-32-chars-long",
       JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || "test-jwt-refresh-secret-minimum-32-chars-long",
+      PLATFORM_JWT_SECRET: process.env.PLATFORM_JWT_SECRET || "test-platform-jwt-secret-minimum-32-chars-long",
       DATABASE_URL: "postgresql://pos_runtime:pos_runtime_secret@localhost:5432/universal_pos_e2e?schema=public",
       TEST_DATABASE_URL: "postgresql://pos_runtime:pos_runtime_secret@localhost:5432/universal_pos_e2e?schema=public",
       MIGRATION_DATABASE_URL: rawUrl,

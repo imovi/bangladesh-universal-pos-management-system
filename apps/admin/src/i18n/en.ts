@@ -108,6 +108,7 @@ export const en: TranslationKeys = {
     loyaltyReports: "Loyalty Reports",
     settings: "Settings",
     shopSettings: "Shop Settings",
+    modules: "Modules",
     loyaltySettings: "Loyalty Points",
     branches: "Branches",
     usersAndRoles: "Staff & Users",

@@ -103,6 +103,7 @@ jobs:
           POSTGRES_PORT: 5432
           JWT_ACCESS_SECRET: test-jwt-access-secret-minimum-32-chars-long
           JWT_REFRESH_SECRET: test-jwt-refresh-secret-minimum-32-chars-long
+          PLATFORM_JWT_SECRET: test-platform-jwt-secret-minimum-32-chars-long
 
       - name: Install PostgreSQL 17 client and age encryption tool
         run: |
@@ -139,6 +140,7 @@ jobs:
           MIGRATION_DATABASE_URL: postgresql://pos_admin:pos_secret@localhost:5432/universal_pos?schema=public
           JWT_ACCESS_SECRET: test-jwt-access-secret-minimum-32-chars-long
           JWT_REFRESH_SECRET: test-jwt-refresh-secret-minimum-32-chars-long
+          PLATFORM_JWT_SECRET: test-platform-jwt-secret-minimum-32-chars-long
 
       - name: Install Playwright browsers with system dependencies
         run: npx playwright install --with-deps chromium
@@ -150,6 +152,7 @@ jobs:
           MIGRATION_E2E_DATABASE_URL: postgresql://pos_admin:pos_secret@localhost:5432/universal_pos_e2e?schema=public
           JWT_ACCESS_SECRET: test-jwt-access-secret-minimum-32-chars-long
           JWT_REFRESH_SECRET: test-jwt-refresh-secret-minimum-32-chars-long
+          PLATFORM_JWT_SECRET: test-platform-jwt-secret-minimum-32-chars-long
 
       - name: Run Admin Dashboard E2E tests
         run: |
@@ -175,6 +178,7 @@ jobs:
           MIGRATION_DATABASE_URL: postgresql://pos_admin:pos_secret@localhost:5432/universal_pos_e2e?schema=public
           JWT_ACCESS_SECRET: test-jwt-access-secret-minimum-32-chars-long
           JWT_REFRESH_SECRET: test-jwt-refresh-secret-minimum-32-chars-long
+          PLATFORM_JWT_SECRET: test-platform-jwt-secret-minimum-32-chars-long
           NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
           ADMIN_URL: http://localhost:3000
 
@@ -212,7 +216,8 @@ jobs:
             env = env.replace('replace-with-generated-postgres-password', crypto.randomBytes(24).toString('base64url'))
                      .replace('replace-with-generated-runtime-password', crypto.randomBytes(24).toString('base64url'))
                      .replace('replace-with-generated-jwt-access-secret-min-32-chars', crypto.randomBytes(32).toString('hex'))
-                     .replace('replace-with-generated-jwt-refresh-secret-min-32-chars', crypto.randomBytes(32).toString('hex'));
+                     .replace('replace-with-generated-jwt-refresh-secret-min-32-chars', crypto.randomBytes(32).toString('hex'))
+                     .replace('replace-with-generated-platform-jwt-secret-min-32-chars', crypto.randomBytes(32).toString('hex'));
             fs.writeFileSync('deploy/.env.production', env);
           "
 
@@ -501,5 +506,6 @@ jobs:
           MIGRATION_DATABASE_URL: postgresql://pos_admin:pos_secret@localhost:5432/universal_pos_e2e?schema=public
           JWT_ACCESS_SECRET: test-jwt-access-secret-minimum-32-chars-long
           JWT_REFRESH_SECRET: test-jwt-refresh-secret-minimum-32-chars-long
+          PLATFORM_JWT_SECRET: test-platform-jwt-secret-minimum-32-chars-long
 
 

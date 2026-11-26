@@ -7,12 +7,15 @@ dotenv.config();
 export const FORBIDDEN_JWT_SECRETS: readonly string[] = [
   "super-secret-access-key-change-me-in-production-min-32-chars",
   "super-secret-refresh-key-change-me-in-production-min-32-chars",
+  "super-secret-platform-key-change-me-in-production-min-32-chars",
   "replace-with-generated-jwt-access-secret-min-32-chars",
   "replace-with-generated-jwt-refresh-secret-min-32-chars",
+  "replace-with-generated-platform-jwt-secret-min-32-chars",
 ] as const;
 
 export const EXAMPLE_JWT_ACCESS_SECRET = FORBIDDEN_JWT_SECRETS[0];
 export const EXAMPLE_JWT_REFRESH_SECRET = FORBIDDEN_JWT_SECRETS[1];
+export const EXAMPLE_PLATFORM_JWT_SECRET = FORBIDDEN_JWT_SECRETS[2];
 
 function containsPlaceholderPattern(val: string): boolean {
   if (!val || typeof val !== "string") return false;
@@ -49,6 +52,11 @@ export const envSchema = z
       .string()
       .min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
     JWT_REFRESH_EXPIRES_IN: z.string().default("30d"),
+    PLATFORM_JWT_SECRET: z
+      .string()
+      .min(32, "PLATFORM_JWT_SECRET must be at least 32 characters")
+      .default("super-secret-platform-key-change-me-in-production-min-32-chars"),
+    PLATFORM_JWT_EXPIRES_IN: z.string().default("30m"),
     RATE_LIMIT_TTL: z.coerce.number().default(60),
     RATE_LIMIT_LIMIT: z.coerce.number().default(100),
     CORS_ORIGINS: z
@@ -103,7 +111,30 @@ export const envSchema = z
         });
       }
 
-      // 3. Reject equal access and refresh secrets
+      // 3. Platform JWT Secret checks
+      if (!data.PLATFORM_JWT_SECRET || Buffer.byteLength(data.PLATFORM_JWT_SECRET, "utf8") < 32) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["PLATFORM_JWT_SECRET"],
+          message: "PLATFORM_JWT_SECRET must be at least 32 bytes in production",
+        });
+      }
+      if (containsPlaceholderPattern(data.PLATFORM_JWT_SECRET)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["PLATFORM_JWT_SECRET"],
+          message: "PLATFORM_JWT_SECRET cannot contain placeholder patterns (replace-with, change-me, example) in production",
+        });
+      }
+      if (FORBIDDEN_JWT_SECRETS.includes(data.PLATFORM_JWT_SECRET)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["PLATFORM_JWT_SECRET"],
+          message: "PLATFORM_JWT_SECRET cannot equal default example placeholder values in production",
+        });
+      }
+
+      // 4. Reject equal access, refresh, or platform secrets
       if (
         data.JWT_ACCESS_SECRET &&
         data.JWT_REFRESH_SECRET &&
@@ -115,8 +146,30 @@ export const envSchema = z
           message: "JWT_ACCESS_SECRET and JWT_REFRESH_SECRET cannot be identical in production",
         });
       }
+      if (
+        data.JWT_ACCESS_SECRET &&
+        data.PLATFORM_JWT_SECRET &&
+        data.JWT_ACCESS_SECRET === data.PLATFORM_JWT_SECRET
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["PLATFORM_JWT_SECRET"],
+          message: "JWT_ACCESS_SECRET and PLATFORM_JWT_SECRET cannot be identical in production",
+        });
+      }
+      if (
+        data.JWT_REFRESH_SECRET &&
+        data.PLATFORM_JWT_SECRET &&
+        data.JWT_REFRESH_SECRET === data.PLATFORM_JWT_SECRET
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["PLATFORM_JWT_SECRET"],
+          message: "JWT_REFRESH_SECRET and PLATFORM_JWT_SECRET cannot be identical in production",
+        });
+      }
 
-      // 4. Reject weak or placeholder database password
+      // 5. Reject weak or placeholder database password
       const dbPassword = extractDatabasePassword(data.DATABASE_URL);
       const lowerPw = dbPassword.toLowerCase();
       if (

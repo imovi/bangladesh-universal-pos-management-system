@@ -206,6 +206,7 @@ export default function SignupPage() {
                     >
                       <option value="fashion">{locale === "bn" ? "পোশাক ও ফ্যাশন" : "Fashion & Apparel"}</option>
                       <option value="retail">{locale === "bn" ? "সাধারণ খুচরা দোকান" : "General Retail"}</option>
+                      <option value="chemical">{locale === "bn" ? "কেমিক্যাল" : "Chemical"}</option>
                       <option value="grocery">{locale === "bn" ? "মুদি ও সুপারশপ" : "Grocery & Supermarket"}</option>
                       <option value="pharmacy">{locale === "bn" ? "ফার্মেসি" : "Pharmacy"}</option>
                       <option value="electronics">{locale === "bn" ? "ইলেকট্রনিক্স" : "Electronics"}</option>

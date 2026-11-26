@@ -106,6 +106,7 @@ export const bn = {
     loyaltyReports: "লয়্যালটি রিপোর্ট",
     settings: "সেটিংস",
     shopSettings: "দোকান সেটিংস",
+    modules: "মডিউল",
     loyaltySettings: "লয়ালটি পয়েন্টস",
     branches: "শাখা সমূহ",
     usersAndRoles: "কর্মী ও ব্যবহারকারী",

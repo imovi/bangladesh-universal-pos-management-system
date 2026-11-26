@@ -16,6 +16,8 @@ import {
   RefreshTokenSchema,
   JwtPayload,
   SYSTEM_ROLES,
+  MODULE_KEYS,
+  type ModuleKey,
 } from "@universal-pos/shared";
 
 @Injectable()
@@ -348,6 +350,21 @@ export class AuthService {
             0,
           );
 
+      const moduleFlags = tx.featureFlag?.findMany
+        ? await tx.featureFlag.findMany({
+            where: {
+              tenantId: user.tenantId,
+              key: { startsWith: "module." },
+              allowed: true,
+              enabled: true,
+            },
+            select: { key: true },
+          })
+        : [];
+      const activeModules = moduleFlags
+        .map((f) => f.key.replace(/^module\./, "") as ModuleKey)
+        .filter((k) => MODULE_KEYS.includes(k));
+
       return {
         id: user.id,
         name: user.name,
@@ -365,6 +382,7 @@ export class AuthService {
         })),
         isOwner,
         maxDiscountPercent,
+        activeModules,
       };
     });
   }

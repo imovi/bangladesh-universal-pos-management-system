@@ -18,6 +18,7 @@
     "restore:drill": "tsx scripts/restore.ts",
     "db:reset:dev": "tsx scripts/reset-dev-db.ts",
     "db:reset:e2e": "tsx scripts/setup-e2e-db.ts",
+    "platform-admin:create": "tsx scripts/create-platform-admin.ts",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down"
   },

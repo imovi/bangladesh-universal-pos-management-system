@@ -1,6 +1,7 @@
 export const BUSINESS_TYPES = [
   "fashion",
   "retail",
+  "grocery",
   "chemical",
   "ecommerce",
   "pharmacy",

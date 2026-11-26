@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from './prisma.service.js';
 import { Prisma } from '@prisma/client';
 import { v7 as uuidv7 } from 'uuid';
+import { DEFAULT_MODULES_BY_BUSINESS_TYPE } from '@universal-pos/shared';
 
 export interface CreateTenantSignupData {
   companyName: string;
@@ -266,6 +267,20 @@ export class SystemDbService {
         ],
       });
 
+      // 8. Seed Default Modules based on business type
+      const defaultModules = DEFAULT_MODULES_BY_BUSINESS_TYPE[data.businessType] || [];
+      if (defaultModules.length > 0) {
+        await tx.featureFlag.createMany({
+          data: defaultModules.map((moduleKey) => ({
+            id: uuidv7(),
+            tenantId: tenant.id,
+            key: `module.${moduleKey}`,
+            allowed: true,
+            enabled: true,
+          })),
+        });
+      }
+
       return {
         tenantId: tenant.id,
         slug: tenant.slug,
@@ -273,6 +288,153 @@ export class SystemDbService {
         branchId,
         ownerId: ownerUserId,
         ownerEmail: data.owner.email,
+      };
+    });
+  }
+
+  /**
+   * Finds a platform admin by ID using pos_system role.
+   */
+  async findPlatformAdminById(id: string) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SET LOCAL ROLE pos_system;`;
+      return tx.platformAdmin.findUnique({
+        where: { id },
+      });
+    });
+  }
+
+  /**
+   * Finds a platform admin by email using pos_system role.
+   */
+  async findPlatformAdminByEmail(email: string) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SET LOCAL ROLE pos_system;`;
+      return tx.platformAdmin.findUnique({
+        where: { email },
+      });
+    });
+  }
+
+  /**
+   * Updates platform admin lastLoginAt.
+   */
+  async updatePlatformAdminLastLogin(id: string) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SET LOCAL ROLE pos_system;`;
+      return tx.platformAdmin.update({
+        where: { id },
+        data: { lastLoginAt: new Date() },
+      });
+    });
+  }
+
+  /**
+   * Retrieves all tenants along with their module feature flags for Platform view.
+   */
+  async getAllTenantsWithModules() {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SET LOCAL ROLE pos_system;`;
+      const tenants = await tx.tenant.findMany({
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          businessType: true,
+          status: true,
+          featureFlags: {
+            where: { key: { startsWith: 'module.' } },
+            select: { key: true, allowed: true, enabled: true },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      return tenants.map((t) => ({
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+        businessType: t.businessType,
+        status: t.status,
+        modules: t.featureFlags.map((f) => ({
+          key: f.key.replace(/^module\./, ''),
+          allowed: f.allowed,
+          enabled: f.enabled,
+        })),
+      }));
+    });
+  }
+
+  /**
+   * Platform admin updates allowed status of a module for a tenant.
+   * Keeps enabled status as is. Writes an audit log with platformActor details.
+   */
+  async updateTenantModuleAllowed(
+    tenantId: string,
+    moduleKey: string,
+    allowed: boolean,
+    platformAdmin: { id: string; email: string },
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SET LOCAL ROLE pos_system;`;
+      const flagKey = `module.${moduleKey}`;
+      const existing = await tx.featureFlag.findUnique({
+        where: { tenantId_key: { tenantId, key: flagKey } },
+      });
+
+      const oldAllowed = existing?.allowed ?? false;
+      const oldEnabled = existing?.enabled ?? false;
+
+      let updatedFlag;
+      if (existing) {
+        updatedFlag = await tx.featureFlag.update({
+          where: { id: existing.id },
+          data: { allowed },
+        });
+      } else {
+        updatedFlag = await tx.featureFlag.create({
+          data: {
+            id: uuidv7(),
+            tenantId,
+            key: flagKey,
+            allowed,
+            enabled: false,
+          },
+        });
+      }
+
+      // Write audit log in that tenant's log (actorUserId is null, platformActor in after)
+      await tx.auditLog.createMany({
+        data: [
+          {
+            id: uuidv7(),
+            tenantId,
+            actorUserId: null,
+            action: 'platform.module.update',
+            entityType: 'Module',
+            entityId: moduleKey,
+            before: {
+              key: moduleKey,
+              allowed: oldAllowed,
+              enabled: oldEnabled,
+            },
+            after: {
+              key: moduleKey,
+              allowed,
+              enabled: updatedFlag.enabled,
+              platformActor: {
+                id: platformAdmin.id,
+                email: platformAdmin.email,
+              },
+            },
+          },
+        ],
+      });
+
+      return {
+        key: moduleKey,
+        allowed: updatedFlag.allowed,
+        enabled: updatedFlag.enabled,
+        active: Boolean(updatedFlag.allowed && updatedFlag.enabled),
       };
     });
   }

@@ -50,7 +50,7 @@ export async function truncateTestDatabase(): Promise<void> {
 
   try {
     await prisma.$connect();
-    await prisma.$executeRawUnsafe("TRUNCATE TABLE public.tenants CASCADE;");
+    await prisma.$executeRawUnsafe("TRUNCATE TABLE public.tenants, public.platform_admins CASCADE;");
   } finally {
     await prisma.$disconnect();
   }

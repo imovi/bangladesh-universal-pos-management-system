@@ -20,6 +20,7 @@ const postgresPassword = generateBase64Url(24);
 const runtimePassword = generateBase64Url(24);
 const jwtAccessSecret = generateHex(32); // 64 hex chars = 32 bytes
 const jwtRefreshSecret = generateHex(32); // 64 hex chars = 32 bytes
+const platformJwtSecret = generateHex(32); // 64 hex chars = 32 bytes
 
 console.log("# === Generated Production Secrets ===");
 console.log("# Copy and paste these into your deploy/.env.production file:");
@@ -28,5 +29,6 @@ console.log(`POSTGRES_PASSWORD=${postgresPassword}`);
 console.log(`POSTGRES_RUNTIME_PASSWORD=${runtimePassword}`);
 console.log(`JWT_ACCESS_SECRET=${jwtAccessSecret}`);
 console.log(`JWT_REFRESH_SECRET=${jwtRefreshSecret}`);
+console.log(`PLATFORM_JWT_SECRET=${platformJwtSecret}`);
 console.log("");
 console.log("# === End of Generated Secrets ===");

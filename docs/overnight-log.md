@@ -4109,3 +4109,187 @@ The test failed immediately and loudly at `coupons-pos-flow.spec.ts:11:11` in `b
 ```json
 {"annotation_level": "notice", "title": "🎭 Playwright Run Summary", "message": "  161 passed (9.2m)"}
 ```
+
+
+---
+
+## Phase 2.0: module system
+
+### 1. Overview
+Implemented the multi-tenant module system across `@universal-pos/shared`, API, and Admin workspaces according to the Phase 2.0 specification.
+- Modules: `units`, `batch_expiry`, `chemical_safety`, `b2b_wholesale`, `pharmacy_catalog`, `prescription`, `serial_tracking`, `vat_mushak`.
+- Platform admin allowlist (`allowed` boolean) and tenant owner activation (`enabled` boolean) two-tier control.
+- Module dependencies enforced at API level (`pharmacy_catalog` depends on `units` and `batch_expiry`; `prescription` depends on `pharmacy_catalog`) returning 409 conflict errors (`MODULE_DEPENDENCY_MISSING` and `MODULE_IN_USE_BY_DEPENDENT`).
+- Existing tenant (`artisan-apparel`) maintains 0 module rows to leave existing 161 tests unaffected.
+- New tenant defaults: `chemical` defaults to `units`, `batch_expiry`, `chemical_safety`, `b2b_wholesale` allowed and enabled.
+- Platform admin API (`/platform/auth/login`, `/platform/tenants`, `/platform/tenants/:tenantId/modules/:key`) guarded by `PLATFORM_JWT_SECRET` and `PlatformAuthGuard`.
+- Owner settings UI at `/settings/modules` with toggles, dependency validation, and platform restriction messaging.
+- Platform dashboard at `/platform` with token-based access via `sessionStorage` (never `localStorage`).
+- Offline POS caches active modules from `/settings/pos` in IndexedDB.
+- New E2E test `apps/admin/e2e/module-settings-flow.spec.ts` verifies the full lifecycle across owner, cashier, and platform roles.
+
+### 2. Implementation Summary
+- `@universal-pos/shared`: Added `grocery` to `BUSINESS_TYPES`, created `modules.ts` with metadata, dependencies, defaults, and helper functions (`isModuleActive`, `findMissingDependencies`).
+- Database Schema & Migration: Updated `FeatureFlag` model with `allowed Boolean @default(false)` and added `PlatformAdmin` model. Created and applied migration `20261127010000_phase2_module_system_and_platform_admin` with RLS and permissions.
+- API Guards & Endpoints: Implemented `@RequireModule(...)` decorator, `ModuleGuard`, `ModulesController` (`GET /modules`, `PATCH /modules/:key`), `PlatformController`, and `PlatformAuthGuard`.
+- Admin UI: Created `/settings/modules` for tenant owners/cashiers, `/platform/login` and `/platform` for platform administrators, updated sidebar navigation with module gating, and updated `/pos` caching.
+- Seed & Demo: Added `seedChemicalDemoTenant` and `seedPlatformAdmin` to `scripts/seed-demo.ts`. Created `scripts/create-platform-admin.ts`.
+- Documentation: Created `docs/modules.md`.
+
+### 3. Verification Commands & Outputs
+
+#### Shared Package Tests (`npm --workspace=@universal-pos/shared run test`)
+```text
+> @universal-pos/shared@0.1.0 test
+> vitest run
+
+ RUN  v3.2.7 D:/pos system/packages/shared
+
+ ✓ test/modules.spec.ts (14 tests) 10ms
+ ✓ test/printing.spec.ts (13 tests) 30ms
+ ✓ test/promotions.spec.ts (27 tests) 309ms
+
+ Test Files  3 passed (3)
+      Tests  54 passed (54)
+   Start at  02:25:54
+   Duration  1.21s (transform 382ms, setup 0ms, collect 567ms, tests 350ms, environment 1ms, prepare 799ms)
+```
+
+#### API Modules Integration Tests (`npx vitest run -c apps/api/vitest.config.ts apps/api/test/modules.spec.ts`)
+```text
+ RUN  v3.2.7 D:/pos system
+
+ ✓ apps/api/test/modules.spec.ts (18 tests) 1758ms
+
+ Test Files  1 passed (1)
+      Tests  18 passed (18)
+   Start at  02:26:02
+   Duration  4.88s (transform 938ms, setup 0ms, collect 2.72s, tests 1.76s, environment 0ms, prepare 140ms)
+```
+
+#### Admin Unit Tests (`npm --workspace=@universal-pos/admin run test`)
+```text
+> @universal-pos/admin@0.1.0 test
+> vitest run
+
+ RUN  v3.2.7 D:/pos system/apps/admin
+
+ ✓ test/reports.spec.ts (5 tests) 9ms
+ ✓ test/auth-context.spec.tsx (4 tests) 4ms
+ ✓ test/modules-ui.spec.tsx (4 tests) 8ms
+ ✓ test/inline-i18n-count.spec.ts (1 test) 134ms
+ ✓ test/i18n.spec.ts (4 tests) 98ms
+ ✓ test/sizes.spec.ts (4 tests) 22ms
+ ✓ test/pos-logic.spec.ts (13 tests) 16ms
+ ✓ test/offline-storage.spec.ts (18 tests) 1044ms
+ ✓ test/size-color-grid.spec.tsx (5 tests) 233ms
+ ✓ test/app.spec.tsx (2 tests) 180ms
+
+ Test Files  10 passed (10)
+      Tests  60 passed (60)
+   Start at  02:35:29
+   Duration  6.55s (transform 1.35s, setup 3.37s, collect 8.27s, tests 1.75s, environment 18.60s, prepare 7.65s)
+```
+
+#### Linter (`npm run lint`)
+```text
+> universal-pos@0.1.0 lint
+> npm run lint --workspaces --if-present
+
+> @universal-pos/admin@0.1.0 lint
+> oxlint src
+
+Found 0 warnings and 0 errors.
+Finished in 26ms on 128 files with 96 rules using 16 threads.
+
+> @universal-pos/api@0.1.0 lint
+> oxlint src || eslint src
+
+Found 0 warnings and 0 errors.
+Finished in 21ms on 96 files with 96 rules using 16 threads.
+```
+
+#### Monorepo Build (`npm run build`)
+```text
+> universal-pos@0.1.0 build
+> npm run build --workspaces --if-present
+
+> @universal-pos/shared@0.1.0 build
+> tsc -b
+
+> @universal-pos/admin@0.1.0 build
+> next build
+
+   ▲ Next.js 15.5.29
+
+   Creating an optimized production build ...
+ ✓ (serwist) Bundling the service worker script with the URL '/sw.js' and the scope '/'...
+ ✓ Compiled successfully in 7.7s
+   Linting and checking validity of types ...
+   Collecting page data ...
+ ✓ Generating static pages (54/54)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+> @universal-pos/api@0.1.0 build
+> tsc -p tsconfig.build.json
+```
+
+#### Database Reset & Seed Check (`npm run db:reset:e2e`)
+```text
+> universal-pos@0.1.0 db:reset:e2e
+> tsx scripts/setup-e2e-db.ts
+
+[db:reset:e2e] Connecting to universal_pos_e2e as admin to drop and recreate schema 'public'...
+[db:reset:e2e] Deploying migrations...
+25 migrations found in prisma/migrations
+All migrations have been successfully applied.
+[db:reset:e2e] Granting table permissions...
+[db:reset:e2e] Seeding clean demo dataset...
+Demo data successfully seeded for tenant 01a2198e-99f4-7f10-8e3d-0b00e2eaf5bc (owner@artisan.com)
+[db:reset:e2e] Database 'universal_pos_e2e' successfully reset and seeded!
+```
+
+#### Tenant 1 (artisan-apparel) Module Flag Count Verification
+```text
+artisan-apparel feature flags count: 0
+```
+
+#### Chemical Demo Tenant Module Flags Verification
+```text
+chemical-demo tenant: {
+  id: '01a2198e-a1e2-7311-a8a1-733fc4bdb1bd',
+  slug: 'chemical-demo',
+  flags: [
+    { key: 'module.units', allowed: true, enabled: true },
+    { key: 'module.batch_expiry', allowed: true, enabled: true },
+    { key: 'module.chemical_safety', allowed: true, enabled: true },
+    { key: 'module.b2b_wholesale', allowed: true, enabled: true }
+  ]
+}
+```
+
+#### Platform Admin Seed Verification
+```text
+platform admins: [
+  {
+    email: 'platform@test.local',
+    name: 'Platform Test Admin',
+    isActive: true
+  }
+]
+```
+
+#### E2E Module Settings Flow Repeat-Each 5 Verification
+```text
+> @universal-pos/admin@0.1.0 test:e2e
+> playwright test e2e/module-settings-flow.spec.ts --project=chromium --repeat-each=5 --retries=0
+
+Running 5 tests using 1 worker
+  5 passed (3.9m)
+```
+
+### Screens
+- Owner module page for artisan-apparel: [01-artisan-apparel-modules.png](file:///d:/pos%20system/docs/screenshots/phase2-0/01-artisan-apparel-modules.png)
+- Owner module page for chemical-demo: [02-chemical-demo-modules.png](file:///d:/pos%20system/docs/screenshots/phase2-0/02-chemical-demo-modules.png)
+- Platform tenants page: [03-platform-tenants.png](file:///d:/pos%20system/docs/screenshots/phase2-0/03-platform-tenants.png)

@@ -3,9 +3,10 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, useModules } from "@/lib/auth-context";
 import { useTranslation } from "@/i18n/context";
 import { cn } from "@/lib/utils";
+import type { ModuleKey } from "@universal-pos/shared";
 import {
   LayoutDashboard,
   Shirt,
@@ -23,12 +24,14 @@ interface NavItem {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   permission?: string;
-  subItems?: Array<{ titleKey: string; href: string; permission?: string }>;
+  module?: ModuleKey;
+  subItems?: Array<{ titleKey: string; href: string; permission?: string; module?: ModuleKey }>;
 }
 
 export function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
   const pathname = usePathname();
   const { hasPermission, user } = useAuth();
+  const { isModuleActive } = useModules();
   const { strings, locale } = useTranslation();
 
   const navItems: NavItem[] = [
@@ -110,6 +113,7 @@ export function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
       permission: "tenant.read",
       subItems: [
         { titleKey: "shopSettings", href: "/settings/shop", permission: "tenant.read" },
+        { titleKey: "modules", href: "/settings/modules", permission: "tenant.read" },
         { titleKey: "loyaltySettings", href: "/settings/loyalty", permission: "tenant.read" },
         { titleKey: "branches", href: "/settings/branches", permission: "branch.read" },
         { titleKey: "usersAndRoles", href: "/settings/users", permission: "user.read" },
@@ -119,9 +123,12 @@ export function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
     },
   ];
 
-  // Filter items based on permissions
+  // Filter items based on permissions and active modules
   const filteredNav = navItems.filter((item) => {
     if (item.permission && !hasPermission(item.permission)) {
+      return false;
+    }
+    if (item.module && !isModuleActive(item.module)) {
       return false;
     }
     return true;
@@ -186,7 +193,11 @@ export function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
               {item.subItems && isActive && (
                 <div className="pl-8 pr-2 py-1 space-y-1">
                   {item.subItems
-                    .filter((sub) => !sub.permission || hasPermission(sub.permission))
+                    .filter((sub) => {
+                      if (sub.permission && !hasPermission(sub.permission)) return false;
+                      if (sub.module && !isModuleActive(sub.module)) return false;
+                      return true;
+                    })
                     .map((sub) => {
                       const isSubActive = pathname === sub.href;
                       const subTitle = (strings.nav as any)[sub.titleKey] || sub.titleKey;

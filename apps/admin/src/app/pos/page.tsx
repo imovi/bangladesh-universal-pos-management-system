@@ -580,6 +580,9 @@ export default function PosPage() {
             receiptHeader: cfg.receiptHeader || "",
             receiptFooter: cfg.receiptFooter || "",
           });
+          if (cfg.activeModules) {
+            db.settings.put({ key: "activeModules", value: cfg.activeModules }).catch(() => {});
+          }
         }
       })
       .catch(() => {});

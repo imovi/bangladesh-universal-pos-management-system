@@ -23,6 +23,8 @@ const ALLOWED_ERROR_EXTRA_FIELDS = new Set([
   "clientTotalMinor",
   "breakdown",
   "lineErrors",
+  "missingModules",
+  "dependentModules",
 ]);
 
 @Catch()

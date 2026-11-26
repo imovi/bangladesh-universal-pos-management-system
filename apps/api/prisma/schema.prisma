@@ -215,6 +215,7 @@ model FeatureFlag {
   tenantId  String   @map("tenant_id") @db.Uuid
   key       String
   enabled   Boolean  @default(false)
+  allowed   Boolean  @default(false)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -223,6 +224,19 @@ model FeatureFlag {
   @@unique([tenantId, key])
   @@index([tenantId])
   @@map("feature_flags")
+}
+
+model PlatformAdmin {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  email        String    @unique
+  name         String
+  passwordHash String    @map("password_hash")
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("platform_admins")
 }
 
 model AuditLog {

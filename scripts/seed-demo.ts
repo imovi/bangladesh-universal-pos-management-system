@@ -16,6 +16,7 @@ import { SalesService } from "../apps/api/dist/modules/sales/sales.service.js";
 import { UsersService } from "../apps/api/dist/modules/users/users.service.js";
 import { RolesService } from "../apps/api/dist/modules/roles/roles.service.js";
 import { v7 as uuidv7 } from "uuid";
+import argon2 from "argon2";
 import {
   DEMO_CATEGORIES,
   DEMO_BRANDS,
@@ -62,6 +63,62 @@ async function seedTenantAndUsers(app: any, slug: string = "artisan-apparel") {
   });
 
   return { tenantId: signup.tenantId, branchId: signup.branchId, ownerId: signup.ownerUserId, cashierId: cashier.id, keeperId: keeper.id };
+}
+
+async function seedChemicalDemoTenant(app: any) {
+  const tenantsService = app.get(TenantsService);
+
+  const signup = await tenantsService.signup({
+    companyName: "Chemical Demo Co",
+    slug: "chemical-demo",
+    businessType: "chemical",
+    owner: {
+      name: "Tariqul Islam",
+      email: "owner@chemical.com",
+      phone: "+8801700000020",
+      password: "Password123!",
+    },
+    branch: {
+      name: "Tejgaon Depot",
+      code: "TD-01",
+      address: "Tejgaon Industrial Area, Dhaka",
+    },
+  });
+
+  return signup;
+}
+
+async function seedPlatformAdmin(adminClient: PrismaClient) {
+  if (process.env.NODE_ENV === "production") return;
+  const adminEmail = "platform@test.local";
+  const passwordHash = await argon2.hash("Password123!");
+
+  await adminClient.$transaction(async (tx) => {
+    await tx.$executeRaw`SET LOCAL ROLE pos_system;`;
+    const existing = await tx.platformAdmin.findUnique({
+      where: { email: adminEmail },
+    });
+    if (existing) {
+      await tx.platformAdmin.update({
+        where: { email: adminEmail },
+        data: {
+          passwordHash,
+          name: "Platform Test Admin",
+          isActive: true,
+        },
+      });
+    } else {
+      await tx.platformAdmin.create({
+        data: {
+          id: uuidv7(),
+          email: adminEmail,
+          passwordHash,
+          name: "Platform Test Admin",
+          isActive: true,
+        },
+      });
+    }
+  });
 }
 
 async function seedCatalog(app: any, tId: string, bId: string, oId: string, kId: string) {
@@ -221,7 +278,15 @@ async function runSeeder() {
     await adminClient.$transaction(async (tx) => {
       await tx.$executeRaw`DELETE FROM tenants WHERE slug = 'artisan-apparel';`;
       await tx.$executeRaw`UPDATE tenants SET slug = 'artisan-apparel' WHERE id = ${tenantId}::uuid;`;
+      await tx.$executeRaw`DELETE FROM tenants WHERE slug = 'chemical-demo';`;
     });
+
+    // Seed chemical demo tenant
+    await seedChemicalDemoTenant(app);
+
+    // Seed platform admin
+    await seedPlatformAdmin(adminClient);
+
     await adminClient.$disconnect();
 
     return { tenantId, branchId, ownerEmail: "owner@artisan.com" };

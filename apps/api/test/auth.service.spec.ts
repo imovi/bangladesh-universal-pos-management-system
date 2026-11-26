@@ -22,6 +22,9 @@ describe("AuthService Unit Tests", () => {
       auditLog: {
         create: vi.fn(),
       },
+      featureFlag: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
     };
 
     mockSystemDb = {

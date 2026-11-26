@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { useRouter, usePathname } from "next/navigation";
 import { env } from "@/env";
 import { db } from "@/lib/pos/offline/db";
+import type { ModuleKey } from "@universal-pos/shared";
 
 export interface BranchInfo {
   id: string;
@@ -24,6 +25,7 @@ export interface AuthUser {
   isOwner: boolean;
   branches: BranchInfo[];
   maxDiscountPercent?: number | null;
+  activeModules?: ModuleKey[];
 }
 
 interface AuthContextValue {
@@ -127,6 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           isOwner: u.isOwner ?? false,
           branches: u.branches || [],
           maxDiscountPercent: u.maxDiscountPercent !== undefined ? u.maxDiscountPercent : (u.isOwner ? null : 0),
+          activeModules: u.activeModules || [],
         };
         setUser(profile);
 
@@ -312,4 +315,14 @@ export function useAuth() {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
+}
+
+export function useModules() {
+  const { user } = useAuth();
+  const activeModules = user?.activeModules || [];
+  const isModuleActive = useCallback(
+    (key: ModuleKey) => activeModules.includes(key),
+    [activeModules]
+  );
+  return { activeModules, isModuleActive };
 }

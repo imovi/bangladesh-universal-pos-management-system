@@ -16,6 +16,7 @@ describe("Production Configuration & Database Role Hardening", () => {
     REDIS_URL: "redis://redis:6379",
     JWT_ACCESS_SECRET: "c841a0b1297e4e138bebf3b7596b42b781682390a3c242ef9a02347192837461",
     JWT_REFRESH_SECRET: "d952b1c2308f5f249cfcf4c8607c53c892793401b4d353fa0b13458203948572",
+    PLATFORM_JWT_SECRET: "e163c2d341906a25b0d0e1d970894502c28a4512b5e4640b1245690314059683",
     CORS_ORIGINS: "https://pos.artisan.com",
   };
 
@@ -30,6 +31,7 @@ describe("Production Configuration & Database Role Hardening", () => {
       DATABASE_URL: `postgresql://pos_runtime:${crypto.randomBytes(24).toString("base64url")}@postgres:5432/universal_pos`,
       JWT_ACCESS_SECRET: crypto.randomBytes(32).toString("hex"),
       JWT_REFRESH_SECRET: crypto.randomBytes(32).toString("hex"),
+      PLATFORM_JWT_SECRET: crypto.randomBytes(32).toString("hex"),
     };
     const result = envSchema.safeParse(generatedEnv);
     expect(result.success).toBe(true);

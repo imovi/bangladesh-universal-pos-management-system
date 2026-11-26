@@ -1279,3 +1279,13 @@ CI Runner (`LOAD_TEST_DURATION_MS=120000`, [`31ee28b`](https://github.com/imovi/
 
 Phase 1F closed at [`31ee28b`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/31ee28b), run [45562469861](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45562469861), all three jobs success.
 
+
+
+---
+
+## Phase 2.0
+
+### 1. Overview & Commit Verification Matrix
+
+| Commit | Description | Status | CI Run ID & Conclusion |
+| :--- | :--- | :--- | :--- |

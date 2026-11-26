@@ -50,21 +50,7 @@ test.describe("Milestone C1: Capture Required Screenshots", () => {
     registerId = registers[0].id;
 
     // Close any lingering open shifts so register is clean for Owner
-    try {
-      const openShiftsRes = await request.get("http://localhost:4000/api/v1/shifts?status=open", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (openShiftsRes.ok()) {
-        const shiftsData = await openShiftsRes.json();
-        const openShifts = Array.isArray(shiftsData.data) ? shiftsData.data : (shiftsData.data?.items || []);
-        for (const s of openShifts) {
-          await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
-            headers: { Authorization: `Bearer ${token}` },
-            data: { closingCashMinor: Number(s.openingCashMinor || 50000) },
-          }).catch(() => {});
-        }
-      }
-    } catch {}
+    await closeAllOpenShifts(request);
 
     const openRes = await request.post("http://localhost:4000/api/v1/shifts/open", {
       headers: { Authorization: `Bearer ${token}` },

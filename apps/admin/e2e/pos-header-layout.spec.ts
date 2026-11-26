@@ -38,22 +38,8 @@ test.describe("Step 1: POS Header Layout, Text Node Overlap & Overflow Verificat
     const registers = (await regRes.json()).data || [];
     const reg = registers[0];
 
-    // Check shift status
-    const shiftRes = await request.get(`http://localhost:4000/api/v1/shifts?registerId=${reg.id}&status=open`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const shiftData = await shiftRes.json();
-    const items = shiftData.data?.items || shiftData.data || [];
-
-    // If open shift belongs to another cashier, close it first
-    for (const item of items) {
-      if (item.cashierUserId !== me.id) {
-        await request.post(`http://localhost:4000/api/v1/shifts/${item.id}/close`, {
-          headers: { Authorization: `Bearer ${token}` },
-          data: { closingCashMinor: Number(item.openingCashMinor || 50000) },
-        }).catch(() => {});
-      }
-    }
+    // Close any lingering open shifts so register is clean for current user
+    await closeAllOpenShifts(request);
 
     // Re-check shift for current user
     const checkRes = await request.get(`http://localhost:4000/api/v1/shifts?registerId=${reg.id}&status=open`, {

@@ -3932,6 +3932,84 @@ Also:
   ```
 - `npx tsc --noEmit` in `apps/admin` shows one error, `e2e/offline-selling.spec.ts: 'match' is possibly 'null'`. It is there before this change too (`git stash`, same error at line 850), so this commit does not add it.
 
+### Shift cleanup sync
+
+#### 1. CI Status for a6b78f6
+Output of `node scripts/ci-status.cjs a6b78f6`:
+```text
+GitHub API: authenticated
+45767075990 a6b78f6 completed success
+```
+
+- CI: `a6b78f6` → run `45767075990` → completed success
+
+a6b78f6 replaced the 12 copies of the shift cleanup with one helper that fails loudly.
+Why ShiftInUseAlert appeared in CI run 45598833108 is still not proven.
+
+#### 2. Open Shift Investigation & Table
+Full local E2E suite was executed once with `retries: 0` with temporary instrumentation logging `[shift-cleanup]` in `closeAllOpenShifts`.
+
+| Spec Name | Number of Shifts Closed | Opened By | Status / Classification |
+|---|---|---|---|
+| `barcode-print-and-scan.spec.ts` | 1 | `barcode-print-and-scan.spec.ts` (Step 11 on /pos) | Expected (test opens shift on purpose, closed by afterAll) |
+| `capture-c1-screenshots.spec.ts` | 1 | `capture-c1-screenshots.spec.ts` (beforeAll line 69) | Expected (test opens shift on purpose, closed by afterAll) |
+| `capture-c2-screenshots.spec.ts` | 1 | `capture-c2-screenshots.spec.ts` (beforeAll line 70) | Expected (test opens shift on purpose, closed by afterAll) |
+| `credit-due-flow.spec.ts` | 1 | `credit-due-flow.spec.ts` (beforeAll line 65) | Expected (test opens shift on purpose, closed by afterAll) |
+| `data-import-flow.spec.ts` | 1 | `data-import-flow.spec.ts` (Step 103 on /pos) | Expected (test opens shift on purpose, closed by afterAll) |
+| `loyalty-pos-flow.spec.ts` | 1 | `loyalty-pos-flow.spec.ts` (beforeAll line 70) | Expected (test opens shift on purpose, closed by afterAll) |
+| `offline-selling.spec.ts` | 1 | `offline-selling.spec.ts` (beforeAll line 52) | Expected (test opens shift on purpose, closed by afterAll) |
+| `pos-flow.spec.ts` (beforeAll) | 0 | None (no open shifts when pos-flow started) | Expected (pristine start) |
+| `pos-flow.spec.ts` (afterAll) | 0 | `pos-flow.spec.ts` (closed via UI in Flow 4) | Expected (shift closed within test) |
+| `pos-header-layout.spec.ts` | 1 | `pos-header-layout.spec.ts` (beforeAll line 64) | Expected (test opens shift on purpose, closed by afterAll) |
+| `pos-shortcuts.spec.ts` | 1 | `pos-shortcuts.spec.ts` (beforeAll line 62) | Expected (test opens shift on purpose, closed by afterAll) |
+| `returns-flow.spec.ts` | 1 | `returns-flow.spec.ts` (beforeAll line 63) | Expected (test opens shift on purpose, closed by afterAll) |
+| `sales-flow.spec.ts` | 1 | `sales-flow.spec.ts` (beforeAll line 62) | Expected (test opens shift on purpose, closed by afterAll) |
+
+No shift leaked across specs into `pos-flow.spec.ts`: `beforeAll` found 0 open shifts.
+`coupons-pos-flow.spec.ts` and `promotions-pos-flow.spec.ts` were updated to call `closeAllOpenShifts(request)` in `afterAll` so all specs that open shifts guarantee teardown.
+All remaining inline shift cleanups using `.catch(() => {})` in test setup across the 9 specs were replaced with `await closeAllOpenShifts(request)`.
+
+#### 3. Node.js 20 Deprecation Warning in CI
+Exact warning text from the GitHub Actions Check Runs Annotations API (run `45767075990`):
+```text
+Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+```
+
+Updated only the actions named in the warning in `.github/workflows/ci.yml` to the versions running on Node 24 per their official repositories/README:
+- `actions/checkout@v4` → `actions/checkout@v7` (lines 40, 197, 442)
+- `actions/setup-node@v4` → `actions/setup-node@v7` (lines 45, 202, 447)
+- `actions/upload-artifact@v4` → `actions/upload-artifact@v7` (line 185)
+
+#### 4. Proof
+1. **Grep check for catch in e2e (`git grep -n "catch {}\|\.catch(() => {})" apps/admin/e2e`):**
+```text
+apps/admin/e2e/coupons-pos-flow.spec.ts:34:          }).catch(() => {});
+apps/admin/e2e/coupons-pos-flow.spec.ts:54:          }).catch(() => {});
+apps/admin/e2e/coupons-pos-flow.spec.ts:67:        }).catch(() => {});
+apps/admin/e2e/coupons-pos-flow.spec.ts:69:    } catch {}
+apps/admin/e2e/coupons-pos-flow.spec.ts:112:      }).catch(() => {});
+apps/admin/e2e/data-import-flow.spec.ts:90:    } catch {}
+apps/admin/e2e/global-data-integrity-guard.spec.ts:71:          await loadingIndicator.waitFor({ state: "detached", timeout: 10000 }).catch(() => {});
+apps/admin/e2e/loyalty-pos-flow.spec.ts:35:          }).catch(() => {});
+apps/admin/e2e/loyalty-pos-flow.spec.ts:55:          }).catch(() => {});
+apps/admin/e2e/loyalty-pos-flow.spec.ts:68:        }).catch(() => {});
+apps/admin/e2e/loyalty-pos-flow.spec.ts:70:    } catch {}
+apps/admin/e2e/loyalty-pos-flow.spec.ts:102:        }).catch(() => {});
+apps/admin/e2e/offline-selling.spec.ts:48:            }).catch(() => {});
+apps/admin/e2e/promotions-pos-flow.spec.ts:33:          }).catch(() => {});
+apps/admin/e2e/promotions-pos-flow.spec.ts:52:          }).catch(() => {});
+apps/admin/e2e/promotions-pos-flow.spec.ts:64:        }).catch(() => {});
+apps/admin/e2e/promotions-pos-flow.spec.ts:66:    } catch {}
+apps/admin/e2e/promotions-pos-flow.spec.ts:272:        }).catch(() => {});
+```
+Zero hits inside shift cleanup.
+
+2. **Full local E2E suite run (`retries: 0`):**
+```text
+  161 passed (9.2m)
+```
+
+
 
 
 

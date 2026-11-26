@@ -31,21 +31,7 @@ test.describe("Milestone C2 Screenshots Capture", () => {
     const token = loginData.data.accessToken;
 
     // Close any lingering open shifts so Owner has a clean register state
-    try {
-      const openShiftsRes = await request.get("http://localhost:4000/api/v1/shifts?status=open", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (openShiftsRes.ok()) {
-        const shiftsData = await openShiftsRes.json();
-        const openShifts = Array.isArray(shiftsData.data) ? shiftsData.data : (shiftsData.data?.items || []);
-        for (const s of openShifts) {
-          await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
-            headers: { Authorization: `Bearer ${token}` },
-            data: { closingCashMinor: Number(s.openingCashMinor || 50000) },
-          }).catch(() => {});
-        }
-      }
-    } catch {}
+    await closeAllOpenShifts(request);
 
     // Fetch branches and products
     const branchesRes = await request.get("http://localhost:4000/api/v1/branches", {

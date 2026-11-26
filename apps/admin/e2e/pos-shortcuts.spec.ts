@@ -38,20 +38,7 @@ test.describe("Step 2 (Item 1): POS Keyboard Shortcuts Flow (F2, F4, F6, F8, F9,
     });
     const meId = (await meRes.json()).data.id;
 
-    const shiftsRes = await request.get(
-      `http://localhost:4000/api/v1/shifts?registerId=${registerId}&status=open`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    const shiftsJson = await shiftsRes.json();
-    const openShifts = Array.isArray(shiftsJson.data) ? shiftsJson.data : (shiftsJson.data?.items || []);
-    for (const s of openShifts) {
-      if (s.cashierUserId !== meId) {
-        await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
-          headers: { Authorization: `Bearer ${token}` },
-          data: { closingCashMinor: Number(s.openingCashMinor || 50000) },
-        }).catch(() => {});
-      }
-    }
+    await closeAllOpenShifts(request);
 
     const checkRes = await request.get(
       `http://localhost:4000/api/v1/shifts?registerId=${registerId}&status=open`,

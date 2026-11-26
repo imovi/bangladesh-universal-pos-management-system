@@ -27,19 +27,7 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
       if (loginRes.ok()) {
         const token = (await loginRes.json()).data?.accessToken;
         if (token) {
-          const shiftsRes = await request.get("http://localhost:4000/api/v1/shifts?status=open", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (shiftsRes.ok()) {
-            const shiftsData = await shiftsRes.json();
-            const openShifts = Array.isArray(shiftsData.data) ? shiftsData.data : (shiftsData.data?.items || []);
-            for (const s of openShifts) {
-              await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
-                headers: { Authorization: `Bearer ${token}` },
-                data: { closingCashMinor: Number(s.openingCashMinor || 50000) },
-              }).catch(() => {});
-            }
-          }
+          await closeAllOpenShifts(request);
           const branchesRes = await request.get("http://localhost:4000/api/v1/branches", {
             headers: { Authorization: `Bearer ${token}` },
           });

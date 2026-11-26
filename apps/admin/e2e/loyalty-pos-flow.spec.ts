@@ -36,19 +36,7 @@ test.describe("Milestone E4: Loyalty Points POS Flow E2E Test", () => {
         }
       }
 
-      const shiftsRes = await request.get("http://localhost:4000/api/v1/shifts?status=open", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (shiftsRes.ok()) {
-        const shiftsData = await shiftsRes.json();
-        const openShifts = shiftsData.data?.items || shiftsData.data || [];
-        for (const s of openShifts) {
-          await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
-            headers: { Authorization: `Bearer ${token}` },
-            data: { closingCashMinor: Number(s.openingCashMinor || 50000) },
-          }).catch(() => {});
-        }
-      }
+      await closeAllOpenShifts(request);
 
       const branchesRes = await request.get("http://localhost:4000/api/v1/branches", {
         headers: { Authorization: `Bearer ${token}` },

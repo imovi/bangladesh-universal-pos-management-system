@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { v7 as uuidv7 } from "uuid";
+import { closeAllOpenShifts } from "./helpers/shift-cleanup";
 
 test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
   let token: string;
@@ -33,19 +34,7 @@ test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
         }
       }
 
-      const shiftsRes = await request.get("http://localhost:4000/api/v1/shifts?status=open", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (shiftsRes.ok()) {
-        const shiftsData = await shiftsRes.json();
-        const openShifts = shiftsData.data?.items || shiftsData.data || [];
-        for (const s of openShifts) {
-          await request.post(`http://localhost:4000/api/v1/shifts/${s.id}/close`, {
-            headers: { Authorization: `Bearer ${token}` },
-            data: { closingCashMinor: Number(s.openingCashMinor || 50000) },
-          }).catch(() => {});
-        }
-      }
+      await closeAllOpenShifts(request);
       const branchesRes = await request.get("http://localhost:4000/api/v1/branches", {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -129,6 +118,7 @@ test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
         headers: { Authorization: `Bearer ${token}` },
       });
     }
+    await closeAllOpenShifts(request);
   });
 
   async function loginAndGoToPos(page: any) {

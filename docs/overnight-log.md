@@ -4098,3 +4098,14 @@ The test failed immediately and loudly at `coupons-pos-flow.spec.ts:11:11` in `b
 ```text
   161 passed (9.6m)
 ```
+
+#### 5. CI Verification of Commit (235b484)
+- CI: `235b484` → run `45881725984` → completed success
+- Job details:
+  - test (job 140122436480): completed success
+  - load-check (job 140128410818): completed success
+  - smoke-prod (job 140128410860): completed success
+- Playwright Run Summary annotation of the test job:
+```json
+{"annotation_level": "notice", "title": "🎭 Playwright Run Summary", "message": "  161 passed (9.2m)"}
+```

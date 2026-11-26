@@ -7,6 +7,8 @@ test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
   let promoId: string;
 
   test.beforeAll(async ({ request }) => {
+    await closeAllOpenShifts(request);
+
     // 1. Authenticate with API as Owner
     const loginRes = await request.post("http://localhost:4000/api/v1/auth/login", {
       data: {
@@ -34,7 +36,6 @@ test.describe("Milestone E2: Promotions POS Cashier Flow & Return", () => {
         }
       }
 
-      await closeAllOpenShifts(request);
       const branchesRes = await request.get("http://localhost:4000/api/v1/branches", {
         headers: { Authorization: `Bearer ${token}` },
       });

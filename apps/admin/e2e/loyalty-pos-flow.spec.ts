@@ -9,6 +9,8 @@ test.describe("Milestone E4: Loyalty Points POS Flow E2E Test", () => {
   const customerName = "Loyalty Flow Customer";
 
   test.beforeAll(async ({ request }) => {
+    await closeAllOpenShifts(request);
+
     // 1. Authenticate with API as Owner
     const loginRes = await request.post("http://localhost:4000/api/v1/auth/login", {
       data: {
@@ -35,8 +37,6 @@ test.describe("Milestone E4: Loyalty Points POS Flow E2E Test", () => {
           }).catch(() => {});
         }
       }
-
-      await closeAllOpenShifts(request);
 
       const branchesRes = await request.get("http://localhost:4000/api/v1/branches", {
         headers: { Authorization: `Bearer ${token}` },

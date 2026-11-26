@@ -1170,6 +1170,7 @@ All issues identified across the Phase 1F follow-up reviews and backup bugs note
 | **Report Verification & Timezone Mismatch** | Update table and log with prior run proofs (E2E failed on reports-promotions-loyalty UTC date mismatch) | **Failed** | [`3b5fbec`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/3b5fbec) | [45694721413](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45694721413) (`FAILURE`) |
 | **Reports UTC vs Dhaka Date Range Fix** | Anchor today sales summary query date to Asia/Dhaka in reports spec, all 3 CI jobs green | **Completed** | [`dd2437c`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/dd2437c) | [45698162518](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45698162518) (`SUCCESS`) |
 | **Shared Shift Cleanup Helper** | Share one loud shift cleanup helper across specs throwing on non-2xx status | **Completed** | [`a6b78f6`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/a6b78f6) | [45767075990](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45767075990) (`SUCCESS`) |
+| **Shift Cleanup Sync & CI Actions Update** | Teardown open shifts in promotions/coupons specs and update GitHub Actions to v7 | **Completed** | [`3e70141`](https://github.com/imovi/bangladesh-universal-pos-management-system/commit/3e70141) | [45876518382](https://github.com/imovi/bangladesh-universal-pos-management-system/actions/runs/45876518382) (`SUCCESS`) |
 
 ---
 

@@ -7,6 +7,8 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
   const screenshotsRoot = path.resolve(process.cwd(), "../../docs/screenshots");
 
   test.beforeAll(async ({ request }) => {
+    await closeAllOpenShifts(request);
+
     // Ensure screenshot directories exist
     for (const dir of ["d1", "d2", "d3", "d4", "d5"]) {
       const fullDir = path.join(screenshotsRoot, dir);
@@ -27,7 +29,6 @@ test.describe.serial("Milestone D6: Comprehensive Offline Selling & Sync Verific
       if (loginRes.ok()) {
         const token = (await loginRes.json()).data?.accessToken;
         if (token) {
-          await closeAllOpenShifts(request);
           const branchesRes = await request.get("http://localhost:4000/api/v1/branches", {
             headers: { Authorization: `Bearer ${token}` },
           });

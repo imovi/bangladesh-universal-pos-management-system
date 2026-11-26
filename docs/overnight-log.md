@@ -4024,3 +4024,77 @@ Zero hits inside shift cleanup.
 
 
 
+
+### Shift cleanup try/catch fix
+
+The line "Zero hits inside shift cleanup" under ### Shift cleanup sync was wrong. In 4 specs, closeAllOpenShifts was still inside a try with an empty catch. This note fixes that.
+
+#### 1. Verification of Prior Commit (3e70141)
+- CI: `3e70141` → run `45876518382` → completed success
+- Job details:
+  - test (job 140104856415): completed success
+  - smoke-prod (job 140110041243): completed success
+  - load-check (job 140110041239): completed success
+- Playwright Run Summary annotation of the test job:
+```json
+{"annotation_level": "notice", "title": "🎭 Playwright Run Summary", "message": "  161 passed (8.2m)"}
+```
+- Node.js 20 warning is completely gone from run 45876518382 (verified 0 occurrences across all jobs).
+
+#### 2. Grep Verification of All Call Sites (Zero Inside Try Blocks)
+`git grep -n "closeAllOpenShifts" apps/admin/e2e` verified that every call to `closeAllOpenShifts` across all spec files is outside try blocks:
+- `apps/admin/e2e/barcode-print-and-scan.spec.ts:40 — not inside try`
+- `apps/admin/e2e/barcode-print-and-scan.spec.ts:210 — not inside try`
+- `apps/admin/e2e/capture-c1-screenshots.spec.ts:53 — not inside try`
+- `apps/admin/e2e/capture-c1-screenshots.spec.ts:215 — not inside try`
+- `apps/admin/e2e/capture-c2-screenshots.spec.ts:34 — not inside try`
+- `apps/admin/e2e/capture-c2-screenshots.spec.ts:245 — not inside try`
+- `apps/admin/e2e/coupons-pos-flow.spec.ts:11 — not inside try`
+- `apps/admin/e2e/coupons-pos-flow.spec.ts:114 — not inside try`
+- `apps/admin/e2e/credit-due-flow.spec.ts:315 — not inside try`
+- `apps/admin/e2e/data-import-flow.spec.ts:140 — not inside try`
+- `apps/admin/e2e/loyalty-pos-flow.spec.ts:12 — not inside try`
+- `apps/admin/e2e/loyalty-pos-flow.spec.ts:284 — not inside try`
+- `apps/admin/e2e/offline-selling.spec.ts:10 — not inside try`
+- `apps/admin/e2e/offline-selling.spec.ts:59 — not inside try`
+- `apps/admin/e2e/pos-flow.spec.ts:20 — not inside try`
+- `apps/admin/e2e/pos-flow.spec.ts:24 — not inside try`
+- `apps/admin/e2e/pos-header-layout.spec.ts:42 — not inside try`
+- `apps/admin/e2e/pos-header-layout.spec.ts:652 — not inside try`
+- `apps/admin/e2e/pos-shortcuts.spec.ts:41 — not inside try`
+- `apps/admin/e2e/pos-shortcuts.spec.ts:62 — not inside try`
+- `apps/admin/e2e/promotions-pos-flow.spec.ts:10 — not inside try`
+- `apps/admin/e2e/promotions-pos-flow.spec.ts:122 — not inside try`
+- `apps/admin/e2e/returns-flow.spec.ts:450 — not inside try`
+- `apps/admin/e2e/sales-flow.spec.ts:222 — not inside try`
+
+#### 3. Loud Failure Demonstration (Port 4999)
+Temporarily pointed `API_BASE_URL` in `apps/admin/e2e/helpers/shift-cleanup.ts` to `http://localhost:4999/api/v1` and ran `npx playwright test e2e/coupons-pos-flow.spec.ts`.
+The test failed immediately and loudly at `coupons-pos-flow.spec.ts:11:11` in `beforeAll`:
+```text
+    AggregateError: apiRequestContext.post: connect ECONNREFUSED ::1:4999
+    connect ECONNREFUSED 127.0.0.1:4999
+    Call log:
+      - → POST http://localhost:4999/api/v1/auth/login
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/159.0.8154.6 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - content-type: application/json
+        - content-length: 86
+
+        at apiRequestContext.post: connect ECONNREFUSED ::1:4999
+        at loginAsOwner (D:\pos system\apps\admin\e2e\helpers\shift-cleanup.ts:20:29)
+        at closeAllOpenShifts (D:\pos system\apps\admin\e2e\helpers\shift-cleanup.ts:44:23)
+        at D:\pos system\apps\admin\e2e\coupons-pos-flow.spec.ts:11:11
+```
+`apps/admin/e2e/helpers/shift-cleanup.ts` was restored and verified with `git diff apps/admin/e2e/helpers/shift-cleanup.ts` (empty output).
+
+#### 4. Local Test Runs
+- 4 changed specs (`coupons-pos-flow.spec.ts`, `loyalty-pos-flow.spec.ts`, `promotions-pos-flow.spec.ts`, `offline-selling.spec.ts` with `--retries=0`):
+```text
+  16 passed (2.0m)
+```
+- Full local E2E suite (`npx playwright test --project=chromium --retries=0`):
+```text
+  161 passed (9.6m)
+```

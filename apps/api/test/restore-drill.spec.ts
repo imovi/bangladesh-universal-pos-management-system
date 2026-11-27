@@ -137,6 +137,7 @@ describe("Milestone F2: PostgreSQL Backup & Restore Drill with RLS and Immutabil
               unitPriceMinor: 250000n,
               unitCostMinor: 150000n,
               quantity: new Decimal(1),
+              baseQuantity: new Decimal(1),
               subtotalMinor: 250000n,
               totalMinor: 250000n,
             },

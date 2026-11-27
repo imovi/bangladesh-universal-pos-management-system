@@ -573,7 +573,7 @@ model PurchaseOrderItem {
   productUnitId   String?      @map("product_unit_id") @db.Uuid
   unitName        String       @default("pcs") @map("unit_name")
   unitFactor      Decimal      @default(1) @map("unit_factor") @db.Decimal(14, 3)
-  baseQuantity    Decimal      @map("base_quantity") @db.Decimal(14, 3)
+  baseQuantity    Decimal      @default(1) @map("base_quantity") @db.Decimal(14, 3)
   qtyOrdered      Decimal      @map("qty_ordered") @db.Decimal(14, 3)
   qtyReceived     Decimal      @default(0) @map("qty_received") @db.Decimal(14, 3)
   unitCostMinor   BigInt       @map("unit_cost_minor")
@@ -629,7 +629,7 @@ model GoodsReceiptItem {
   productUnitId       String?            @map("product_unit_id") @db.Uuid
   unitName            String             @default("pcs") @map("unit_name")
   unitFactor          Decimal            @default(1) @map("unit_factor") @db.Decimal(14, 3)
-  baseQtyReceived     Decimal            @map("base_qty_received") @db.Decimal(14, 3)
+  baseQtyReceived     Decimal            @default(1) @map("base_qty_received") @db.Decimal(14, 3)
   qtyReceived         Decimal            @map("qty_received") @db.Decimal(14, 3)
   unitCostMinor       BigInt             @map("unit_cost_minor")
   createdAt           DateTime           @default(now()) @map("created_at")
@@ -845,7 +845,7 @@ model SaleItem {
   productUnitId          String?        @map("product_unit_id") @db.Uuid
   unitName               String         @default("pcs") @map("unit_name")
   unitFactor             Decimal        @default(1) @map("unit_factor") @db.Decimal(14, 3)
-  baseQuantity           Decimal        @map("base_quantity") @db.Decimal(14, 3)
+  baseQuantity           Decimal        @default(1) @map("base_quantity") @db.Decimal(14, 3)
   originalUnitPriceMinor BigInt?        @map("original_unit_price_minor")
   unitPriceMinor         BigInt         @map("unit_price_minor")
   unitCostMinor          BigInt         @map("unit_cost_minor")
@@ -970,7 +970,7 @@ model SaleReturnItem {
   saleItemId       String         @map("sale_item_id") @db.Uuid
   variantId        String         @map("variant_id") @db.Uuid
   quantity         Decimal        @db.Decimal(14, 3)
-  baseQuantity     Decimal        @map("base_quantity") @db.Decimal(14, 3)
+  baseQuantity     Decimal        @default(1) @map("base_quantity") @db.Decimal(14, 3)
   unitRefundMinor  BigInt         @map("unit_refund_minor")
   taxRefundMinor   BigInt         @default(0) @map("tax_refund_minor")
   totalRefundMinor BigInt         @map("total_refund_minor")

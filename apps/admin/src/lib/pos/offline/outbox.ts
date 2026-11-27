@@ -1,7 +1,6 @@
 import { db, PosOfflineDatabase } from "./db";
 import type {
   CreateCustomerPayload,
-  CreateSalePayload,
   OfflineOutboxItem,
 } from "./types";
 

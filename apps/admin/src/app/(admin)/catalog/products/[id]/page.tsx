@@ -40,6 +40,7 @@ export default function ProductDetailPage() {
   const params = useParams();
   const productId = params.id as string;
   const { strings, locale } = useTranslation();
+  const isBn = locale === "bn";
   const { apiFetch, hasPermission } = useAuth();
   const queryClient = useQueryClient();
 
@@ -350,7 +351,7 @@ export default function ProductDetailPage() {
     return (
       <PermissionGate permission="catalog.read">
         <div className="p-8 text-center text-sm text-destructive">
-          {locale === "bn" ? "পণ্যটি খুঁজে পাওয়া যায়নি।" : "Product not found."}
+          {isBn ? "পণ্যটি খুঁজে পাওয়া যায়নি।" : "Product not found."}
         </div>
       </PermissionGate>
     );
@@ -375,7 +376,7 @@ export default function ProductDetailPage() {
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {product.category?.name || (locale === "bn" ? "ক্যাটাগরি নেই" : "No category")} • {product.brand?.name || (locale === "bn" ? "ব্র্যান্ড নেই" : "No brand")} • {variants.length} {locale === "bn" ? "টি ভ্যারিয়েন্ট" : "variants"}
+                {product.category?.name || (isBn ? "ক্যাটাগরি নেই" : "No category")} • {product.brand?.name || (isBn ? "ব্র্যান্ড নেই" : "No brand")} • {variants.length} {isBn ? "টি ভ্যারিয়েন্ট" : "variants"}
               </p>
             </div>
           </div>
@@ -389,7 +390,7 @@ export default function ProductDetailPage() {
               data-testid="print-barcodes-button"
             >
               <Printer className="h-4 w-4" />
-              <span>{locale === "bn" ? "বারকোড প্রিন্ট" : "Print Barcodes"}</span>
+              <span>{isBn ? "বারকোড প্রিন্ট" : "Print Barcodes"}</span>
             </Button>
             <Button
               size="sm"
@@ -398,7 +399,7 @@ export default function ProductDetailPage() {
               className="flex items-center gap-1.5"
             >
               <DollarSign className="h-4 w-4" />
-              <span>{locale === "bn" ? "একসাথে মূল্য পরিবর্তন" : "Bulk Price Update"}</span>
+              <span>{isBn ? "একসাথে মূল্য পরিবর্তন" : "Bulk Price Update"}</span>
             </Button>
           </div>
         </div>
@@ -424,9 +425,9 @@ export default function ProductDetailPage() {
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base font-bold flex items-center justify-between">
-                <span>{locale === "bn" ? "সাইজ ও কালার ভিত্তিক বর্তমান স্টক" : "Size & Colour Stock Matrix"}</span>
+                <span>{isBn ? "সাইজ ও কালার ভিত্তিক বর্তমান স্টক" : "Size & Colour Stock Matrix"}</span>
                 <span className="text-xs font-normal text-muted-foreground">
-                  {locale === "bn" ? "সবুজ: পর্যাপ্ত স্টক | হলুদ: কম স্টক | লাল: শূন্য" : "Green: In stock | Amber: Low stock | Red: Out of stock"}
+                  {isBn ? "সবুজ: পর্যাপ্ত স্টক | হলুদ: কম স্টক | লাল: শূন্য" : "Green: In stock | Amber: Low stock | Red: Out of stock"}
                 </span>
               </CardTitle>
             </CardHeader>
@@ -448,11 +449,11 @@ export default function ProductDetailPage() {
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <span>{locale === "bn" ? "একক ও পরিমাপ (Units & Packing)" : "Units & Packing"}</span>
+                  <span>{isBn ? "একক ও পরিমাপ (Units & Packing)" : "Units & Packing"}</span>
                   <Badge variant="outline" className="text-xs">Module: Units</Badge>
                 </CardTitle>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {locale === "bn"
+                  {isBn
                     ? "পণ্যটির বেস একক, দশমিক অনুমতি এবং বিভিন্ন প্যাকিং একক ও মূল্য নির্ধারণ করুন"
                     : "Configure base unit, decimal quantities, and packing units"}
                 </p>
@@ -472,7 +473,7 @@ export default function ProductDetailPage() {
                 }}
               >
                 <Plus className="h-3.5 w-3.5" />
-                <span>{locale === "bn" ? "নতুন একক যোগ করুন" : "Add Packing Unit"}</span>
+                <span>{isBn ? "নতুন একক যোগ করুন" : "Add Packing Unit"}</span>
               </Button>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -480,7 +481,7 @@ export default function ProductDetailPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-lg bg-muted/30 border">
                 <div className="space-y-1.5">
                   <Label htmlFor="detailBaseUnit" className="text-xs font-semibold">
-                    {locale === "bn" ? "বেস একক (Base Unit)" : "Base Unit"}
+                    {isBn ? "বেস একক (Base Unit)" : "Base Unit"}
                   </Label>
                   <div className="flex items-center gap-2">
                     <select
@@ -494,13 +495,13 @@ export default function ProductDetailPage() {
                     >
                       {BASE_UNITS.map((u) => (
                         <option key={u.code} value={u.code}>
-                          {locale === "bn" ? `${u.nameBn} (${u.code})` : `${u.nameEn} (${u.code})`}
+                          {isBn ? `${u.nameBn} (${u.code})` : `${u.nameEn} (${u.code})`}
                         </option>
                       ))}
                     </select>
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    {locale === "bn"
+                    {isBn
                       ? "স্টক মুভমেন্ট বা বিক্রয় হয়ে গেলে বেস একক পরিবর্তন করা যাবে না।"
                       : "Cannot change base unit once stock movements or sales exist."}
                   </p>
@@ -519,11 +520,11 @@ export default function ProductDetailPage() {
                       data-testid="detail-allow-decimal-switch"
                     />
                     <Label htmlFor="detailAllowDecimal" className="text-xs font-semibold cursor-pointer">
-                      {locale === "bn" ? "ভগ্নাংশ বা দশমিক পরিমাণ অনুমোদন করুন (Allow Decimal Qty)" : "Allow Decimal Quantity"}
+                      {isBn ? "ভগ্নাংশ বা দশমিক পরিমাণ অনুমোদন করুন (Allow Decimal Qty)" : "Allow Decimal Quantity"}
                     </Label>
                   </div>
                   <p className="text-[11px] text-muted-foreground pl-6">
-                    {locale === "bn" ? "সক্রিয় থাকলে ২.৫ কেজি ইত্যাদি দশমিক বিক্রি সম্ভব।" : "Enables fractional quantities (e.g. 2.5 kg)."}
+                    {isBn ? "সক্রিয় থাকলে ২.৫ কেজি ইত্যাদি দশমিক বিক্রি সম্ভব।" : "Enables fractional quantities (e.g. 2.5 kg)."}
                   </p>
                 </div>
               </div>
@@ -531,18 +532,18 @@ export default function ProductDetailPage() {
               {/* Packing Units Table */}
               <div className="space-y-2">
                 <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                  {locale === "bn" ? "প্যাকিং এককসমূহ (Units)" : "Packing Units"}
+                  {isBn ? "প্যাকিং এককসমূহ (Units)" : "Packing Units"}
                 </h3>
                 <div className="rounded-md border overflow-hidden">
                   <Table data-testid="product-units-table">
                     <TableHeader>
                       <TableRow>
-                        <TableHead>{locale === "bn" ? "এককের নাম" : "Unit Name"}</TableHead>
-                        <TableHead>{locale === "bn" ? "রূপান্তর ফ্যাক্টর" : "Factor"}</TableHead>
-                        <TableHead className="text-center">{locale === "bn" ? "বিক্রয় একক" : "Sale Unit"}</TableHead>
-                        <TableHead className="text-center">{locale === "bn" ? "ক্রয় একক" : "Purchase Unit"}</TableHead>
-                        <TableHead className="text-center">{locale === "bn" ? "অবস্থা" : "Status"}</TableHead>
-                        <TableHead className="text-right">{locale === "bn" ? "ভ্যারিয়েন্ট মূল্য ও ওভাররাইড" : "Variant Prices"}</TableHead>
+                        <TableHead>{isBn ? "এককের নাম" : "Unit Name"}</TableHead>
+                        <TableHead>{isBn ? "রূপান্তর ফ্যাক্টর" : "Factor"}</TableHead>
+                        <TableHead className="text-center">{isBn ? "বিক্রয় একক" : "Sale Unit"}</TableHead>
+                        <TableHead className="text-center">{isBn ? "ক্রয় একক" : "Purchase Unit"}</TableHead>
+                        <TableHead className="text-center">{isBn ? "অবস্থা" : "Status"}</TableHead>
+                        <TableHead className="text-right">{isBn ? "ভ্যারিয়েন্ট মূল্য ও ওভাররাইড" : "Variant Prices"}</TableHead>
                         <TableHead className="text-right w-24">{strings.common.actions}</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -550,13 +551,13 @@ export default function ProductDetailPage() {
                       {(!product.units || product.units.length === 0) ? (
                         <TableRow>
                           <TableCell colSpan={7} className="text-center py-6 text-xs text-muted-foreground">
-                            {locale === "bn" ? "কোনো অতিরিক্ত একক নেই (শুধুমাত্র বেস এককে বিক্রি/ক্রয় হয়)" : "No additional packing units."}
+                            {isBn ? "কোনো অতিরিক্ত একক নেই (শুধুমাত্র বেস এককে বিক্রি/ক্রয় হয়)" : "No additional packing units."}
                           </TableCell>
                         </TableRow>
                       ) : (
                         product.units.map((u: any) => {
                           const baseDef = getBaseUnit(product.baseUnit || "pcs");
-                          const baseLabel = locale === "bn" ? (baseDef?.nameBn || product.baseUnit) : (baseDef?.nameEn || product.baseUnit);
+                          const baseLabel = isBn ? (baseDef?.nameBn || product.baseUnit) : (baseDef?.nameEn || product.baseUnit);
                           const factorFormula = `১ ${u.name} = ${u.factor} ${baseLabel}`;
 
                           return (
@@ -671,7 +672,7 @@ export default function ProductDetailPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[180px]">{strings.products.sku}</TableHead>
-                  <TableHead>{locale === "bn" ? "অপশন" : "Options"}</TableHead>
+                  <TableHead>{isBn ? "অপশন" : "Options"}</TableHead>
                   <TableHead className="text-right">{strings.products.price}</TableHead>
                   {canSeeCost && <TableHead className="text-right">{strings.products.costPrice}</TableHead>}
                   <TableHead className="w-[240px]">{strings.products.barcode}</TableHead>
@@ -728,7 +729,7 @@ export default function ProductDetailPage() {
                               </span>
                             ))
                           ) : (
-                            <span className="text-[11px] text-muted-foreground">{locale === "bn" ? "বারকোড নেই" : "No barcode"}</span>
+                            <span className="text-[11px] text-muted-foreground">{isBn ? "বারকোড নেই" : "No barcode"}</span>
                           )}
                           <Button
                             variant="ghost"
@@ -757,7 +758,7 @@ export default function ProductDetailPage() {
                           }}
                         >
                           <Edit2 className="h-3 w-3" />
-                          <span>{locale === "bn" ? "মূল্য পরিবর্তন" : "Edit Price"}</span>
+                          <span>{isBn ? "মূল্য পরিবর্তন" : "Edit Price"}</span>
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -775,13 +776,13 @@ export default function ProductDetailPage() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-bold flex items-center gap-2">
                   <Barcode className="h-4 w-4" />
-                  {locale === "bn" ? "নতুন বারকোড যোগ করুন" : "Add New Barcode"}
+                  {isBn ? "নতুন বারকোড যোগ করুন" : "Add New Barcode"}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="barcodeInput">
-                    {locale === "bn" ? "বারকোড নম্বর (টাইপ বা স্ক্যান করুন)" : "Barcode number (type or scan)"}
+                    {isBn ? "বারকোড নম্বর (টাইপ বা স্ক্যান করুন)" : "Barcode number (type or scan)"}
                   </Label>
                   <Input
                     id="barcodeInput"
@@ -794,7 +795,7 @@ export default function ProductDetailPage() {
                 {isUnitsActive && (
                   <div className="space-y-1.5">
                     <Label htmlFor="barcodeUnitSelect">
-                      {locale === "bn" ? "একক নির্বাচন (ঐচ্ছিক)" : "Unit Selection (Optional)"}
+                      {isBn ? "একক নির্বাচন (ঐচ্ছিক)" : "Unit Selection (Optional)"}
                     </Label>
                     <select
                       id="barcodeUnitSelect"
@@ -803,7 +804,7 @@ export default function ProductDetailPage() {
                       className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
                       data-testid="barcode-unit-select"
                     >
-                      <option value="">{locale === "bn" ? `বেস একক (${product.baseUnit || "pcs"})` : `Base Unit (${product.baseUnit || "pcs"})`}</option>
+                      <option value="">{isBn ? `বেস একক (${product.baseUnit || "pcs"})` : `Base Unit (${product.baseUnit || "pcs"})`}</option>
                       {(product.units || [])
                         .filter((u: any) => u.isActive)
                         .map((u: any) => (
@@ -823,7 +824,7 @@ export default function ProductDetailPage() {
                     disabled={!newBarcode.trim() || addBarcodeMutation.isPending}
                     onClick={() => addBarcodeMutation.mutate({ variantId: barcodeVariantId, barcode: newBarcode.trim(), productUnitId: barcodeUnitId || undefined })}
                   >
-                    {locale === "bn" ? "যোগ করুন" : "Add"}<span className="sr-only"> (Add)</span>
+                    {isBn ? "যোগ করুন" : "Add"}<span className="sr-only"> (Add)</span>
                   </Button>
                 </div>
               </CardContent>
@@ -837,12 +838,12 @@ export default function ProductDetailPage() {
             <Card className="w-full max-w-sm shadow-xl border">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-bold">
-                  {locale === "bn" ? `ভ্যারিয়েন্ট মূল্য পরিবর্তন (${editingVariant.sku})` : `Edit Variant Price (${editingVariant.sku})`}
+                  {isBn ? `ভ্যারিয়েন্ট মূল্য পরিবর্তন (${editingVariant.sku})` : `Edit Variant Price (${editingVariant.sku})`}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="editPriceInput">{locale === "bn" ? "বিক্রয় মূল্য (৳)" : "Selling Price (৳)"}</Label>
+                  <Label htmlFor="editPriceInput">{isBn ? "বিক্রয় মূল্য (৳)" : "Selling Price (৳)"}</Label>
                   <Input
                     id="editPriceInput"
                     type="number"
@@ -885,17 +886,17 @@ export default function ProductDetailPage() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-bold flex items-center gap-2">
                   <DollarSign className="h-4 w-4" />
-                  {locale === "bn" ? "একসাথে সকল ভ্যারিয়েন্টের মূল্য পরিবর্তন" : "Bulk Price Update for All Variants"}
+                  {isBn ? "একসাথে সকল ভ্যারিয়েন্টের মূল্য পরিবর্তন" : "Bulk Price Update for All Variants"}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-xs text-muted-foreground">
-                  {locale === "bn"
+                  {isBn
                     ? `এই পণ্যের সকল ${variants.length} টি ভ্যারিয়েন্টের বিক্রয় মূল্য একসাথে পরিবর্তন করা হবে।`
                     : `Selling price will be updated for all ${variants.length} variants of this product.`}
                 </p>
                 <div className="space-y-1.5">
-                  <Label htmlFor="bulkPriceInput">{locale === "bn" ? "নতুন সাধারণ বিক্রয় মূল্য (৳)" : "New Selling Price (৳)"}</Label>
+                  <Label htmlFor="bulkPriceInput">{isBn ? "নতুন সাধারণ বিক্রয় মূল্য (৳)" : "New Selling Price (৳)"}</Label>
                   <Input
                     id="bulkPriceInput"
                     type="number"
@@ -935,12 +936,12 @@ export default function ProductDetailPage() {
             <Card className="w-full max-w-md shadow-xl border">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-bold">
-                  {editingUnit ? (locale === "bn" ? "একক পরিবর্তন করুন" : "Edit Unit") : (locale === "bn" ? "নতুন প্যাকিং একক যোগ করুন" : "Add Packing Unit")}
+                  {editingUnit ? (isBn ? "একক পরিবর্তন করুন" : "Edit Unit") : (isBn ? "নতুন প্যাকিং একক যোগ করুন" : "Add Packing Unit")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="unitNameInput">{locale === "bn" ? "এককের নাম" : "Unit Name"} *</Label>
+                  <Label htmlFor="unitNameInput">{isBn ? "এককের নাম" : "Unit Name"} *</Label>
                   <Input
                     id="unitNameInput"
                     placeholder="যেমন: ড্রাম, বস্তা, 5 লিটার ক্যান"
@@ -953,7 +954,7 @@ export default function ProductDetailPage() {
 
                 <div className="space-y-1.5">
                   <Label htmlFor="unitFactorInput">
-                    {locale === "bn" ? `রূপান্তর ফ্যাক্টর (প্রতি এককে কত ${getBaseUnit(product.baseUnit || "pcs")?.nameBn || product.baseUnit})` : `Conversion Factor (base units per 1 of this unit)`} *
+                    {isBn ? `রূপান্তর ফ্যাক্টর (প্রতি এককে কত ${getBaseUnit(product.baseUnit || "pcs")?.nameBn || product.baseUnit})` : `Conversion Factor (base units per 1 of this unit)`} *
                   </Label>
                   <Input
                     id="unitFactorInput"
@@ -981,7 +982,7 @@ export default function ProductDetailPage() {
                       className="rounded border-gray-300"
                       data-testid="unit-sale-checkbox"
                     />
-                    <span>{locale === "bn" ? "বিক্রয়ে প্রযোজ্য" : "Sale Unit"}</span>
+                    <span>{isBn ? "বিক্রয়ে প্রযোজ্য" : "Sale Unit"}</span>
                   </label>
 
                   <label className="flex items-center space-x-2 text-xs cursor-pointer">
@@ -992,7 +993,7 @@ export default function ProductDetailPage() {
                       className="rounded border-gray-300"
                       data-testid="unit-purchase-checkbox"
                     />
-                    <span>{locale === "bn" ? "ক্রয়ে প্রযোজ্য" : "Purchase Unit"}</span>
+                    <span>{isBn ? "ক্রয়ে প্রযোজ্য" : "Purchase Unit"}</span>
                   </label>
                 </div>
 
@@ -1004,7 +1005,7 @@ export default function ProductDetailPage() {
                       onChange={(e) => setUnitIsActive(e.target.checked)}
                       className="rounded border-gray-300"
                     />
-                    <span>{locale === "bn" ? "সক্রিয় রাখুন" : "Active"}</span>
+                    <span>{isBn ? "সক্রিয় রাখুন" : "Active"}</span>
                   </label>
                 )}
 
@@ -1041,7 +1042,7 @@ export default function ProductDetailPage() {
             <Card className="w-full max-w-sm shadow-xl border">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-bold">
-                  {locale === "bn"
+                  {isBn
                     ? `এককের বিশেষ মূল্য নির্ধারণ (${priceOverrideModal.unit.name})`
                     : `Set Unit Price Override (${priceOverrideModal.unit.name})`}
                 </CardTitle>
@@ -1052,7 +1053,7 @@ export default function ProductDetailPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="overridePriceInput">
-                    {locale === "bn" ? "বিক্রয় মূল্য (৳)" : "Selling Price (৳)"}
+                    {isBn ? "বিক্রয় মূল্য (৳)" : "Selling Price (৳)"}
                   </Label>
                   <Input
                     id="overridePriceInput"
@@ -1083,7 +1084,7 @@ export default function ProductDetailPage() {
                         });
                       }}
                     >
-                      {locale === "bn" ? "ওভাররাইড মুছুন" : "Clear Override"}
+                      {isBn ? "ওভাররাইড মুছুন" : "Clear Override"}
                     </Button>
                   ) : <div />}
 

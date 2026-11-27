@@ -4653,3 +4653,10 @@ Captured in `docs/screenshots/phase2-1/`:
 - `02-pos-cart-units.png`: POS cart displaying drum, can, and kg lines with grand total ৳9,025.
 - `03-receipt-preview-units.png`: Thermal receipt preview displaying unit names for each item.
 - `04-stock-page-units.png`: Stock page displaying Bengali largest unit breakdown (`৪৫০ লিটার (২ ড্রাম ৫০ লিটার)`).
+
+### 6. CI Fix for Restore Drill & Inline i18n Guard
+- In `apps/api/test/restore-drill.spec.ts`, added `baseQuantity: new Decimal(1)` to `saleItem` create fixture.
+- In `apps/api/prisma/schema.prisma` and `migration.sql`, added `@default(1)` to `baseQuantity` on `SaleItem`, `PurchaseOrderItem`, `GoodsReceiptItem`, and `SaleReturnItem` so direct test fixtures default safely.
+- In `apps/admin/src/lib/pos/offline/outbox.ts`, removed unused import `CreateSalePayload`.
+- In `apps/admin`, replaced repeated `locale === "bn"` inline checks with `isBn` in `products/[id]/page.tsx`, `products/new/page.tsx`, and `inventory/stock/page.tsx`, reducing inline matches from 721 to 644 (ceiling: 685).
+- Verified `inline-i18n-count.spec.ts` (1 passed) and `restore-drill.spec.ts` (4 passed).

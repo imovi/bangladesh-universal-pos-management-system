@@ -87,7 +87,7 @@ ADD COLUMN "base_quantity" DECIMAL(14, 3);
 
 UPDATE "sale_items" SET "base_quantity" = "quantity", "unit_name" = 'pcs', "unit_factor" = 1 WHERE "base_quantity" IS NULL;
 
-ALTER TABLE "sale_items" ALTER COLUMN "base_quantity" SET NOT NULL;
+ALTER TABLE "sale_items" ALTER COLUMN "base_quantity" SET NOT NULL, ALTER COLUMN "base_quantity" SET DEFAULT 1;
 CREATE INDEX "sale_items_product_unit_id_idx" ON "sale_items"("product_unit_id");
 ALTER TABLE "sale_items" ADD CONSTRAINT "sale_items_product_unit_id_fkey" FOREIGN KEY ("product_unit_id") REFERENCES "product_units"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
@@ -99,7 +99,7 @@ ADD COLUMN "base_quantity" DECIMAL(14, 3);
 
 UPDATE "purchase_order_items" SET "base_quantity" = "qty_ordered", "unit_name" = 'pcs', "unit_factor" = 1 WHERE "base_quantity" IS NULL;
 
-ALTER TABLE "purchase_order_items" ALTER COLUMN "base_quantity" SET NOT NULL;
+ALTER TABLE "purchase_order_items" ALTER COLUMN "base_quantity" SET NOT NULL, ALTER COLUMN "base_quantity" SET DEFAULT 1;
 CREATE INDEX "purchase_order_items_product_unit_id_idx" ON "purchase_order_items"("product_unit_id");
 ALTER TABLE "purchase_order_items" ADD CONSTRAINT "purchase_order_items_product_unit_id_fkey" FOREIGN KEY ("product_unit_id") REFERENCES "product_units"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
@@ -111,7 +111,7 @@ ADD COLUMN "base_qty_received" DECIMAL(14, 3);
 
 UPDATE "goods_receipt_items" SET "base_qty_received" = "qty_received", "unit_name" = 'pcs', "unit_factor" = 1 WHERE "base_qty_received" IS NULL;
 
-ALTER TABLE "goods_receipt_items" ALTER COLUMN "base_qty_received" SET NOT NULL;
+ALTER TABLE "goods_receipt_items" ALTER COLUMN "base_qty_received" SET NOT NULL, ALTER COLUMN "base_qty_received" SET DEFAULT 1;
 CREATE INDEX "goods_receipt_items_product_unit_id_idx" ON "goods_receipt_items"("product_unit_id");
 ALTER TABLE "goods_receipt_items" ADD CONSTRAINT "goods_receipt_items_product_unit_id_fkey" FOREIGN KEY ("product_unit_id") REFERENCES "product_units"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
@@ -125,4 +125,4 @@ WHERE sri."sale_item_id" = si."id" AND sri."base_quantity" IS NULL;
 
 UPDATE "sale_return_items" SET "base_quantity" = "quantity" WHERE "base_quantity" IS NULL;
 
-ALTER TABLE "sale_return_items" ALTER COLUMN "base_quantity" SET NOT NULL;
+ALTER TABLE "sale_return_items" ALTER COLUMN "base_quantity" SET NOT NULL, ALTER COLUMN "base_quantity" SET DEFAULT 1;

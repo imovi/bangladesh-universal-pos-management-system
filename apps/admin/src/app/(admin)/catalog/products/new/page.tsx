@@ -54,6 +54,7 @@ interface VariantRowState {
 export default function NewProductPage() {
   const router = useRouter();
   const { strings, locale } = useTranslation();
+  const isBn = locale === "bn";
   const { apiFetch, hasPermission } = useAuth();
   const { isModuleActive } = useModules();
   const isUnitsActive = isModuleActive("units");
@@ -327,7 +328,7 @@ export default function NewProductPage() {
                 {strings.products.createProduct}
               </h1>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {locale === "bn"
+                {isBn
                   ? "নতুন পোশাক বা পণ্যের তথ্য ও সাইজ-রঙের ভ্যারিয়েন্ট তৈরি করুন"
                   : "Add new fashion product with size and colour variants"}
               </p>
@@ -350,7 +351,7 @@ export default function NewProductPage() {
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base font-semibold">
-                {locale === "bn" ? "সাধারণ বিবরণ" : "Product Basics"}
+                {isBn ? "সাধারণ বিবরণ" : "Product Basics"}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -437,7 +438,7 @@ export default function NewProductPage() {
                     onValueChange={(val) => setValue("taxClassId", val)}
                   >
                     <SelectTrigger id="taxClassId" className="h-9">
-                      <SelectValue placeholder={locale === "bn" ? "ট্যাক্স ক্লাস বেছে নিন" : "Choose a tax class"} />
+                      <SelectValue placeholder={isBn ? "ট্যাক্স ক্লাস বেছে নিন" : "Choose a tax class"} />
                     </SelectTrigger>
                     <SelectContent>
                       {taxClasses.map((t: any) => (
@@ -515,13 +516,13 @@ export default function NewProductPage() {
               {isUnitsActive && (
                 <div className="p-4 rounded-lg border bg-muted/20 space-y-4 mt-2">
                   <div className="font-semibold text-sm flex items-center justify-between">
-                    <span>{locale === "bn" ? "একক ও পরিমাপ (Units & Measurement)" : "Units & Measurement"}</span>
+                    <span>{isBn ? "একক ও পরিমাপ (Units & Measurement)" : "Units & Measurement"}</span>
                     <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">Module: Units</span>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label htmlFor="baseUnit" className="text-sm font-medium">
-                        {locale === "bn" ? "বেস একক (Base Unit)" : "Base Unit"}
+                        {isBn ? "বেস একক (Base Unit)" : "Base Unit"}
                       </Label>
                       <select
                         id="baseUnit"
@@ -532,12 +533,12 @@ export default function NewProductPage() {
                       >
                         {BASE_UNITS.map((u) => (
                           <option key={u.code} value={u.code}>
-                            {locale === "bn" ? `${u.nameBn} (${u.code})` : `${u.nameEn} (${u.code})`}
+                            {isBn ? `${u.nameBn} (${u.code})` : `${u.nameEn} (${u.code})`}
                           </option>
                         ))}
                       </select>
                       <p className="text-[11px] text-muted-foreground">
-                        {locale === "bn" ? "মজুদ সর্বদা বেস এককে সংরক্ষিত হয়।" : "Stock is always kept in base units."}
+                        {isBn ? "মজুদ সর্বদা বেস এককে সংরক্ষিত হয়।" : "Stock is always kept in base units."}
                       </p>
                     </div>
 
@@ -552,11 +553,11 @@ export default function NewProductPage() {
                           data-testid="product-allow-decimal-switch"
                         />
                         <Label htmlFor="allowDecimalQty" className="text-sm font-medium cursor-pointer">
-                          {locale === "bn" ? "ভগ্নাংশ বা দশমিক পরিমাণ অনুমোদন করুন" : "Allow Decimal Quantity"}
+                          {isBn ? "ভগ্নাংশ বা দশমিক পরিমাণ অনুমোদন করুন" : "Allow Decimal Quantity"}
                         </Label>
                       </div>
                       <p className="text-[11px] text-muted-foreground pl-6">
-                        {locale === "bn" ? "যেমন: ২.৫ কেজি বা ১.৭৫ লিটার বিক্রি করা যাবে।" : "Allows selling quantities like 2.5 kg or 1.75 liters."}
+                        {isBn ? "যেমন: ২.৫ কেজি বা ১.৭৫ লিটার বিক্রি করা যাবে।" : "Allows selling quantities like 2.5 kg or 1.75 liters."}
                       </p>
                     </div>
                   </div>
@@ -572,7 +573,7 @@ export default function NewProductPage() {
                 {strings.products.options}
               </CardTitle>
               <CardDescription className="text-xs">
-                {locale === "bn"
+                {isBn
                   ? "যেসব সাইজ এবং রঙে পণ্যটি তৈরি বা মজুদ আছে তা যোগ করুন"
                   : "Specify available sizes and colours to generate variant combinations"}
               </CardDescription>
@@ -678,16 +679,16 @@ export default function NewProductPage() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
                   <CardTitle className="text-base font-semibold">
-                    {locale === "bn" ? "ভ্যারিয়েন্ট তালিকা ও কনফিগারেশন" : "Variant Rows & Pricing"}
+                    {isBn ? "ভ্যারিয়েন্ট তালিকা ও কনফিগারেশন" : "Variant Rows & Pricing"}
                   </CardTitle>
                   <CardDescription className="text-xs mt-0.5">
-                    {locale === "bn"
+                    {isBn
                       ? "প্রতিটি ভ্যারিয়েন্টের এসকেইউ, মূল্য, ক্রয়মূল্য ও বারকোড নির্ধারণ করুন"
                       : "Configure individual SKU, price, cost and barcode for each stocked combination"}
                   </CardDescription>
                 </div>
                 <div className="text-xs font-mono text-muted-foreground">
-                  {combinations.filter((c) => c.enabled).length} / {combinations.length} {locale === "bn" ? "ভ্যারিয়েন্ট সক্রিয়" : "variants active"}
+                  {combinations.filter((c) => c.enabled).length} / {combinations.length} {isBn ? "ভ্যারিয়েন্ট সক্রিয়" : "variants active"}
                 </div>
               </div>
             </CardHeader>
@@ -714,7 +715,7 @@ export default function NewProductPage() {
                         />
                       </th>
                       <th className="py-2.5 px-3 text-left font-semibold w-32">
-                        {locale === "bn" ? "কম্বিনেশন" : "Combination"}
+                        {isBn ? "কম্বিনেশন" : "Combination"}
                       </th>
                       <th className="py-2.5 px-3 text-left font-semibold">
                         {strings.products.sku}
@@ -846,7 +847,7 @@ export default function NewProductPage() {
                               className="h-7 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
                             >
                               <Copy className="h-3 w-3 mr-0.5" />
-                              <span>{locale === "bn" ? "সবগুলোতে" : "All"}</span>
+                              <span>{isBn ? "সবগুলোতে" : "All"}</span>
                             </Button>
                             <Button
                               type="button"

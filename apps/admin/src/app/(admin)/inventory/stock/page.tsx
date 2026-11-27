@@ -99,6 +99,7 @@ interface MovementItem {
 
 export default function StockLevelsPage() {
   const { strings, locale } = useTranslation();
+  const isBn = locale === "bn";
   const { apiFetch, hasPermission, currentBranch } = useAuth();
   const queryClient = useQueryClient();
 
@@ -170,10 +171,10 @@ export default function StockLevelsPage() {
       if (!adjustItem) throw new Error("No item selected");
       const delta = parseInt(adjustDelta, 10);
       if (isNaN(delta) || delta === 0) {
-        throw new Error(locale === "bn" ? "সঠিক পরিমাণ লিখুন" : "Please enter a non-zero adjustment delta");
+        throw new Error(isBn ? "সঠিক পরিমাণ লিখুন" : "Please enter a non-zero adjustment delta");
       }
       if (!adjustReason.trim() || adjustReason.trim().length < 3) {
-        throw new Error(locale === "bn" ? "সমন্বয়ের কারণ অন্তত ৩ অক্ষরের হতে হবে" : "Reason must be at least 3 characters");
+        throw new Error(isBn ? "সমন্বয়ের কারণ অন্তত ৩ অক্ষরের হতে হবে" : "Reason must be at least 3 characters");
       }
 
       const res = await apiFetch("/inventory/adjustment", {
@@ -194,7 +195,7 @@ export default function StockLevelsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["stock-levels"] });
-      setActionSuccess(locale === "bn" ? "স্টক সমন্বয় করা হয়েছে" : "Stock adjusted successfully");
+      setActionSuccess(isBn ? "স্টক সমন্বয় করা হয়েছে" : "Stock adjusted successfully");
       setAdjustItem(null);
       setAdjustDelta("");
       setAdjustReason("");
@@ -217,7 +218,7 @@ export default function StockLevelsPage() {
             {strings.inventory.title}
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-            {locale === "bn"
+            {isBn
               ? "শাখাভিত্তিক ভ্যারিয়েন্ট স্টক নিরীক্ষণ ও দ্রুত সমন্বয়"
               : "Live branch stock levels and adjustments"}
           </p>
@@ -257,7 +258,7 @@ export default function StockLevelsPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder={locale === "bn" ? "পণ্য, এসকেইউ বা বারকোড দিয়ে খুঁজুন..." : "Search by product, SKU or barcode..."}
+            placeholder={isBn ? "পণ্য, এসকেইউ বা বারকোড দিয়ে খুঁজুন..." : "Search by product, SKU or barcode..."}
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
@@ -319,12 +320,12 @@ export default function StockLevelsPage() {
         <Table data-testid="stock-levels-table">
           <TableHeader>
             <TableRow>
-              <TableHead>{locale === "bn" ? "পণ্যের বিবরণ ও অপশন" : "Product & Variant"}</TableHead>
+              <TableHead>{isBn ? "পণ্যের বিবরণ ও অপশন" : "Product & Variant"}</TableHead>
               <TableHead className="w-[140px]">{strings.products.sku}</TableHead>
               <TableHead className="w-[160px]">{strings.products.barcode}</TableHead>
-              <TableHead className="w-[120px]">{locale === "bn" ? "শাখা" : "Branch"}</TableHead>
+              <TableHead className="w-[120px]">{isBn ? "শাখা" : "Branch"}</TableHead>
               <TableHead className="w-[120px] text-right">{strings.inventory.quantity}</TableHead>
-              <TableHead className="w-[120px] text-right">{locale === "bn" ? "ইন-ট্রানজিট" : "In-Transit"}</TableHead>
+              <TableHead className="w-[120px] text-right">{isBn ? "ইন-ট্রানজিট" : "In-Transit"}</TableHead>
               <TableHead className="w-[120px] text-right">{strings.inventory.reorderLevel}</TableHead>
               <TableHead className="w-[160px] text-right">{strings.common.actions}</TableHead>
             </TableRow>
@@ -351,7 +352,7 @@ export default function StockLevelsPage() {
                         .map((vov: any) => vov.optionValue?.value)
                         .filter(Boolean)
                         .join(" / ")
-                    : (locale === "bn" ? "সাধারণ" : "Standard");
+                    : (isBn ? "সাধারণ" : "Standard");
 
                 const reorderVal =
                   item.reorderLevel !== undefined && item.reorderLevel !== null
@@ -478,7 +479,7 @@ export default function StockLevelsPage() {
                             }}
                             data-testid="btn-adjust-row"
                           >
-                            {locale === "bn" ? "সমন্বয়" : "Adjust"}
+                            {isBn ? "সমন্বয়" : "Adjust"}
                           </Button>
                         )}
                         <Button
@@ -489,7 +490,7 @@ export default function StockLevelsPage() {
                           data-testid="btn-print-row-barcode"
                         >
                           <Barcode className="h-3.5 w-3.5 mr-1" />
-                          <span>{locale === "bn" ? "বারকোড" : "Barcode"}</span>
+                          <span>{isBn ? "বারকোড" : "Barcode"}</span>
                         </Button>
                         <Button
                           size="sm"
@@ -499,7 +500,7 @@ export default function StockLevelsPage() {
                           data-testid="btn-history-row"
                         >
                           <History className="h-3.5 w-3.5 mr-1" />
-                          <span>{locale === "bn" ? "ইতিহাস" : "History"}</span>
+                          <span>{isBn ? "ইতিহাস" : "History"}</span>
                         </Button>
                       </div>
                     </TableCell>
@@ -534,7 +535,7 @@ export default function StockLevelsPage() {
               <div className="rounded-lg bg-muted/50 p-3 text-xs space-y-1">
                 <div className="font-semibold text-sm text-foreground">{adjustItem.variant.product.name}</div>
                 <div className="text-muted-foreground">
-                  {strings.products.sku}: <span className="font-mono font-medium text-foreground">{adjustItem.variant.sku}</span> • {locale === "bn" ? "শাখা" : "Branch"}: {adjustItem.branch?.name}
+                  {strings.products.sku}: <span className="font-mono font-medium text-foreground">{adjustItem.variant.sku}</span> • {isBn ? "শাখা" : "Branch"}: {adjustItem.branch?.name}
                 </div>
                 <div className="flex items-center gap-2 pt-1">
                   <span>{strings.inventory.currentStock}:</span>
@@ -553,20 +554,20 @@ export default function StockLevelsPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="adjustDeltaInput" className="text-xs font-semibold">
-                  {strings.inventory.adjustmentDelta} ({locale === "bn" ? "যোগ করতে ধণাত্মক, কমাতে ঋণাত্মক" : "+ to add, - to subtract"})
+                  {strings.inventory.adjustmentDelta} ({isBn ? "যোগ করতে ধণাত্মক, কমাতে ঋণাত্মক" : "+ to add, - to subtract"})
                 </Label>
                 <Input
                   id="adjustDeltaInput"
                   data-testid="adjust-delta-input"
                   type="number"
-                  placeholder={locale === "bn" ? "যেমন: 5 অথবা -2" : "e.g. 5 or -2"}
+                  placeholder={isBn ? "যেমন: 5 অথবা -2" : "e.g. 5 or -2"}
                   value={adjustDelta}
                   onChange={(e) => setAdjustDelta(e.target.value)}
                   className="h-9 text-sm font-mono tabular-nums"
                 />
                 {adjustDelta && !isNaN(parseInt(adjustDelta, 10)) && (
                   <p className="text-xs text-muted-foreground">
-                    {locale === "bn" ? "সমন্বয়ের পর নতুন মজুদ:" : "New stock quantity:"}{" "}
+                    {isBn ? "সমন্বয়ের পর নতুন মজুদ:" : "New stock quantity:"}{" "}
                     <span className="font-semibold text-foreground font-mono tabular-nums">
                       {adjustItem.qty + parseInt(adjustDelta, 10)}
                     </span>
@@ -581,7 +582,7 @@ export default function StockLevelsPage() {
                 <Input
                   id="adjustReasonInput"
                   data-testid="adjust-reason-input"
-                  placeholder={locale === "bn" ? "সমন্বয়ের কারণ লিখুন..." : "Enter adjustment reason..."}
+                  placeholder={isBn ? "সমন্বয়ের কারণ লিখুন..." : "Enter adjustment reason..."}
                   value={adjustReason}
                   onChange={(e) => setAdjustReason(e.target.value)}
                   className="h-9 text-sm"

@@ -151,9 +151,12 @@ test.describe.serial("Phase 2.1: Units and Unit Conversion POS Flow", () => {
     await page.waitForTimeout(300);
 
     // Verify cart grand total: ৳300 + ৳8,500 + ৳225 = ৳9,025
+    const grandTotalSpan = page.locator('[data-testid="pos-grand-total"]');
+    await expect(grandTotalSpan).toBeVisible();
+    await expect(grandTotalSpan).toContainText(/৯,০২৫|9,025/);
     const checkoutBtn = page.locator('[data-testid="pos-checkout-button"]');
     await expect(checkoutBtn).toBeVisible();
-    await expect(checkoutBtn).toContainText(/৯,০২৫|9,025/);
+    await expect(checkoutBtn).toBeEnabled();
 
     // Capture Screenshot 2: POS cart with drum, can, and kg lines
     await page.screenshot({ path: path.join(screenshotsDir, "02-pos-cart-units.png") });
@@ -337,7 +340,7 @@ test.describe.serial("Phase 2.1: Units and Unit Conversion POS Flow", () => {
     await searchInput.press("Enter");
     await page.waitForTimeout(400);
 
-    await expect(checkoutBtn).toContainText(/২২৫|225/);
+    await expect(grandTotalSpan).toContainText(/২২৫|225/);
     await checkoutBtn.click();
 
     const offlinePaymentDialog = page.locator('[role="dialog"]:has-text("পেমেন্ট সম্পন্ন করুন"), [role="dialog"]:has-text("Complete Payment")');

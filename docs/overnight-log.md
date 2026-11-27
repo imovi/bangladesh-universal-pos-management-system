@@ -4672,3 +4672,7 @@ Captured in `docs/screenshots/phase2-1/`:
   - Resolved Playwright test timeout on unit select: switched option selection to `hclCanUnit.id` value instead of hardcoded Bengali digit string `"৫ লিটার ক্যান"` which did not match ASCII `"5 লিটার ক্যান"`.
   - Added robust payload unwrapping for `GET /branches` and `GET /purchasing/suppliers`.
   - Increased test timeout to 180s for multi-step POS/inventory lifecycle.
+
+### 9. POS Grand Total Locator Fix in Units E2E
+- Added `data-testid="pos-grand-total"` to the net payable amount span in `apps/admin/src/app/pos/page.tsx`.
+- Updated `apps/admin/e2e/units-pos-flow.spec.ts` lines 154 and 340 to assert cart totals on `[data-testid="pos-grand-total"]` rather than `[data-testid="pos-checkout-button"]`, resolving the mismatch where the button contains `"পেমেন্ট গ্রহণ (F4)"` rather than the numeric grand total.

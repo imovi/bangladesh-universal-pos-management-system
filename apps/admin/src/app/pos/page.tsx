@@ -2950,7 +2950,7 @@ export default function PosPage() {
                       : locale === "bn" ? "নিট প্রদেয়" : "Net Payable"
                     : strings.pos.payable}
                 </span>
-                <span className={`text-2xl font-black font-mono tabular-nums ${exchangeContext && exchangeDifferenceMinor < 0 ? "text-amber-600 dark:text-amber-400" : "text-primary"}`}>
+                <span data-testid="pos-grand-total" className={`text-2xl font-black font-mono tabular-nums ${exchangeContext && exchangeDifferenceMinor < 0 ? "text-amber-600 dark:text-amber-400" : "text-primary"}`}>
                   {formatMoney(Math.abs(exchangeDifferenceMinor))}
                 </span>
               </div>

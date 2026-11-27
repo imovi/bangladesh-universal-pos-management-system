@@ -133,6 +133,13 @@ export default function TenantModulesPage() {
           {modules.map((mod) => {
             const isUpdating = updatingKey === mod.key;
             const itemError = errorMap[mod.key];
+            const missingDepKeys = (mod.dependsOn || []).filter((depKey) => {
+              const dep = modules.find((m) => m.key === depKey);
+              return !dep?.active;
+            });
+            const missingDepNames = missingDepKeys
+              .map((k) => modules.find((m) => m.key === k)?.nameBn || k)
+              .join(", ");
 
             return (
               <Card
@@ -179,6 +186,15 @@ export default function TenantModulesPage() {
                         >
                           <Lock className="h-3 w-3" />
                           <span>অনুমতি নেই</span>
+                        </Badge>
+                      ) : mod.enabled && !mod.active ? (
+                        <Badge
+                          variant="outline"
+                          data-testid={`module-dep-inactive-badge-${mod.key}`}
+                          className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 text-xs flex items-center gap-1"
+                        >
+                          <AlertCircle className="h-3 w-3" />
+                          <span>নির্ভরশীল মডিউল বন্ধ ({missingDepNames})</span>
                         </Badge>
                       ) : (
                         <Badge
@@ -239,6 +255,11 @@ export default function TenantModulesPage() {
                       ) : !isOwner ? (
                         <span className="text-xs text-muted-foreground">
                           শুধুমাত্র মালিক পরিবর্তন করতে পারবেন
+                        </span>
+                      ) : mod.enabled && !mod.active ? (
+                        <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3 inline" />
+                          <span>নির্ভরশীল মডিউল বন্ধ ({missingDepNames})</span>
                         </span>
                       ) : (
                         <span className="text-xs text-muted-foreground">

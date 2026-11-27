@@ -4360,3 +4360,154 @@ Running 5 tests using 1 worker
   "raw_details": ""
 }
 ```
+
+
+---
+
+## Phase 2.1: units
+
+### Phase 2.0 proof (added later)
+
+#### 1. API Test Suite Summary
+```text
+> @universal-pos/api@0.1.0 test
+> vitest run
+
+ RUN  v3.2.7 D:/pos system/apps/api
+
+ ✓ test/auth.service.spec.ts (7 tests) 210ms
+ ✓ test/db-protection-guard.spec.ts (5 tests) 20474ms
+ ✓ test/restore-drill.spec.ts (4 tests) 10493ms
+ ✓ test/import-engine.spec.ts (13 tests) 9274ms
+ ✓ test/offline-sales-engine.spec.ts (28 tests) 6304ms
+ ✓ test/transfers-engine.spec.ts (8 tests) 2310ms
+ ✓ test/returns-engine.spec.ts (12 tests) 2815ms
+ ✓ test/credit-and-due.spec.ts (11 tests) 2315ms
+ ✓ test/milestone-a1-api-gaps.spec.ts (17 tests) 2209ms
+ ✓ test/fix4-shift-cash-sales.spec.ts (3 tests) 1721ms
+ ✓ test/exchanges-engine.spec.ts (6 tests) 1964ms
+ ✓ test/fix2-server-pricing.spec.ts (7 tests) 1827ms
+ ✓ test/reports.spec.ts (7 tests) 1790ms
+ ✓ test/fix5-shift-payments.spec.ts (1 test) 1690ms
+ ✓ test/sales-engine.spec.ts (7 tests) 1873ms
+ ✓ test/tenant-http-isolation.spec.ts (19 tests) 1641ms
+ ✓ test/catalog-variants.spec.ts (9 tests) 1993ms
+ ✓ test/inventory-ledger.spec.ts (8 tests) 1948ms
+ ✓ test/fix3-discount-limit.spec.ts (7 tests) 1773ms
+ ✓ test/coupons-engine.spec.ts (5 tests) 1933ms
+ ✓ test/loyalty-engine.spec.ts (8 tests) 1777ms
+ ✓ test/fix1-role-discount.spec.ts (4 tests) 1670ms
+ ✓ test/reports-c5.spec.ts (4 tests) 1633ms
+ ✓ test/fix2-combined-discounts.spec.ts (4 tests) 1533ms
+ ✓ test/promotions-offline.spec.ts (7 tests) 1686ms
+ ✓ test/purchasing-and-suppliers.spec.ts (9 tests) 1567ms
+ ✓ test/promotions-loyalty-reports.spec.ts (4 tests) 1605ms
+ ✓ test/modules.spec.ts (21 tests) 1937ms
+ ✓ test/fix6-corrections.spec.ts (5 tests) 1530ms
+ ✓ test/promotions.spec.ts (12 tests) 1548ms
+ ✓ test/customers-shifts.spec.ts (8 tests) 1629ms
+ ✓ test/fix3-mandatory-sale-id.spec.ts (5 tests) 1285ms
+ ✓ test/barcodes-parallel.spec.ts (4 tests) 1416ms
+ ✓ test/fix5-timezone.spec.ts (3 tests) 1358ms
+ ✓ test/settings-pos.spec.ts (2 tests) 1147ms
+ ✓ test/settings-backups.spec.ts (3 tests) 1227ms
+ ✓ test/part-a-data-display.spec.ts (3 tests) 1191ms
+ ✓ test/seed-demo-and-permissions.spec.ts (3 tests) 1133ms
+ ✓ test/shift-occurred-at.spec.ts (1 test) 1142ms
+ ✓ test/rate-limiting.spec.ts (1 test) 674ms
+ ✓ test/real-tenant-isolation.spec.ts (7 tests) 582ms
+ ✓ test/fix4-narrow-pos-system.spec.ts (8 tests) 453ms
+ ✓ test/production-config.spec.ts (15 tests) 155ms
+ ✓ test/rls-catalogue-guard.spec.ts (1 test) 74ms
+ ✓ test/uuid-v7.spec.ts (1 test) 78ms
+ ✓ test/database-rls-migration.spec.ts (5 tests) 72ms
+ ✓ test/users.service.spec.ts (5 tests) 60ms
+ ✓ test/tenant-signup.service.spec.ts (3 tests) 65ms
+ ✓ test/tenant-context-fail-closed.spec.ts (3 tests) 42ms
+ ✓ test/runtime-user-privileges.spec.ts (1 test) 50ms
+ ✓ test/money-and-tax-math.spec.ts (8 tests) 23ms
+ ✓ test/common-filters-interceptors.spec.ts (7 tests) 14ms
+ ✓ test/daily-health-alert.spec.ts (5 tests) 12ms
+ ✓ test/unit-mock-isolation.spec.ts (3 tests) 9ms
+ ✓ test/branches.service.spec.ts (5 tests) 11ms
+ ✓ test/roles.service.spec.ts (5 tests) 12ms
+ ✓ test/barcodes-unit.spec.ts (14 tests) 8ms
+ ✓ test/shared-schemas.spec.ts (8 tests) 8ms
+ ✓ test/csv-parser.spec.ts (10 tests) 8ms
+ ✓ test/returns-rounding.spec.ts (1 test) 5ms
+ ✓ test/audit.service.spec.ts (2 tests) 6ms
+ ✓ test/json-logger.spec.ts (4 tests) 5ms
+ ✓ test/cors-config.spec.ts (3 tests) 6ms
+ ✓ test/health.spec.ts (2 tests) 5ms
+ ✓ test/permissions-guard.spec.ts (4 tests) 5ms
+
+ Test Files  65 passed (65)
+      Tests  425 passed (425)
+   Start at  22:16:24
+   Duration  196.10s (transform 1.62s, setup 0ms, collect 67.28s, tests 107.02s, environment 13ms, prepare 7.77s)
+```
+
+#### 2. Full Local Playwright E2E Suite Run (`--project=chromium --retries=0`)
+```text
+> @universal-pos/admin@0.1.0 test:e2e
+> playwright test --project=chromium --retries=0
+
+Running 162 tests using 1 worker
+  162 passed (9.8m)
+```
+
+#### 3. Secrets Audit Output (`git grep -n "PLATFORM_JWT_SECRET" -- . ":!*.md"`)
+```text
+.env.example:26:PLATFORM_JWT_SECRET="super-secret-platform-key-change-me-in-production-min-32-chars"
+.github/workflows/ci.yml:106:          PLATFORM_JWT_SECRET: test-platform-jwt-secret-minimum-32-chars-long
+.github/workflows/ci.yml:143:          PLATFORM_JWT_SECRET: test-platform-jwt-secret-minimum-32-chars-long
+.github/workflows/ci.yml:155:          PLATFORM_JWT_SECRET: test-platform-jwt-secret-minimum-32-chars-long
+.github/workflows/ci.yml:181:          PLATFORM_JWT_SECRET: test-platform-jwt-secret-minimum-32-chars-long
+.github/workflows/ci.yml:509:          PLATFORM_JWT_SECRET: test-platform-jwt-secret-minimum-32-chars-long
+apps/api/src/common/config/config.service.ts:18:export const EXAMPLE_PLATFORM_JWT_SECRET = FORBIDDEN_JWT_SECRETS[2];
+apps/api/src/common/config/config.service.ts:55:    PLATFORM_JWT_SECRET: z
+apps/api/src/common/config/config.service.ts:57:      .min(32, "PLATFORM_JWT_SECRET must be at least 32 characters")
+apps/api/src/common/config/config.service.ts:115:      if (!data.PLATFORM_JWT_SECRET || Buffer.byteLength(data.PLATFORM_JWT_SECRET, "utf8") < 32) {
+apps/api/src/common/config/config.service.ts:118:          path: ["PLATFORM_JWT_SECRET"],
+apps/api/src/common/config/config.service.ts:119:          message: "PLATFORM_JWT_SECRET must be at least 32 bytes in production",
+apps/api/src/common/config/config.service.ts:122:      if (containsPlaceholderPattern(data.PLATFORM_JWT_SECRET)) {
+apps/api/src/common/config/config.service.ts:125:          path: ["PLATFORM_JWT_SECRET"],
+apps/api/src/common/config/config.service.ts:126:          message: "PLATFORM_JWT_SECRET cannot contain placeholder patterns (replace-with, change-me, example) in production",
+apps/api/src/common/config/config.service.ts:129:      if (FORBIDDEN_JWT_SECRETS.includes(data.PLATFORM_JWT_SECRET)) {
+apps/api/src/common/config/config.service.ts:132:          path: ["PLATFORM_JWT_SECRET"],
+apps/api/src/common/config/config.service.ts:133:          message: "PLATFORM_JWT_SECRET cannot equal default example placeholder values in production",
+apps/api/src/common/config/config.service.ts:151:        data.PLATFORM_JWT_SECRET &&
+apps/api/src/common/config/config.service.ts:152:        data.JWT_ACCESS_SECRET === data.PLATFORM_JWT_SECRET
+apps/api/src/common/config/config.service.ts:156:          path: ["PLATFORM_JWT_SECRET"],
+apps/api/src/common/config/config.service.ts:157:          message: "JWT_ACCESS_SECRET and PLATFORM_JWT_SECRET cannot be identical in production",
+apps/api/src/common/config/config.service.ts:162:        data.PLATFORM_JWT_SECRET &&
+apps/api/src/common/config/config.service.ts:163:        data.JWT_REFRESH_SECRET === data.PLATFORM_JWT_SECRET
+apps/api/src/common/config/config.service.ts:167:          path: ["PLATFORM_JWT_SECRET"],
+apps/api/src/common/config/config.service.ts:168:          message: "JWT_REFRESH_SECRET and PLATFORM_JWT_SECRET cannot be identical in production",
+apps/api/src/common/guards/platform-auth.guard.ts:45:        secret: this.configService.get("PLATFORM_JWT_SECRET"),
+apps/api/src/modules/platform/platform.service.ts:49:    const secret = this.configService.get("PLATFORM_JWT_SECRET");
+apps/api/test/modules.spec.ts:176:    const platformSecret = configService.get("PLATFORM_JWT_SECRET");
+apps/api/test/production-config.spec.ts:19:    PLATFORM_JWT_SECRET: "e163c2d341906a25b0d0e1d970894502c28a4512b5e4640b1245690314059683",
+apps/api/test/production-config.spec.ts:34:      PLATFORM_JWT_SECRET: crypto.randomBytes(32).toString("hex"),
+deploy/.env.production.example:53:PLATFORM_JWT_SECRET=replace-with-generated-platform-jwt-secret-min-32-chars
+deploy/docker-compose.prod.yml:66:      PLATFORM_JWT_SECRET: ${PLATFORM_JWT_SECRET:?set PLATFORM_JWT_SECRET in deploy/.env.production}
+scripts/gen-secrets.cjs:32:console.log(`PLATFORM_JWT_SECRET=${platformJwtSecret}`);
+scripts/setup-e2e-db.ts:57:      PLATFORM_JWT_SECRET: process.env.PLATFORM_JWT_SECRET || "test-platform-jwt-secret-minimum-32-chars-long",
+```
+Every value in this output is a test value, a placeholder, a test-generated hash, or a variable reference; no real secret exists in the repository.
+
+### Section 0.1: Phase 2.0 Review Fixes
+1. **Module Dependency Resolution (`getActiveModules`):**
+   - Added `getActiveModules(flags): ModuleKey[]` to `packages/shared/src/modules.ts`. A module is active only when allowed, enabled, and all its dependencies are active across the entire dependency chain.
+   - Updated `ModuleGuard`, `GET /auth/me` (`auth.service.ts`), `GET /settings/pos` (`settings.controller.ts`), `GET /modules` and `PATCH /modules/:key` (`modules.service.ts`), and platform tenants list (`system-db.service.ts`) to use `getActiveModules`.
+   - Updated owner modules UI (`apps/admin/src/app/(admin)/settings/modules/page.tsx`) to show `নির্ভরশীল মডিউল বন্ধ (<মডিউলের নাম>)` when a module is enabled but has an inactive dependency.
+   - Added unit tests for 3-level chain (`prescription -> pharmacy_catalog -> units`) in `packages/shared/test/modules.spec.ts` and integration test in `apps/api/test/modules.spec.ts`.
+2. **Offline POS Modules Hook & Storage Fallback:**
+   - Updated `apps/admin/src/app/pos/page.tsx` so when `/settings/pos` is unreachable, it reads `activeModules` from `db.settings`. If both fail, falls back to empty list. Any save error logs to `console.error`.
+   - Added `usePosModules()` hook in `apps/admin/src/lib/pos/use-pos-modules.ts`.
+   - Added offline unit tests in `apps/admin/test/pos-modules.spec.tsx` verifying offline fallback and empty list fallback.
+3. **Platform Module Update Tenant ID Validation:**
+   - Validated `tenantId` in `PATCH /platform/tenants/:tenantId/modules/:key` using `z.string().uuid()` (returns 400 `INVALID_TENANT_ID`).
+   - Verified tenant existence in database (returns 404 `TENANT_NOT_FOUND`). Added API tests in `apps/api/test/modules.spec.ts`.
+4. **Platform Login Constant-Time Verification:**
+   - Updated `platform.service.ts` to verify password against fixed dummy hash `DUMMY_ARGON2_HASH` when admin email does not exist, preventing timing side-channel attacks.

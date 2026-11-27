@@ -3,6 +3,7 @@ import {
   MODULE_KEYS,
   MODULE_INFO,
   DEFAULT_MODULES_BY_BUSINESS_TYPE,
+  getActiveModules,
   isModuleActive,
   findMissingDependencies,
   type ModuleKey,
@@ -171,6 +172,54 @@ describe("Module Registry & Helper Functions", () => {
       expect(findMissingDependencies(activeSet, "pharmacy_catalog")).toEqual([
         "batch_expiry",
       ]);
+    });
+  });
+
+  describe("getActiveModules & 3-level dependency chain", () => {
+    it("returns all modules when allowed, enabled and all dependencies in chain are active", () => {
+      const flags = [
+        { key: "units", allowed: true, enabled: true },
+        { key: "batch_expiry", allowed: true, enabled: true },
+        { key: "pharmacy_catalog", allowed: true, enabled: true },
+        { key: "prescription", allowed: true, enabled: true },
+      ];
+      const active = getActiveModules(flags);
+      expect(active).toContain("units");
+      expect(active).toContain("batch_expiry");
+      expect(active).toContain("pharmacy_catalog");
+      expect(active).toContain("prescription");
+    });
+
+    it("prescription -> pharmacy_catalog -> units: blocks entire 3-level chain when units is not active", () => {
+      // units is NOT allowed
+      const flags = [
+        { key: "units", allowed: false, enabled: true },
+        { key: "batch_expiry", allowed: true, enabled: true },
+        { key: "pharmacy_catalog", allowed: true, enabled: true },
+        { key: "prescription", allowed: true, enabled: true },
+      ];
+
+      const active = getActiveModules(flags);
+      expect(active).toEqual(["batch_expiry"]);
+      expect(isModuleActive(flags, "units")).toBe(false);
+      expect(isModuleActive(flags, "pharmacy_catalog")).toBe(false);
+      expect(isModuleActive(flags, "prescription")).toBe(false);
+      expect(isModuleActive(flags, "batch_expiry")).toBe(true);
+    });
+
+    it("prescription -> pharmacy_catalog -> units: blocks prescription when pharmacy_catalog is disabled", () => {
+      const flags = [
+        { key: "units", allowed: true, enabled: true },
+        { key: "batch_expiry", allowed: true, enabled: true },
+        { key: "pharmacy_catalog", allowed: true, enabled: false }, // disabled by owner
+        { key: "prescription", allowed: true, enabled: true },
+      ];
+
+      const active = getActiveModules(flags);
+      expect(active).toContain("units");
+      expect(active).toContain("batch_expiry");
+      expect(active).not.toContain("pharmacy_catalog");
+      expect(active).not.toContain("prescription");
     });
   });
 });

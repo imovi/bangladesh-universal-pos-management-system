@@ -103,43 +103,77 @@ export type ModuleFlagInput =
   | Set<string>;
 
 /**
- * Returns true if a module is both allowed and enabled for the tenant.
+ * Returns the list of active module keys for a tenant.
+ * A module is active only when it is allowed, enabled, and every module in its
+ * dependsOn chain is active the entire way down the chain.
+ */
+export function getActiveModules(
+  flags: ModuleFlagInput | null | undefined
+): ModuleKey[] {
+  if (!flags) return [];
+
+  function isCandidate(k: ModuleKey): boolean {
+    if (!flags) return false;
+    if (flags instanceof Set) {
+      return flags.has(k) || flags.has(`module.${k}`);
+    }
+    if (Array.isArray(flags)) {
+      if (flags.length === 0) return false;
+      const first = flags[0];
+      if (typeof first === "string") {
+        const arr = flags as unknown as readonly string[];
+        return arr.includes(k) || arr.includes(`module.${k}`);
+      }
+      const objList = flags as { key: string; allowed?: boolean; enabled?: boolean }[];
+      const match = objList.find((f) => f.key === k || f.key === `module.${k}`);
+      return Boolean(match?.allowed && match?.enabled);
+    }
+    if (typeof flags === "object") {
+      const rawVal =
+        (flags as Record<string, ModuleFlagState | boolean>)[k] ??
+        (flags as Record<string, ModuleFlagState | boolean>)[`module.${k}`];
+      if (rawVal === undefined) return false;
+      if (typeof rawVal === "boolean") return rawVal;
+      return Boolean(rawVal.allowed && rawVal.enabled);
+    }
+    return false;
+  }
+
+  const memo = new Map<ModuleKey, boolean>();
+  const visiting = new Set<ModuleKey>();
+
+  function checkActive(k: ModuleKey): boolean {
+    if (memo.has(k)) return memo.get(k)!;
+    if (visiting.has(k)) return false; // Cycle prevention
+    if (!isCandidate(k)) {
+      memo.set(k, false);
+      return false;
+    }
+    visiting.add(k);
+    const deps = MODULE_INFO[k]?.dependsOn ?? [];
+    for (const dep of deps) {
+      if (!checkActive(dep)) {
+        visiting.delete(k);
+        memo.set(k, false);
+        return false;
+      }
+    }
+    visiting.delete(k);
+    memo.set(k, true);
+    return true;
+  }
+
+  return MODULE_KEYS.filter((k) => checkActive(k));
+}
+
+/**
+ * Returns true if a module is active (allowed, enabled, and all dependencies active).
  */
 export function isModuleActive(
   flags: ModuleFlagInput | null | undefined,
   key: ModuleKey
 ): boolean {
-  if (!flags) return false;
-
-  // Set of active keys or string array
-  if (flags instanceof Set) {
-    return flags.has(key) || flags.has(`module.${key}`);
-  }
-
-  if (Array.isArray(flags)) {
-    if (flags.length === 0) return false;
-    const first = flags[0];
-    if (typeof first === "string") {
-      const arr = flags as unknown as readonly string[];
-      return arr.includes(key) || arr.includes(`module.${key}`);
-    }
-    // Array of { key, allowed, enabled }
-    const objList = flags as { key: string; allowed?: boolean; enabled?: boolean }[];
-    const match = objList.find((f) => f.key === key || f.key === `module.${key}`);
-    return Boolean(match?.allowed && match?.enabled);
-  }
-
-  // Object / Record
-  if (typeof flags === "object") {
-    const rawVal =
-      (flags as Record<string, ModuleFlagState | boolean>)[key] ??
-      (flags as Record<string, ModuleFlagState | boolean>)[`module.${key}`];
-    if (rawVal === undefined) return false;
-    if (typeof rawVal === "boolean") return rawVal;
-    return Boolean(rawVal.allowed && rawVal.enabled);
-  }
-
-  return false;
+  return getActiveModules(flags).includes(key);
 }
 
 /**

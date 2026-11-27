@@ -569,7 +569,7 @@ export default function PosPage() {
     if (!user) return;
     apiFetch("/settings/pos")
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
+      .then(async (data) => {
         if (data) {
           const cfg = data.data || data;
           setPosConfig({
@@ -580,12 +580,36 @@ export default function PosPage() {
             receiptHeader: cfg.receiptHeader || "",
             receiptFooter: cfg.receiptFooter || "",
           });
-          if (cfg.activeModules) {
-            db.settings.put({ key: "activeModules", value: cfg.activeModules }).catch(() => {});
+          if (cfg.activeModules && Array.isArray(cfg.activeModules)) {
+            try {
+              await db.settings.put({ key: "activeModules", value: cfg.activeModules });
+            } catch (saveErr) {
+              console.error("[POS] Failed to save activeModules to offline db:", saveErr);
+            }
+          }
+        } else {
+          // Fallback to offline saved activeModules when server is unreachable
+          try {
+            const saved = await db.settings.get("activeModules");
+            if (!saved?.value || !Array.isArray(saved.value)) {
+              await db.settings.put({ key: "activeModules", value: [] });
+            }
+          } catch (dbErr) {
+            console.error("[POS] Failed to read activeModules from offline db fallback:", dbErr);
           }
         }
       })
-      .catch(() => {});
+      .catch(async (err) => {
+        console.error("[POS] Failed to fetch /settings/pos, reading from offline db:", err);
+        try {
+          const saved = await db.settings.get("activeModules");
+          if (!saved?.value || !Array.isArray(saved.value)) {
+            await db.settings.put({ key: "activeModules", value: [] });
+          }
+        } catch (dbErr) {
+          console.error("[POS] Failed to read activeModules from offline db:", dbErr);
+        }
+      });
   }, [user, apiFetch]);
 
   // Load Registers for current branch

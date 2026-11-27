@@ -16,8 +16,7 @@ import {
   RefreshTokenSchema,
   JwtPayload,
   SYSTEM_ROLES,
-  MODULE_KEYS,
-  type ModuleKey,
+  getActiveModules,
 } from "@universal-pos/shared";
 
 @Injectable()
@@ -355,15 +354,11 @@ export class AuthService {
             where: {
               tenantId: user.tenantId,
               key: { startsWith: "module." },
-              allowed: true,
-              enabled: true,
             },
-            select: { key: true },
+            select: { key: true, allowed: true, enabled: true },
           })
         : [];
-      const activeModules = moduleFlags
-        .map((f) => f.key.replace(/^module\./, "") as ModuleKey)
-        .filter((k) => MODULE_KEYS.includes(k));
+      const activeModules = getActiveModules(moduleFlags || []);
 
       return {
         id: user.id,

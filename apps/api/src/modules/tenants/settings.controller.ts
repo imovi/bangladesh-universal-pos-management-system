@@ -16,7 +16,7 @@ import { PermissionsGuard } from "../../common/guards/permissions.guard.js";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator.js";
 import { TenantsService } from "./tenants.service.js";
 import { TenantContextService } from "../../common/database/tenant-context.service.js";
-import { PERMISSIONS, SYSTEM_ROLES, UpdateTenantSettingsSchema, MODULE_KEYS, type ModuleKey } from "@universal-pos/shared";
+import { PERMISSIONS, SYSTEM_ROLES, UpdateTenantSettingsSchema, getActiveModules } from "@universal-pos/shared";
 import type { AuthenticatedRequest } from "../../common/types/request.js";
 
 @Controller("settings")
@@ -91,15 +91,11 @@ export class SettingsController {
       return tx.featureFlag.findMany({
         where: {
           key: { startsWith: "module." },
-          allowed: true,
-          enabled: true,
         },
-        select: { key: true },
+        select: { key: true, allowed: true, enabled: true },
       });
     });
-    const activeModules = flags
-      .map((f) => f.key.replace(/^module\./, "") as ModuleKey)
-      .filter((k) => MODULE_KEYS.includes(k));
+    const activeModules = getActiveModules(flags);
 
     return {
       shopName: data.name,

@@ -40,6 +40,12 @@ class TestGuardedController {
   getUnitsOnly() {
     return { ok: true, feature: "units" };
   }
+
+  @Get("prescription-required")
+  @RequireModule("prescription")
+  getPrescriptionOnly() {
+    return { ok: true, feature: "prescription" };
+  }
 }
 
 describe("Phase 2.0 Module System & Platform Admin Integration Tests", () => {
@@ -315,6 +321,27 @@ describe("Phase 2.0 Module System & Platform Admin Integration Tests", () => {
       expect(afterJson.platformActor.id).toBe(platformAdminId);
       expect(afterJson.platformActor.email).toBe("superadmin@platform.local");
     });
+
+    it("PATCH /platform/tenants/:tenantId/modules/:key returns 400 when tenantId is not a UUID", async () => {
+      const res = await request(app.getHttpServer())
+        .patch("/api/v1/platform/tenants/invalid-not-a-uuid/modules/units")
+        .set("Authorization", `Bearer ${platformAdminToken}`)
+        .send({ allowed: true });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error?.code).toBe("INVALID_TENANT_ID");
+    });
+
+    it("PATCH /platform/tenants/:tenantId/modules/:key returns 404 with TENANT_NOT_FOUND when tenant does not exist", async () => {
+      const nonExistentId = "00000000-0000-0000-0000-000000000000";
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/platform/tenants/${nonExistentId}/modules/units`)
+        .set("Authorization", `Bearer ${platformAdminToken}`)
+        .send({ allowed: true });
+
+      expect(res.status).toBe(404);
+      expect(res.body.error?.code).toBe("TENANT_NOT_FOUND");
+    });
   });
 
   // Section 4: Tenant Modules API
@@ -475,6 +502,129 @@ describe("Phase 2.0 Module System & Platform Admin Integration Tests", () => {
         .set("Authorization", `Bearer ${retailToken}`);
       expect(blockedRes.status).toBe(403);
       expect(blockedRes.body.error?.code).toBe("MODULE_DISABLED");
+    });
+
+    it("3-level chain deactivation: platform disallows units -> pharmacy_catalog and prescription become inactive while enabled stays true", async () => {
+      // 1. Create a pharmacy tenant which defaults to units, batch_expiry, pharmacy_catalog, prescription
+      const pharmacyTenant = await tenantsService.signup({
+        companyName: "Care Pharmacy",
+        slug: "care-pharmacy-" + Date.now().toString(36),
+        businessType: "pharmacy",
+        owner: {
+          name: "Care Owner",
+          email: "owner@care" + Date.now().toString(36) + ".com",
+          phone: "+8801700000088",
+          password: "Password123!",
+        },
+        branch: { name: "Care Main", code: "CP1" },
+      });
+
+      const pharmacyOwnerToken = await jwtService.signAsync(
+        {
+          sub: pharmacyTenant.ownerId,
+          email: "owner@care.com",
+          tenantId: pharmacyTenant.tenantId,
+          roles: ["Owner"],
+          permissions: ["*"],
+          isOwner: true,
+        },
+        { secret: configService.get("JWT_ACCESS_SECRET"), expiresIn: "15m" }
+      );
+
+      // Verify initially all are active
+      const initModulesRes = await request(app.getHttpServer())
+        .get("/api/v1/modules")
+        .set("Authorization", `Bearer ${pharmacyOwnerToken}`);
+      expect(initModulesRes.status).toBe(200);
+      const initMods = initModulesRes.body.data;
+      const getMod = (k: string) => initMods.find((m: any) => m.key === k);
+      expect(getMod("units").active).toBe(true);
+      expect(getMod("pharmacy_catalog").active).toBe(true);
+      expect(getMod("prescription").active).toBe(true);
+
+      const initMeRes = await request(app.getHttpServer())
+        .get("/api/v1/auth/me")
+        .set("Authorization", `Bearer ${pharmacyOwnerToken}`);
+      expect(initMeRes.status).toBe(200);
+      expect(initMeRes.body.data.activeModules).toContain("prescription");
+      expect(initMeRes.body.data.activeModules).toContain("pharmacy_catalog");
+      expect(initMeRes.body.data.activeModules).toContain("units");
+
+      const initGuardRes = await request(app.getHttpServer())
+        .get("/api/v1/test-guarded/prescription-required")
+        .set("Authorization", `Bearer ${pharmacyOwnerToken}`);
+      expect(initGuardRes.status).toBe(200);
+      expect(initGuardRes.body.data.ok).toBe(true);
+
+      // 2. Platform admin sets 'units' to allowed: false
+      const disallowRes = await request(app.getHttpServer())
+        .patch(`/api/v1/platform/tenants/${pharmacyTenant.tenantId}/modules/units`)
+        .set("Authorization", `Bearer ${platformAdminToken}`)
+        .send({ allowed: false });
+      expect(disallowRes.status).toBe(200);
+      expect(disallowRes.body.data.allowed).toBe(false);
+
+      // 3. GET /modules: units, pharmacy_catalog, prescription all active=false; enabled stays true!
+      const afterDisallowRes = await request(app.getHttpServer())
+        .get("/api/v1/modules")
+        .set("Authorization", `Bearer ${pharmacyOwnerToken}`);
+      expect(afterDisallowRes.status).toBe(200);
+      const afterMods = afterDisallowRes.body.data;
+      const getAfterMod = (k: string) => afterMods.find((m: any) => m.key === k);
+
+      expect(getAfterMod("units").allowed).toBe(false);
+      expect(getAfterMod("units").enabled).toBe(true);
+      expect(getAfterMod("units").active).toBe(false);
+
+      expect(getAfterMod("pharmacy_catalog").allowed).toBe(true);
+      expect(getAfterMod("pharmacy_catalog").enabled).toBe(true);
+      expect(getAfterMod("pharmacy_catalog").active).toBe(false); // Dep units is inactive
+
+      expect(getAfterMod("prescription").allowed).toBe(true);
+      expect(getAfterMod("prescription").enabled).toBe(true);
+      expect(getAfterMod("prescription").active).toBe(false); // Dep pharmacy_catalog is inactive
+
+      expect(getAfterMod("batch_expiry").allowed).toBe(true);
+      expect(getAfterMod("batch_expiry").enabled).toBe(true);
+      expect(getAfterMod("batch_expiry").active).toBe(true); // batch_expiry has no dependencies
+
+      // 4. GET /auth/me: treats pharmacy_catalog and prescription as inactive
+      const afterMeRes = await request(app.getHttpServer())
+        .get("/api/v1/auth/me")
+        .set("Authorization", `Bearer ${pharmacyOwnerToken}`);
+      expect(afterMeRes.status).toBe(200);
+      expect(afterMeRes.body.data.activeModules).not.toContain("units");
+      expect(afterMeRes.body.data.activeModules).not.toContain("pharmacy_catalog");
+      expect(afterMeRes.body.data.activeModules).not.toContain("prescription");
+      expect(afterMeRes.body.data.activeModules).toContain("batch_expiry");
+
+      // 5. ModuleGuard on /prescription-required returns 403 MODULE_DISABLED
+      const blockedGuardRes = await request(app.getHttpServer())
+        .get("/api/v1/test-guarded/prescription-required")
+        .set("Authorization", `Bearer ${pharmacyOwnerToken}`);
+      expect(blockedGuardRes.status).toBe(403);
+      expect(blockedGuardRes.body.error?.code).toBe("MODULE_DISABLED");
+
+      // 6. When platform allows units again, pharmacy_catalog and prescription become active again by itself
+      const reallowRes = await request(app.getHttpServer())
+        .patch(`/api/v1/platform/tenants/${pharmacyTenant.tenantId}/modules/units`)
+        .set("Authorization", `Bearer ${platformAdminToken}`)
+        .send({ allowed: true });
+      expect(reallowRes.status).toBe(200);
+
+      const restoredMeRes = await request(app.getHttpServer())
+        .get("/api/v1/auth/me")
+        .set("Authorization", `Bearer ${pharmacyOwnerToken}`);
+      expect(restoredMeRes.status).toBe(200);
+      expect(restoredMeRes.body.data.activeModules).toContain("units");
+      expect(restoredMeRes.body.data.activeModules).toContain("pharmacy_catalog");
+      expect(restoredMeRes.body.data.activeModules).toContain("prescription");
+
+      const restoredGuardRes = await request(app.getHttpServer())
+        .get("/api/v1/test-guarded/prescription-required")
+        .set("Authorization", `Bearer ${pharmacyOwnerToken}`);
+      expect(restoredGuardRes.status).toBe(200);
+      expect(restoredGuardRes.body.data.ok).toBe(true);
     });
   });
 });

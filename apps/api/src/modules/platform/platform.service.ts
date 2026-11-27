@@ -9,6 +9,9 @@ import { ConfigService } from "../../common/config/config.service.js";
 import { SystemDbService } from "../../common/database/system-db.service.js";
 import { MODULE_KEYS, type ModuleKey } from "@universal-pos/shared";
 
+// Fixed dummy argon2id hash to prevent email enumeration via timing side-channels
+const DUMMY_ARGON2_HASH = "$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHRzb21lc2FsdA$RdescudvJCsgqlfreOJAcw";
+
 export interface PlatformLoginDto {
   email: string;
   password: string;
@@ -24,12 +27,10 @@ export class PlatformService {
 
   async login(dto: PlatformLoginDto) {
     const admin = await this.systemDb.findPlatformAdminByEmail(dto.email.toLowerCase().trim());
-    if (!admin || !admin.isActive) {
-      throw new UnauthorizedException("Invalid credentials");
-    }
+    const hashToVerify = admin && admin.isActive ? admin.passwordHash : DUMMY_ARGON2_HASH;
+    const isMatch = await argon2.verify(hashToVerify, dto.password);
 
-    const isMatch = await argon2.verify(admin.passwordHash, dto.password);
-    if (!isMatch) {
+    if (!admin || !admin.isActive || !isMatch) {
       throw new UnauthorizedException("Invalid credentials");
     }
 

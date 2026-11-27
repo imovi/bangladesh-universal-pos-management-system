@@ -9,6 +9,7 @@ import { TenantContextService } from "../../common/database/tenant-context.servi
 import {
   MODULE_KEYS,
   MODULE_INFO,
+  getActiveModules,
   findMissingDependencies,
   type ModuleKey,
 } from "@universal-pos/shared";
@@ -35,10 +36,12 @@ export class ModulesService {
         });
       }
 
+      const activeModules = getActiveModules(flags);
+
       return MODULE_KEYS.map((key) => {
         const info = MODULE_INFO[key];
         const state = flagMap.get(key) || { allowed: false, enabled: false };
-        const active = Boolean(state.allowed && state.enabled);
+        const active = activeModules.includes(key);
         return {
           key,
           allowed: state.allowed,
@@ -58,14 +61,10 @@ export class ModulesService {
       const flags = await tx.featureFlag.findMany({
         where: {
           key: { startsWith: "module." },
-          allowed: true,
-          enabled: true,
         },
-        select: { key: true },
+        select: { key: true, allowed: true, enabled: true },
       });
-      return flags
-        .map((f) => f.key.replace(/^module\./, "") as ModuleKey)
-        .filter((k) => MODULE_KEYS.includes(k));
+      return getActiveModules(flags);
     });
   }
 
@@ -99,9 +98,7 @@ export class ModulesService {
         });
       }
 
-      const activeKeys = flags
-        .filter((f) => f.allowed && f.enabled)
-        .map((f) => f.key.replace(/^module\./, "") as ModuleKey);
+      const activeKeys = getActiveModules(flags);
 
       if (enabled) {
         // Check dependencies
@@ -138,6 +135,12 @@ export class ModulesService {
         data: { enabled },
       });
 
+      // Recalculate active state after toggle
+      const updatedFlags = flags.map((f) =>
+        f.id === targetFlag.id ? { ...f, enabled } : f
+      );
+      const updatedActiveModules = getActiveModules(updatedFlags);
+
       // Write audit log
       await tx.auditLog.create({
         data: {
@@ -165,7 +168,7 @@ export class ModulesService {
         key: moduleKey,
         allowed: updated.allowed,
         enabled: updated.enabled,
-        active: Boolean(updated.allowed && updated.enabled),
+        active: updatedActiveModules.includes(moduleKey),
         nameBn: info?.nameBn || moduleKey,
         nameEn: info?.nameEn || moduleKey,
         description: info?.descriptionBn || "",

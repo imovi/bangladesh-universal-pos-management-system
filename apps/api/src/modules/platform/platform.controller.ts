@@ -60,6 +60,14 @@ export class PlatformController {
     @Body() body: unknown,
     @Req() req: PlatformAuthenticatedRequest,
   ) {
+    const tenantIdParse = z.string().uuid().safeParse(tenantId);
+    if (!tenantIdParse.success) {
+      throw new BadRequestException({
+        code: "INVALID_TENANT_ID",
+        message: "Tenant ID must be a valid UUID",
+      });
+    }
+
     const parse = UpdateModuleAllowedSchema.safeParse(body);
     if (!parse.success) {
       throw new BadRequestException({

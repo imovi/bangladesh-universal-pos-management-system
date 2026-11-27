@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from './prisma.service.js';
 import { Prisma } from '@prisma/client';
 import { v7 as uuidv7 } from 'uuid';
-import { DEFAULT_MODULES_BY_BUSINESS_TYPE } from '@universal-pos/shared';
+import { DEFAULT_MODULES_BY_BUSINESS_TYPE, getActiveModules, type ModuleKey } from '@universal-pos/shared';
 
 export interface CreateTenantSignupData {
   companyName: string;
@@ -349,18 +349,25 @@ export class SystemDbService {
         },
         orderBy: { createdAt: 'asc' },
       });
-      return tenants.map((t) => ({
-        id: t.id,
-        name: t.name,
-        slug: t.slug,
-        businessType: t.businessType,
-        status: t.status,
-        modules: t.featureFlags.map((f) => ({
-          key: f.key.replace(/^module\./, ''),
-          allowed: f.allowed,
-          enabled: f.enabled,
-        })),
-      }));
+      return tenants.map((t) => {
+        const activeModules = getActiveModules(t.featureFlags);
+        return {
+          id: t.id,
+          name: t.name,
+          slug: t.slug,
+          businessType: t.businessType,
+          status: t.status,
+          modules: t.featureFlags.map((f) => {
+            const key = f.key.replace(/^module\./, '') as ModuleKey;
+            return {
+              key,
+              allowed: f.allowed,
+              enabled: f.enabled,
+              active: activeModules.includes(key),
+            };
+          }),
+        };
+      });
     });
   }
 
@@ -376,6 +383,16 @@ export class SystemDbService {
   ) {
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SET LOCAL ROLE pos_system;`;
+
+      const tenant = await tx.tenant.findUnique({
+        where: { id: tenantId },
+      });
+      if (!tenant) {
+        throw new NotFoundException({
+          code: 'TENANT_NOT_FOUND',
+          message: 'Tenant not found',
+        });
+      }
       const flagKey = `module.${moduleKey}`;
       const existing = await tx.featureFlag.findUnique({
         where: { tenantId_key: { tenantId, key: flagKey } },

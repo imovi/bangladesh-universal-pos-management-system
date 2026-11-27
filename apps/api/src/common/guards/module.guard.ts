@@ -7,7 +7,7 @@ import {
 import { Reflector } from "@nestjs/core";
 import { TenantContextService } from "../database/tenant-context.service.js";
 import {
-  isModuleActive,
+  getActiveModules,
   MODULE_INFO,
   type ModuleKey,
 } from "@universal-pos/shared";
@@ -40,17 +40,17 @@ export class ModuleGuard implements CanActivate {
     }
 
     // Read the tenant's flags once per request under tenant context
-    if (!req._tenantModuleFlags) {
+    if (!req._activeModules) {
       const flags = await this.tenantContext.runWithTenant(tenantId, async (tx) => {
         return tx.featureFlag.findMany({
           select: { key: true, allowed: true, enabled: true },
         });
       });
-      req._tenantModuleFlags = flags;
+      req._activeModules = getActiveModules(flags);
     }
 
     for (const key of requiredModules) {
-      if (!isModuleActive(req._tenantModuleFlags, key)) {
+      if (!req._activeModules.includes(key)) {
         const info = MODULE_INFO[key];
         const name = info?.nameBn || key;
         throw new ForbiddenException({

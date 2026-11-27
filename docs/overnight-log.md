@@ -4293,3 +4293,70 @@ Running 5 tests using 1 worker
 - Owner module page for artisan-apparel: [01-artisan-apparel-modules.png](file:///d:/pos%20system/docs/screenshots/phase2-0/01-artisan-apparel-modules.png)
 - Owner module page for chemical-demo: [02-chemical-demo-modules.png](file:///d:/pos%20system/docs/screenshots/phase2-0/02-chemical-demo-modules.png)
 - Platform tenants page: [03-platform-tenants.png](file:///d:/pos%20system/docs/screenshots/phase2-0/03-platform-tenants.png)
+
+
+#### 4. CI Verification of Commit (04eb7a9)
+- CI: `04eb7a9` → run `45892387422` → completed success
+- Job details:
+  - test (job 140157933411): completed success
+  - load-check (job 140162908179): completed success
+  - smoke-prod (job 140162908180): completed success
+- Playwright Run Summary annotation of the test job:
+```json
+{
+  "path": ".github",
+  "blob_href": "https://github.com/imovi/bangladesh-universal-pos-management-system/blob/04eb7a92ceaf3c649d7f140289c0872f25ece8ec/.github",
+  "start_line": 436,
+  "start_column": null,
+  "end_line": 436,
+  "end_column": null,
+  "annotation_level": "notice",
+  "title": "🎭 Playwright Run Summary",
+  "message": "  162 passed (8.7m)",
+  "raw_details": ""
+}
+```
+- Smoke-prod backup notice annotations:
+```json
+{
+  "path": ".github",
+  "blob_href": "https://github.com/imovi/bangladesh-universal-pos-management-system/blob/04eb7a92ceaf3c649d7f140289c0872f25ece8ec/.github",
+  "start_line": 64,
+  "start_column": null,
+  "end_line": 64,
+  "end_column": null,
+  "annotation_level": "notice",
+  "title": "smoke-prod backup",
+  "message": "status=running, restarts=0, health=healthy, crond=running (PID 1), daily_dumps=1",
+  "raw_details": ""
+}
+```
+```json
+{
+  "path": ".github",
+  "blob_href": "https://github.com/imovi/bangladesh-universal-pos-management-system/blob/04eb7a92ceaf3c649d7f140289c0872f25ece8ec/.github",
+  "start_line": 98,
+  "start_column": null,
+  "end_line": 98,
+  "end_column": null,
+  "annotation_level": "notice",
+  "title": "smoke-prod backup",
+  "message": "tableCount=55, tables=[tenants, products, sales] verified",
+  "raw_details": ""
+}
+```
+- Load-check scenario 3 annotation:
+```json
+{
+  "path": ".github",
+  "blob_href": "https://github.com/imovi/bangladesh-universal-pos-management-system/blob/04eb7a92ceaf3c649d7f140289c0872f25ece8ec/.github",
+  "start_line": 316,
+  "start_column": null,
+  "end_line": 316,
+  "end_column": null,
+  "annotation_level": "notice",
+  "title": "load-check scenario 3",
+  "message": "{\"scenario\":3,\"name\":\"sales_summary_report_50k\",\"durationMs\":40,\"targetMs\":2000,\"salesCount\":50000,\"expectedSalesCount\":50000,\"budgetMet\":true,\"passed\":true}",
+  "raw_details": ""
+}
+```

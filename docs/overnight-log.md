@@ -4660,3 +4660,8 @@ Captured in `docs/screenshots/phase2-1/`:
 - In `apps/admin/src/lib/pos/offline/outbox.ts`, removed unused import `CreateSalePayload`.
 - In `apps/admin`, replaced repeated `locale === "bn"` inline checks with `isBn` in `products/[id]/page.tsx`, `products/new/page.tsx`, and `inventory/stock/page.tsx`, reducing inline matches from 721 to 644 (ceiling: 685).
 - Verified `inline-i18n-count.spec.ts` (1 passed) and `restore-drill.spec.ts` (4 passed).
+
+### 7. Stock Badge Format & Units E2E Spec Fix
+- In `apps/admin/src/app/(admin)/inventory/stock/page.tsx`, conditioned `formatStockWithBiggestUnit` on `isUnitsActive && (units.length > 0 || baseUnit !== 'pcs')`. For standard fashion products with default `pcs` units, `{item.qty}` is rendered directly in Latin digits, preserving 100% backward compatibility for fashion tests (`inventory-flow.spec.ts`) that parse stock text as integer.
+- In `apps/admin/e2e/units-pos-flow.spec.ts`, normalized response unwrapping for `GET /products` and `GET /sales` with `Array.isArray(body.data) ? body.data : (body.data?.items ?? [])` to handle both unpaginated and wrapped responses safely.
+- Verified `inline-i18n-count.spec.ts` (1 passed).

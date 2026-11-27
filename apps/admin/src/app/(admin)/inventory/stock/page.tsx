@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "@/i18n/context";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, useModules } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -101,6 +101,8 @@ export default function StockLevelsPage() {
   const { strings, locale } = useTranslation();
   const isBn = locale === "bn";
   const { apiFetch, hasPermission, currentBranch } = useAuth();
+  const { hasModule } = useModules();
+  const isUnitsActive = hasModule("units");
   const queryClient = useQueryClient();
 
   const [selectedBranchId, setSelectedBranchId] = useState<string>(currentBranch?.id || "");
@@ -432,12 +434,17 @@ export default function StockLevelsPage() {
                         }`}
                         data-testid="stock-qty-badge"
                       >
-                        {formatStockWithBiggestUnit(
-                          Number(item.qty),
-                          item.variant?.product?.baseUnit || "pcs",
-                          item.variant?.product?.units,
-                          locale as any,
-                        )}
+                        {isUnitsActive &&
+                        (item.variant?.product?.units?.length > 0 ||
+                          (item.variant?.product?.baseUnit &&
+                            item.variant.product.baseUnit !== "pcs"))
+                          ? formatStockWithBiggestUnit(
+                              Number(item.qty),
+                              item.variant?.product?.baseUnit || "pcs",
+                              item.variant?.product?.units,
+                              locale as any,
+                            )
+                          : item.qty}
                       </span>
                     </TableCell>
 

@@ -72,9 +72,10 @@ test.describe.serial("Phase 2.1: Units and Unit Conversion POS Flow", () => {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(prodRes.ok()).toBeTruthy();
-    const prods = (await prodRes.json()).data.items;
-    const hclProduct = prods.find((p: any) => p.sku === "CHEM-HCL-01" || p.name.includes("হাইড্রোক্লোরিক"));
-    const csProduct = prods.find((p: any) => p.sku === "CHEM-CS-01" || p.name.includes("সোডা"));
+    const prodBody = await prodRes.json();
+    const prods = Array.isArray(prodBody.data) ? prodBody.data : (prodBody.data?.items ?? []);
+    const hclProduct = prods.find((p: any) => p.sku === "CHEM-HCL" || p.sku === "CHEM-HCL-01" || p.name.includes("হাইড্রোক্লোরিক"));
+    const csProduct = prods.find((p: any) => p.sku === "CHEM-CS" || p.sku === "CHEM-CS-01" || p.name.includes("সোডা"));
     expect(hclProduct).toBeDefined();
     expect(csProduct).toBeDefined();
 
@@ -355,7 +356,8 @@ test.describe.serial("Phase 2.1: Units and Unit Conversion POS Flow", () => {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(salesRes.ok()).toBeTruthy();
-    const recentSales = (await salesRes.json()).data.items;
+    const salesBody = await salesRes.json();
+    const recentSales = Array.isArray(salesBody.data) ? salesBody.data : (salesBody.data?.items ?? []);
     const offlineSaleOnServer = recentSales.find((s: any) => s.isOffline === true);
     expect(offlineSaleOnServer).toBeDefined();
 

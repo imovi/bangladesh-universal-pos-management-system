@@ -4665,3 +4665,10 @@ Captured in `docs/screenshots/phase2-1/`:
 - In `apps/admin/src/app/(admin)/inventory/stock/page.tsx`, conditioned `formatStockWithBiggestUnit` on `isUnitsActive && (units.length > 0 || baseUnit !== 'pcs')`. For standard fashion products with default `pcs` units, `{item.qty}` is rendered directly in Latin digits, preserving 100% backward compatibility for fashion tests (`inventory-flow.spec.ts`) that parse stock text as integer.
 - In `apps/admin/e2e/units-pos-flow.spec.ts`, normalized response unwrapping for `GET /products` and `GET /sales` with `Array.isArray(body.data) ? body.data : (body.data?.items ?? [])` to handle both unpaginated and wrapped responses safely.
 - Verified `inline-i18n-count.spec.ts` (1 passed).
+
+### 8. Units E2E Unit Selection & Build Resolution
+- Fixed `useModules()` in `apps/admin/src/app/(admin)/inventory/stock/page.tsx` to destructure `isModuleActive` (the actual exported method) resolving Next.js production build failure.
+- In `apps/admin/e2e/units-pos-flow.spec.ts`:
+  - Resolved Playwright test timeout on unit select: switched option selection to `hclCanUnit.id` value instead of hardcoded Bengali digit string `"৫ লিটার ক্যান"` which did not match ASCII `"5 লিটার ক্যান"`.
+  - Added robust payload unwrapping for `GET /branches` and `GET /purchasing/suppliers`.
+  - Increased test timeout to 180s for multi-step POS/inventory lifecycle.

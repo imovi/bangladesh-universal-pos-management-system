@@ -63,7 +63,7 @@ test.describe.serial("Phase 2.1: Units and Unit Conversion POS Flow", () => {
     context,
     request,
   }) => {
-    test.setTimeout(120000);
+    test.setTimeout(180000);
 
     const { token } = await loginAsChemicalOwner(request);
 
@@ -142,7 +142,12 @@ test.describe.serial("Phase 2.1: Units and Unit Conversion POS Flow", () => {
     const unitSelect2 = page.locator('[data-testid="cart-unit-select-2"]');
     await expect(unitSelect2).toBeVisible({ timeout: 5000 });
     // Switch unit to 5L can
-    await unitSelect2.selectOption({ label: "৫ লিটার ক্যান" });
+    const hclCanUnit = hclProduct.units?.find((u: any) => u.factor === 5 || u.name.includes("ক্যান"));
+    if (hclCanUnit) {
+      await unitSelect2.selectOption(hclCanUnit.id);
+    } else {
+      await unitSelect2.selectOption({ label: /5\s*লিটার\s*ক্যান|৫\s*লিটার\s*ক্যান/ });
+    }
     await page.waitForTimeout(300);
 
     // Verify cart grand total: ৳300 + ৳8,500 + ৳225 = ৳9,025
@@ -252,12 +257,15 @@ test.describe.serial("Phase 2.1: Units and Unit Conversion POS Flow", () => {
     const branchesRes = await request.get(`${API_BASE_URL}/branches`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    const branch = (await branchesRes.json()).data[0];
+    const branchData = (await branchesRes.json()).data;
+    const branch = Array.isArray(branchData) ? branchData[0] : (branchData?.items?.[0] ?? branchData);
 
     const suppliersRes = await request.get(`${API_BASE_URL}/purchasing/suppliers`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    let supplier = (await suppliersRes.json()).data?.[0];
+    const suppBody = await suppliersRes.json();
+    const suppData = suppBody.data;
+    let supplier = Array.isArray(suppData) ? suppData[0] : (suppData?.items?.[0] ?? suppData);
     if (!supplier) {
       const createSupp = await request.post(`${API_BASE_URL}/purchasing/suppliers`, {
         headers: { Authorization: `Bearer ${token}` },

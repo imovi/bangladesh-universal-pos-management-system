@@ -101,8 +101,8 @@ export default function StockLevelsPage() {
   const { strings, locale } = useTranslation();
   const isBn = locale === "bn";
   const { apiFetch, hasPermission, currentBranch } = useAuth();
-  const { hasModule } = useModules();
-  const isUnitsActive = hasModule("units");
+  const { isModuleActive } = useModules();
+  const isUnitsActive = isModuleActive("units");
   const queryClient = useQueryClient();
 
   const [selectedBranchId, setSelectedBranchId] = useState<string>(currentBranch?.id || "");

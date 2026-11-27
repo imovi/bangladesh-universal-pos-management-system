@@ -10,6 +10,7 @@ export interface ReceiptItem {
   sku?: string;
   size?: string;
   color?: string;
+  unitName?: string;
   quantity: number;
   unitPriceMinor: number;
   totalMinor: number;
@@ -213,11 +214,13 @@ export function encodeReceiptText(
   // Items
   for (const item of receipt.items) {
     const nameLine = item.name + (item.size ? ` (${item.size})` : "");
-    const qtyRateTotal = `${item.quantity} x ${formatTaka(item.unitPriceMinor)}   ${formatTaka(item.totalMinor)}`;
+    const showUnit = item.unitName && item.unitName.toLowerCase() !== "pcs" && item.unitName !== "পিস";
+    const unitSuffix = showUnit ? ` ${item.unitName}` : "";
+    const qtyRateTotal = `${item.quantity}${unitSuffix} x ${formatTaka(item.unitPriceMinor)}   ${formatTaka(item.totalMinor)}`;
 
     if (settings.paperWidth === "58mm") {
       addText(nameLine + "\n");
-      addText(formatTwoColumns(`  ${item.quantity} x ${formatTaka(item.unitPriceMinor)}`, formatTaka(item.totalMinor), width));
+      addText(formatTwoColumns(`  ${item.quantity}${unitSuffix} x ${formatTaka(item.unitPriceMinor)}`, formatTaka(item.totalMinor), width));
     } else {
       if (nameLine.length > 24) {
         addText(nameLine + "\n");

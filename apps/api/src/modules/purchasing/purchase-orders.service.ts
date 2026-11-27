@@ -7,7 +7,7 @@ import { Prisma } from "@prisma/client";
 import { v7 as uuidv7 } from "uuid";
 import { TenantContextService } from "../../common/database/tenant-context.service.js";
 import { AuditService } from "../audit/audit.service.js";
-import { CreatePurchaseOrderDto, formatDateKey } from "@universal-pos/shared";
+import { CreatePurchaseOrderDto, formatDateKey, computeBaseQuantity } from "@universal-pos/shared";
 
 @Injectable()
 export class PurchaseOrdersService {
@@ -40,27 +40,59 @@ export class PurchaseOrdersService {
     return `PO-${dateKey}-${String(nextSeq).padStart(4, "0")}`;
   }
 
-  private prepareOrderItems(
+  private async prepareOrderItems(
     tenantId: string,
+    tx: Prisma.TransactionClient,
     items: CreatePurchaseOrderDto["items"],
   ) {
     let totalEstimatedMinor = 0n;
-    const itemsData = items.map((item) => {
+    const itemsData = [];
+
+    for (const item of items) {
       const lineTotal =
         (BigInt(Math.round(item.qtyOrdered * 1000)) *
           BigInt(item.unitCostMinor)) /
         1000n;
       totalEstimatedMinor += lineTotal;
-      return {
+
+      let unitName = "pcs";
+      let unitFactor = 1;
+      if (item.productUnitId) {
+        const unit = await tx.productUnit.findUnique({
+          where: { id: item.productUnitId, tenantId },
+        });
+        if (!unit || !unit.isActive || !unit.isPurchaseUnit) {
+          throw new BadRequestException("এককটি ক্রয়ের জন্য প্রযোজ্য বা সক্রিয় নয়।");
+        }
+        unitName = unit.name;
+        unitFactor = Number(unit.factor);
+      } else {
+        const variant = await tx.productVariant.findUnique({
+          where: { id: item.variantId, tenantId },
+          include: { product: true },
+        });
+        if (variant?.product?.baseUnit) {
+          unitName = variant.product.baseUnit;
+        }
+      }
+
+      const baseQuantity = computeBaseQuantity(item.qtyOrdered, unitFactor);
+
+      itemsData.push({
         id: uuidv7(),
         tenantId,
         variantId: item.variantId,
+        productUnitId: item.productUnitId || null,
+        unitName,
+        unitFactor: new Prisma.Decimal(unitFactor),
+        baseQuantity: new Prisma.Decimal(baseQuantity),
         qtyOrdered: new Prisma.Decimal(item.qtyOrdered),
         qtyReceived: new Prisma.Decimal(0),
         unitCostMinor: BigInt(item.unitCostMinor),
         totalMinor: lineTotal,
-      };
-    });
+      });
+    }
+
     return { totalEstimatedMinor, itemsData };
   }
 
@@ -73,8 +105,9 @@ export class PurchaseOrdersService {
     return this.tenantContext.runWithTenant(tenantId, async (tx) => {
       const poNumber =
         dto.poNumber || (await this.generatePoNumber(tenantId, tx));
-      const { totalEstimatedMinor, itemsData } = this.prepareOrderItems(
+      const { totalEstimatedMinor, itemsData } = await this.prepareOrderItems(
         tenantId,
+        tx,
         dto.items,
       );
 

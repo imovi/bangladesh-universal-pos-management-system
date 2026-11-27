@@ -340,7 +340,12 @@ export default function OpeningStockPage() {
             <Card className="shadow-sm">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-bold flex items-center justify-between">
-                  <span>ভ্যারিয়েন্ট ভিত্তিক প্রারম্ভিক স্টক (Initial Stock Quantities)</span>
+                  <div className="flex items-center gap-2">
+                    <span>ভ্যারিয়েন্ট ভিত্তিক প্রারম্ভিক স্টক (Initial Stock Quantities)</span>
+                    <span className="text-xs font-mono font-normal px-2 py-0.5 rounded bg-muted border">
+                      বেস একক: {productDetail?.baseUnit || "pcs"}
+                    </span>
+                  </div>
                   <span className="text-xs font-normal text-muted-foreground">
                     প্রতিটি ঘরে প্রাথমিক মজুদ সংখ্যা লিখুন অথবা "সবগুলোতে বসান" ব্যবহার করুন
                   </span>

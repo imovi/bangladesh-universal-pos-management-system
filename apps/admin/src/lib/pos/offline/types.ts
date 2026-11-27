@@ -4,10 +4,12 @@ import type { z } from "zod";
 export interface OfflineCatalogVariant {
   id: string;
   sku: string;
-  optionValues: Record<string, string>;
+  optionValues: Record<string, string> | any[];
   retailPriceMinor: number;
   costPriceMinor: number;
   barcodes: string[];
+  barcodeUnits?: Array<{ barcode: string; productUnitId: string | null }>;
+  unitPrices?: Array<{ productUnitId: string; priceMinor: number }>;
   stockQty: number;
 }
 
@@ -18,6 +20,9 @@ export interface OfflineCatalogProduct {
   categoryId?: string | null;
   taxClassId?: string | null;
   taxRatePercent: number;
+  baseUnit?: string;
+  allowDecimalQty?: boolean;
+  units?: Array<{ id: string; name: string; factor: number; sortOrder?: number }>;
   variants: OfflineCatalogVariant[];
   barcodes: string[];
   updatedAt: string;
@@ -58,7 +63,7 @@ export interface OfflineOutboxItem {
   id: string;
   idempotencyKey: string;
   type: OutboxType;
-  payload: CreateSalePayload | CreateCustomerPayload;
+  payload: any;
   status: OutboxStatus;
   attemptCount: number;
   nextAttemptAt: number;

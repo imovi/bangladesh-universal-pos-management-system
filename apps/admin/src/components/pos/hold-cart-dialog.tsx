@@ -134,6 +134,9 @@ export function HoldCartDialog({
                     >
                       <div className="min-w-0 flex-1">
                         <div className="font-semibold text-xs truncate">{hc.label}</div>
+                        <div className="text-[10px] text-muted-foreground truncate mt-0.5">
+                          {hc.items.map((it) => `${it.quantity}${it.unitName && it.unitName.toLowerCase() !== "pcs" && it.unitName !== "পিস" ? ` ${it.unitName}` : ""} × ${it.name}`).join(", ")}
+                        </div>
                         <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono mt-0.5">
                           <Clock className="h-3 w-3" />
                           <span>{new Date(hc.heldAt).toLocaleTimeString()}</span>

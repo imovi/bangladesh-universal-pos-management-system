@@ -33,6 +33,7 @@ import {
 import { DataTablePagination } from "@/components/common/data-table-pagination";
 import { formatDateTime } from "@/lib/utils";
 import { formatMovementType } from "@/i18n/formatters";
+import { formatStockWithBiggestUnit } from "@universal-pos/shared";
 import {
   Search,
   History,
@@ -392,8 +393,13 @@ export default function StockLevelsPage() {
                     <TableCell className="text-xs font-mono">
                       {item.variant.barcodes && item.variant.barcodes.length > 0 ? (
                         item.variant.barcodes.map((b: any) => (
-                          <div key={b.id || b.barcode || b} className="text-muted-foreground">
-                            {b.barcode || b}
+                          <div key={b.id || b.barcode || b} className="text-muted-foreground flex items-center gap-1">
+                            <span>{b.barcode || b}</span>
+                            {b.productUnit?.name && (
+                              <span className="text-[10px] px-1 py-0.2 rounded bg-primary/10 text-primary font-sans">
+                                {b.productUnit.name}
+                              </span>
+                            )}
                           </div>
                         ))
                       ) : (
@@ -425,7 +431,12 @@ export default function StockLevelsPage() {
                         }`}
                         data-testid="stock-qty-badge"
                       >
-                        {item.qty}
+                        {formatStockWithBiggestUnit(
+                          Number(item.qty),
+                          item.variant?.product?.baseUnit || "pcs",
+                          item.variant?.product?.units,
+                          locale as any,
+                        )}
                       </span>
                     </TableCell>
 

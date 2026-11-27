@@ -62,6 +62,8 @@ model Tenant {
   couponUsages               CouponUsage[]
   loyaltySetting             LoyaltySetting?
   loyaltyLedger              LoyaltyLedger[]
+  productUnits               ProductUnit[]
+  variantUnitPrices          VariantUnitPrice[]
 
   @@map("tenants")
 }
@@ -339,11 +341,13 @@ model Product {
   brandId      String?          @map("brand_id") @db.Uuid
   collectionId String?          @map("collection_id") @db.Uuid
   taxClassId   String?          @map("tax_class_id") @db.Uuid
-  isActive     Boolean          @default(true) @map("is_active")
-  customFields Json             @default("{}") @map("custom_fields")
-  trackingMode String           @default("none") @map("tracking_mode")
-  createdAt    DateTime         @default(now()) @map("created_at")
-  updatedAt    DateTime         @updatedAt @map("updated_at")
+  isActive        Boolean          @default(true) @map("is_active")
+  baseUnit        String           @default("pcs") @map("base_unit")
+  allowDecimalQty Boolean          @default(false) @map("allow_decimal_qty")
+  customFields    Json             @default("{}") @map("custom_fields")
+  trackingMode    String           @default("none") @map("tracking_mode")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
 
   tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   category   Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
@@ -352,6 +356,7 @@ model Product {
   taxClass   TaxClass?        @relation(fields: [taxClassId], references: [id], onDelete: SetNull)
   options    ProductOption[]
   variants   ProductVariant[]
+  units      ProductUnit[]
 
   @@index([tenantId])
   @@index([categoryId])
@@ -418,6 +423,7 @@ model ProductVariant {
   saleItems          SaleItem[]
   saleReturnItems    SaleReturnItem[]
   transferItems      StockTransferItem[]
+  unitPrices         VariantUnitPrice[]
 
   @@unique([tenantId, sku])
   @@index([tenantId])
@@ -443,18 +449,21 @@ model VariantOptionValue {
 }
 
 model VariantBarcode {
-  id        String         @id @default(uuid(7)) @db.Uuid
-  tenantId  String         @map("tenant_id") @db.Uuid
-  variantId String         @map("variant_id") @db.Uuid
-  barcode   String
-  createdAt DateTime       @default(now()) @map("created_at")
+  id            String         @id @default(uuid(7)) @db.Uuid
+  tenantId      String         @map("tenant_id") @db.Uuid
+  variantId     String         @map("variant_id") @db.Uuid
+  barcode       String
+  productUnitId String?        @map("product_unit_id") @db.Uuid
+  createdAt     DateTime       @default(now()) @map("created_at")
 
-  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  variant       ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  productUnit   ProductUnit?   @relation(fields: [productUnitId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, barcode])
   @@index([tenantId])
   @@index([variantId])
   @@index([barcode])
+  @@index([productUnitId])
   @@map("variant_barcodes")
 }
 
@@ -557,25 +566,31 @@ model PurchaseOrder {
 }
 
 model PurchaseOrderItem {
-  id              String   @id @default(uuid(7)) @db.Uuid
-  tenantId        String   @map("tenant_id") @db.Uuid
-  purchaseOrderId String   @map("purchase_order_id") @db.Uuid
-  variantId       String   @map("variant_id") @db.Uuid
-  qtyOrdered      Decimal  @map("qty_ordered") @db.Decimal(14, 3)
-  qtyReceived     Decimal  @default(0) @map("qty_received") @db.Decimal(14, 3)
-  unitCostMinor   BigInt   @map("unit_cost_minor")
-  totalMinor      BigInt   @map("total_minor")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id              String       @id @default(uuid(7)) @db.Uuid
+  tenantId        String       @map("tenant_id") @db.Uuid
+  purchaseOrderId String       @map("purchase_order_id") @db.Uuid
+  variantId       String       @map("variant_id") @db.Uuid
+  productUnitId   String?      @map("product_unit_id") @db.Uuid
+  unitName        String       @default("pcs") @map("unit_name")
+  unitFactor      Decimal      @default(1) @map("unit_factor") @db.Decimal(14, 3)
+  baseQuantity    Decimal      @map("base_quantity") @db.Decimal(14, 3)
+  qtyOrdered      Decimal      @map("qty_ordered") @db.Decimal(14, 3)
+  qtyReceived     Decimal      @default(0) @map("qty_received") @db.Decimal(14, 3)
+  unitCostMinor   BigInt       @map("unit_cost_minor")
+  totalMinor      BigInt       @map("total_minor")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
 
   tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   purchaseOrder PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   variant       ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  productUnit   ProductUnit?       @relation(fields: [productUnitId], references: [id], onDelete: SetNull)
   receiptItems  GoodsReceiptItem[]
 
   @@index([tenantId])
   @@index([purchaseOrderId])
   @@index([variantId])
+  @@index([productUnitId])
   @@map("purchase_order_items")
 }
 
@@ -606,24 +621,30 @@ model GoodsReceipt {
 }
 
 model GoodsReceiptItem {
-  id                  String   @id @default(uuid(7)) @db.Uuid
-  tenantId            String   @map("tenant_id") @db.Uuid
-  goodsReceiptId      String   @map("goods_receipt_id") @db.Uuid
-  purchaseOrderItemId String?  @map("purchase_order_item_id") @db.Uuid
-  variantId           String   @map("variant_id") @db.Uuid
-  qtyReceived         Decimal  @map("qty_received") @db.Decimal(14, 3)
-  unitCostMinor       BigInt   @map("unit_cost_minor")
-  createdAt           DateTime @default(now()) @map("created_at")
+  id                  String             @id @default(uuid(7)) @db.Uuid
+  tenantId            String             @map("tenant_id") @db.Uuid
+  goodsReceiptId      String             @map("goods_receipt_id") @db.Uuid
+  purchaseOrderItemId String?            @map("purchase_order_item_id") @db.Uuid
+  variantId           String             @map("variant_id") @db.Uuid
+  productUnitId       String?            @map("product_unit_id") @db.Uuid
+  unitName            String             @default("pcs") @map("unit_name")
+  unitFactor          Decimal            @default(1) @map("unit_factor") @db.Decimal(14, 3)
+  baseQtyReceived     Decimal            @map("base_qty_received") @db.Decimal(14, 3)
+  qtyReceived         Decimal            @map("qty_received") @db.Decimal(14, 3)
+  unitCostMinor       BigInt             @map("unit_cost_minor")
+  createdAt           DateTime           @default(now()) @map("created_at")
 
   tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   goodsReceipt      GoodsReceipt       @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
   purchaseOrderItem PurchaseOrderItem? @relation(fields: [purchaseOrderItemId], references: [id], onDelete: SetNull)
   variant           ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  productUnit       ProductUnit?       @relation(fields: [productUnitId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
   @@index([goodsReceiptId])
   @@index([purchaseOrderItemId])
   @@index([variantId])
+  @@index([productUnitId])
   @@map("goods_receipt_items")
 }
 
@@ -821,29 +842,35 @@ model SaleItem {
   tenantId               String         @map("tenant_id") @db.Uuid
   saleId                 String         @map("sale_id") @db.Uuid
   variantId              String         @map("variant_id") @db.Uuid
+  productUnitId          String?        @map("product_unit_id") @db.Uuid
+  unitName               String         @default("pcs") @map("unit_name")
+  unitFactor             Decimal        @default(1) @map("unit_factor") @db.Decimal(14, 3)
+  baseQuantity           Decimal        @map("base_quantity") @db.Decimal(14, 3)
   originalUnitPriceMinor BigInt?        @map("original_unit_price_minor")
   unitPriceMinor         BigInt         @map("unit_price_minor")
-  unitCostMinor  BigInt         @map("unit_cost_minor")
-  quantity       Decimal        @db.Decimal(14, 3)
-  subtotalMinor  BigInt         @map("subtotal_minor")
-  discountMinor  BigInt         @default(0) @map("discount_minor")
-  taxRateBp      Int            @default(0) @map("tax_rate_bp")
-  taxMinor       BigInt         @default(0) @map("tax_minor")
-  totalMinor     BigInt         @map("total_minor")
-  promotionId    String?        @map("promotion_id") @db.Uuid
-  promotionDiscountMinor BigInt @default(0) @map("promotion_discount_minor")
-  promotionLabel String?        @map("promotion_label")
-  createdAt      DateTime       @default(now()) @map("created_at")
+  unitCostMinor          BigInt         @map("unit_cost_minor")
+  quantity               Decimal        @db.Decimal(14, 3)
+  subtotalMinor          BigInt         @map("subtotal_minor")
+  discountMinor          BigInt         @default(0) @map("discount_minor")
+  taxRateBp              Int            @default(0) @map("tax_rate_bp")
+  taxMinor               BigInt         @default(0) @map("tax_minor")
+  totalMinor             BigInt         @map("total_minor")
+  promotionId            String?        @map("promotion_id") @db.Uuid
+  promotionDiscountMinor BigInt         @default(0) @map("promotion_discount_minor")
+  promotionLabel         String?        @map("promotion_label")
+  createdAt              DateTime       @default(now()) @map("created_at")
 
-  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  sale    Sale           @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
-  promotion Promotion?   @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  tenant      Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sale        Sale           @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  variant     ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  promotion   Promotion?     @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  productUnit ProductUnit?   @relation(fields: [productUnitId], references: [id], onDelete: SetNull)
   returnItems SaleReturnItem[]
 
   @@index([tenantId])
   @@index([saleId])
   @@index([variantId])
+  @@index([productUnitId])
   @@map("sale_items")
 }
 
@@ -943,6 +970,7 @@ model SaleReturnItem {
   saleItemId       String         @map("sale_item_id") @db.Uuid
   variantId        String         @map("variant_id") @db.Uuid
   quantity         Decimal        @db.Decimal(14, 3)
+  baseQuantity     Decimal        @map("base_quantity") @db.Decimal(14, 3)
   unitRefundMinor  BigInt         @map("unit_refund_minor")
   taxRefundMinor   BigInt         @default(0) @map("tax_refund_minor")
   totalRefundMinor BigInt         @map("total_refund_minor")
@@ -1266,6 +1294,54 @@ model LoyaltyLedger {
   @@index([expiresAt])
   @@map("loyalty_ledger")
 }
+
+model ProductUnit {
+  id             String             @id @default(uuid(7)) @db.Uuid
+  tenantId       String             @map("tenant_id") @db.Uuid
+  productId      String             @map("product_id") @db.Uuid
+  name           String
+  factor         Decimal            @db.Decimal(14, 3)
+  isSaleUnit     Boolean            @default(true) @map("is_sale_unit")
+  isPurchaseUnit Boolean            @default(true) @map("is_purchase_unit")
+  isActive       Boolean            @default(true) @map("is_active")
+  sortOrder      Int                @default(0) @map("sort_order")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product        Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  unitPrices     VariantUnitPrice[]
+  barcodes       VariantBarcode[]
+  saleItems      SaleItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+  goodsReceiptItems  GoodsReceiptItem[]
+
+  @@unique([productId, name])
+  @@index([tenantId])
+  @@index([productId])
+  @@map("product_units")
+}
+
+model VariantUnitPrice {
+  id            String         @id @default(uuid(7)) @db.Uuid
+  tenantId      String         @map("tenant_id") @db.Uuid
+  variantId     String         @map("variant_id") @db.Uuid
+  productUnitId String         @map("product_unit_id") @db.Uuid
+  priceMinor    BigInt         @map("price_minor")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  variant       ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  productUnit   ProductUnit    @relation(fields: [productUnitId], references: [id], onDelete: Cascade)
+
+  @@unique([variantId, productUnitId])
+  @@index([tenantId])
+  @@index([variantId])
+  @@index([productUnitId])
+  @@map("variant_unit_prices")
+}
+
 
 
 

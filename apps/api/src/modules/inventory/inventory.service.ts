@@ -363,7 +363,16 @@ export class InventoryService {
               costMinor: true,
               priceMinor: true,
               reorderLevel: true,
-              barcodes: true,
+              barcodes: {
+                select: {
+                  id: true,
+                  barcode: true,
+                  productUnitId: true,
+                  productUnit: {
+                    select: { id: true, name: true },
+                  },
+                },
+              },
               optionValues: {
                 include: {
                   optionValue: {
@@ -377,6 +386,17 @@ export class InventoryService {
                 select: {
                   id: true,
                   name: true,
+                  baseUnit: true,
+                  units: {
+                    where: { isActive: true },
+                    select: {
+                      id: true,
+                      name: true,
+                      factor: true,
+                      isActive: true,
+                    },
+                    orderBy: { factor: "desc" },
+                  },
                   category: {
                     select: {
                       id: true,

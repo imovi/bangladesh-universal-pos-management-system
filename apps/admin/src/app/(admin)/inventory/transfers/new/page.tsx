@@ -27,6 +27,7 @@ interface TransferItemDraft {
   optionsLabel: string;
   sourceStock: number;
   quantity: number;
+  baseUnit?: string;
 }
 
 export default function NewStockTransferPage() {
@@ -201,6 +202,7 @@ export default function NewStockTransferPage() {
             optionsLabel: `${c} / ${s}`,
             sourceStock,
             quantity: cell.value,
+            baseUnit: productDetail.baseUnit || "pcs",
           });
         }
       }
@@ -511,17 +513,20 @@ export default function NewStockTransferPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">
-                    {item.sourceStock}
+                    {item.sourceStock} {item.baseUnit || "pcs"}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Input
-                      type="number"
-                      min={1}
-                      value={item.quantity}
-                      onChange={(e) => handleQuantityChange(item.variantId, Number(e.target.value))}
-                      className="w-20 h-7 text-xs text-right font-mono tabular-nums ml-auto"
-                      data-testid={`qty-input-${item.variantId}`}
-                    />
+                    <div className="flex items-center justify-end gap-1">
+                      <Input
+                        type="number"
+                        min={1}
+                        value={item.quantity}
+                        onChange={(e) => handleQuantityChange(item.variantId, Number(e.target.value))}
+                        className="w-16 h-7 text-xs text-right font-mono tabular-nums"
+                        data-testid={`qty-input-${item.variantId}`}
+                      />
+                      <span className="text-[11px] text-muted-foreground font-mono">{item.baseUnit || "pcs"}</span>
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <Button

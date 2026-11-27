@@ -321,5 +321,58 @@ describe("ESCPOS Thermal Receipt Printing Engine", () => {
         0x1b, 0x70, 0x00, 0x19, 0xfa, // DRAWER KICK
       ]);
     });
+
+    it("formats fashion receipts without unit name and without pcs text", () => {
+      const outputNoUnit = encodeReceiptText(sampleReceipt, { paperWidth: "80mm" });
+      const textNoUnit = Buffer.from(outputNoUnit).toString("utf8");
+      expect(textNoUnit).toContain("1 x 3,500.00");
+      expect(textNoUnit).toContain("2 x 800.00");
+      expect(textNoUnit).not.toContain("pcs");
+      expect(textNoUnit).not.toContain("পিস");
+
+      // Even if unitName is explicitly pcs or পিস, it does not print unit text
+      const receiptWithPcs: ReceiptModel = {
+        ...sampleReceipt,
+        items: [
+          { ...sampleReceipt.items[0], unitName: "pcs" },
+          { ...sampleReceipt.items[1], unitName: "পিস" },
+        ],
+      };
+      const outputPcs = encodeReceiptText(receiptWithPcs, { paperWidth: "80mm" });
+      const textPcs = Buffer.from(outputPcs).toString("utf8");
+      expect(textPcs).toBe(textNoUnit);
+    });
+
+    it("formats unit name in receipt text when a non-default unit is used", () => {
+      const chemicalReceipt: ReceiptModel = {
+        ...sampleReceipt,
+        shopName: "Bengal Chemical Works",
+        items: [
+          {
+            name: "Hydrochloric Acid (HCl)",
+            quantity: 2,
+            unitName: "ড্রাম",
+            unitPriceMinor: 1800000,
+            totalMinor: 3600000,
+          },
+          {
+            name: "Caustic Soda",
+            quantity: 2.5,
+            unitName: "kg",
+            unitPriceMinor: 12000,
+            totalMinor: 30000,
+          },
+        ],
+        grossMinor: 3630000,
+        totalMinor: 3630000,
+        paidMinor: 3630000,
+        changeMinor: 0,
+      };
+
+      const output = encodeReceiptText(chemicalReceipt, { paperWidth: "80mm" });
+      const text = Buffer.from(output).toString("utf8");
+      expect(text).toContain("2 ড্রাম x 18,000.00");
+      expect(text).toContain("2.5 kg x 120.00");
+    });
   });
 });

@@ -18,6 +18,7 @@ export type UpdateSupplierDto = z.infer<typeof UpdateSupplierSchema>;
 
 export const PurchaseOrderItemSchema = z.object({
   variantId: z.string().uuid(),
+  productUnitId: z.string().uuid().optional().nullable(),
   qtyOrdered: z.coerce.number().positive(),
   unitCostMinor: z.coerce.number().int().min(0),
 });
@@ -34,6 +35,7 @@ export type CreatePurchaseOrderDto = z.infer<typeof CreatePurchaseOrderSchema>;
 export const GoodsReceiptItemSchema = z.object({
   poItemId: z.string().uuid().optional(),
   variantId: z.string().uuid(),
+  productUnitId: z.string().uuid().optional().nullable(),
   qtyReceived: z.coerce.number().positive(),
   unitCostMinor: z.coerce.number().int().min(0),
 });

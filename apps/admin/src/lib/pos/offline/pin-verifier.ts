@@ -87,7 +87,7 @@ export async function saveOfflinePinVerifier(
 }
 
 export type VerifyPinResult =
-  | { success: true }
+  | { success: true; error?: undefined }
   | { success: false; error: "LOCKED"; lockedUntilMs: number }
   | { success: false; error: "EXPIRED" }
   | { success: false; error: "NOT_FOUND" }

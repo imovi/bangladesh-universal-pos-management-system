@@ -33,6 +33,13 @@ export interface PosVariantOptionValue {
   optionValue: PosOptionValue;
 }
 
+export interface PosProductUnit {
+  id: string;
+  name: string;
+  factor: number;
+  sortOrder?: number;
+}
+
 export interface PosProductVariant {
   id: string;
   tenantId?: string;
@@ -42,7 +49,9 @@ export interface PosProductVariant {
   costMinor?: number;
   reorderLevel?: string | number;
   isActive: boolean;
-  barcodes?: Array<{ id?: string; barcode: string; isPrimary?: boolean }>;
+  barcodes?: Array<{ id?: string; barcode: string; isPrimary?: boolean; productUnitId?: string | null }>;
+  barcodeUnits?: Array<{ barcode: string; productUnitId: string | null }>;
+  unitPrices?: Array<{ productUnitId: string; priceMinor: number }>;
   stockLevels?: PosStockLevel[];
   optionValues?: PosVariantOptionValue[];
   totalStock?: number;
@@ -70,6 +79,9 @@ export interface PosProduct {
   variants: PosProductVariant[];
   totalStock?: number;
   allowDecimals?: boolean;
+  baseUnit?: string;
+  allowDecimalQty?: boolean;
+  units?: PosProductUnit[];
 }
 
 export interface PosProductListResponse {

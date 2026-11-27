@@ -1,6 +1,7 @@
 import {
   Injectable,
   NotFoundException,
+  ConflictException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { TenantContextService } from "../../common/database/tenant-context.service.js";
@@ -56,6 +57,8 @@ export class ProductsService {
           collectionId: dto.collectionId || null,
           taxClassId: dto.taxClassId || null,
           trackingMode: dto.trackingMode || "none",
+          baseUnit: dto.baseUnit || "pcs",
+          allowDecimalQty: dto.allowDecimalQty || false,
           customFields: (dto.customFields as any) || {},
         },
       });
@@ -223,6 +226,9 @@ export class ProductsService {
         brand: true,
         collection: true,
         taxClass: true,
+        units: {
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        },
         options: {
           include: { values: true },
           orderBy: { position: "asc" },
@@ -238,7 +244,10 @@ export class ProductsService {
                 },
               },
             },
-            barcodes: true,
+            barcodes: {
+              include: { productUnit: true },
+            },
+            unitPrices: true,
           },
           orderBy: { createdAt: "asc" },
         },
@@ -318,6 +327,7 @@ export class ProductsService {
             brand: true,
             collection: true,
             taxClass: true,
+            units: true,
             variants: {
               include: {
                 optionValues: {
@@ -394,6 +404,30 @@ export class ProductsService {
       const existing = await tx.product.findUnique({ where: { id, tenantId } });
       if (!existing) throw new NotFoundException(`Product not found`);
 
+      if (dto.baseUnit && dto.baseUnit !== existing.baseUnit) {
+        const variants = await tx.productVariant.findMany({
+          where: { productId: id, tenantId },
+          select: { id: true },
+        });
+        const variantIds = variants.map((v: any) => v.id);
+        if (variantIds.length > 0) {
+          const [movementCount, saleCount] = await Promise.all([
+            tx.stockMovement.count({
+              where: { tenantId, variantId: { in: variantIds } },
+            }),
+            tx.saleItem.count({
+              where: { tenantId, variantId: { in: variantIds } },
+            }),
+          ]);
+          if (movementCount > 0 || saleCount > 0) {
+            throw new ConflictException({
+              code: "BASE_UNIT_IN_USE",
+              message: "পণ্যটির স্টক মুভমেন্ট বা বিক্রয় বিদ্যমান থাকায় বেস ইউনিট পরিবর্তন করা যাবে না।",
+            });
+          }
+        }
+      }
+
       const updated = await tx.product.update({
         where: { id, tenantId },
         data: {
@@ -403,6 +437,8 @@ export class ProductsService {
           brandId: dto.brandId,
           collectionId: dto.collectionId,
           taxClassId: dto.taxClassId,
+          baseUnit: dto.baseUnit,
+          allowDecimalQty: dto.allowDecimalQty,
           isActive: dto.isActive,
           customFields: dto.customFields as any,
         },

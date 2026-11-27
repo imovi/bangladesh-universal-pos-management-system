@@ -22,6 +22,8 @@ import {
   PromotionEvaluationLineItem,
   earnPoints,
   maxRedeemablePoints,
+  computeBaseQuantity,
+  computeUnitDerivedPriceMinor,
 } from "@universal-pos/shared";
 import { validateDiscountsNonNegative, enforceDiscountAndOverrideLimits } from "./sales-discount.helper.js";
 import { computeSalePayloadHash, matchesSalePayload } from "./sales-hash.helper.js";
@@ -106,7 +108,65 @@ export class SalesService {
         }
       }
 
-      const catalogPrice = v ? v.priceMinor : 0n;
+      let unitName = v?.product?.baseUnit || "pcs";
+      let unitFactor = 1;
+      let catalogPrice = v ? v.priceMinor : 0n;
+
+      if (it.productUnitId) {
+        const unit = v?.product?.units?.find((u: any) => u.id === it.productUnitId);
+        if (!unit) {
+          throw new BadRequestException({
+            code: "UNIT_NOT_FOUND",
+            message: "একক পাওয়া যায়নি।",
+          });
+        }
+        if (unit.productId !== v.productId) {
+          throw new BadRequestException({
+            code: "UNIT_PRODUCT_MISMATCH",
+            message: "এককটি এই পণ্যের জন্য প্রযোজ্য নয়।",
+          });
+        }
+
+        if (!isOffline && (!unit.isActive || !unit.isSaleUnit)) {
+          throw new BadRequestException({
+            code: "UNIT_NOT_ACTIVE_FOR_SALE",
+            message: "এককটি বিক্রয়ের জন্য সক্রিয় নয়।",
+          });
+        }
+
+        if (isOffline && (!unit.isActive || !unit.isSaleUnit)) {
+          priceFlags.push({
+            flag: "UNIT_DEACTIVATED",
+            details: {
+              variantId: it.variantId,
+              productUnitId: it.productUnitId,
+              reason: "অফলাইন বিক্রয়ে ব্যবহৃত এককটি পরবর্তীতে নিষ্ক্রিয় বা অনুপলব্ধ করা হয়েছে।",
+            },
+          });
+        }
+
+        unitName = unit.name;
+        unitFactor = Number(unit.factor);
+
+        const override = v.unitPrices?.find((up: any) => up.productUnitId === it.productUnitId);
+        if (override) {
+          catalogPrice = override.priceMinor;
+        } else {
+          catalogPrice = computeUnitDerivedPriceMinor(v.priceMinor, unitFactor);
+        }
+      }
+
+      const baseQuantity = computeBaseQuantity(it.quantity, unitFactor);
+
+      // Validate allowDecimalQty: when false, both quantity and baseQuantity must be whole numbers
+      const isDecimal = !Number.isInteger(Number(it.quantity)) || !Number.isInteger(baseQuantity);
+      if (isDecimal && v?.product && !v.product.allowDecimalQty) {
+        throw new BadRequestException({
+          code: "DECIMAL_QTY_NOT_ALLOWED",
+          message: "এই পণ্যের জন্য ভগ্নাংশ (দশমিক) পরিমাণ গ্রহণযোগ্য নয়।",
+        });
+      }
+
       let unitPriceMinor = catalogPrice;
       let priceDiffered = false;
 
@@ -151,7 +211,17 @@ export class SalesService {
       }
 
       const taxRateBp = v?.product?.taxClass ? v.product.taxClass.rateBp : defaultTaxRateBp;
-      return { variantId: it.variantId, unitPriceMinor, quantity: it.quantity, discount: it.discount, taxRateBp };
+      return {
+        variantId: it.variantId,
+        productUnitId: it.productUnitId ?? null,
+        unitName,
+        unitFactor,
+        baseQuantity,
+        unitPriceMinor,
+        quantity: it.quantity,
+        discount: it.discount,
+        taxRateBp,
+      };
     });
 
     return { lineInputs, originalPrices, priceFlags };
@@ -260,13 +330,24 @@ export class SalesService {
     tenantId: string, lines: any[], costMap: Map<string, bigint>, originalPrices: (bigint | null)[],
   ) {
     return lines.map((l: any, idx: number) => ({
-      id: uuidv7(), tenantId, variantId: l.variantId, unitPriceMinor: l.unitPriceMinor,
-      originalUnitPriceMinor: originalPrices[idx] ?? null, unitCostMinor: costMap.get(l.variantId) ?? 0n,
-      quantity: new Prisma.Decimal(l.quantity), subtotalMinor: l.grossMinor,
+      id: uuidv7(),
+      tenantId,
+      variantId: l.variantId,
+      productUnitId: l.productUnitId ?? null,
+      unitName: l.unitName ?? "pcs",
+      unitFactor: new Prisma.Decimal(l.unitFactor ?? 1),
+      baseQuantity: new Prisma.Decimal(l.baseQuantity ?? l.quantity),
+      unitPriceMinor: l.unitPriceMinor,
+      originalUnitPriceMinor: originalPrices[idx] ?? null,
+      unitCostMinor: costMap.get(l.variantId) ?? 0n,
+      quantity: new Prisma.Decimal(l.quantity),
+      subtotalMinor: l.grossMinor,
       discountMinor: l.lineDiscountMinor !== undefined && l.allocatedBillDiscountMinor !== undefined
         ? l.lineDiscountMinor + l.allocatedBillDiscountMinor
         : l.discountMinor ?? 0n,
-      taxRateBp: l.taxRateBp, taxMinor: l.taxMinor, totalMinor: l.totalMinor,
+      taxRateBp: l.taxRateBp,
+      taxMinor: l.taxMinor,
+      totalMinor: l.totalMinor,
       promotionId: l.promotionId ?? null,
       promotionDiscountMinor: l.promotionDiscountMinor ? BigInt(l.promotionDiscountMinor) : 0n,
       promotionLabel: l.promotionLabel ?? null,
@@ -330,7 +411,15 @@ export class SalesService {
     const defaultTax = await tx.taxClass.findFirst({ where: { tenantId, isDefault: true } });
     const variants = await tx.productVariant.findMany({
       where: { id: { in: dto.items.map((i) => i.variantId) }, tenantId },
-      include: { product: { include: { taxClass: true } } },
+      include: {
+        product: {
+          include: {
+            taxClass: true,
+            units: true,
+          },
+        },
+        unitPrices: true,
+      },
     });
     return { shift, defaultTaxRateBp: defaultTax?.rateBp ?? 0, variants, isShiftClosed };
   }
@@ -346,7 +435,7 @@ export class SalesService {
     const { negativeStockItems } = await this.inventoryService.applyMovements(
       tenantId, tx,
       meta.calc.lines.map((l: any) => ({
-        branchId: meta.branchId, variantId: l.variantId, qtyDelta: -Number(l.quantity),
+        branchId: meta.branchId, variantId: l.variantId, qtyDelta: -Number(l.baseQuantity ?? l.quantity),
         unitCostMinor: meta.costMap.get(l.variantId) ?? 0n,
         type: "sale", refType: "sale", refId: meta.saleId, reason: `Sale ${meta.inv}`, actorUserId: meta.userId,
       })),
@@ -1332,7 +1421,7 @@ export class SalesService {
       await this.inventoryService.applyMovements(
         tenantId, tx,
         sale.items.map((it) => ({
-          branchId: sale.branchId, variantId: it.variantId, qtyDelta: Number(it.quantity),
+          branchId: sale.branchId, variantId: it.variantId, qtyDelta: Number(it.baseQuantity ?? it.quantity),
           unitCostMinor: it.unitCostMinor,
           type: "sale_void", refType: "sale_void", refId: saleId,
           reason: `Void sale ${sale.invoiceNumber}: ${dto.reason}`, actorUserId: userId,

@@ -573,4 +573,84 @@ describe("Milestone D2: Offline Storage & Client Sync Engine Unit Tests", () => 
       }
     });
   });
+
+  describe("IndexedDB v1 to v2 Migration (Phase 2.1)", () => {
+    it("migrates existing stores without losing queued sales and backfills unit fields", async () => {
+      const Dexie = (await import("dexie")).default;
+      const migrateDbName = `test_upgrade_${crypto.randomUUID()}`;
+
+      // 1. Create and populate database at version 1
+      const v1Db = new Dexie(migrateDbName);
+      v1Db.version(1).stores({
+        catalog: "id, sku, categoryId, *barcodes, updatedAt",
+        stock: "variantId, updatedAt",
+        customers: "id, phone, name, updatedAt",
+        settings: "key",
+        session: "key",
+        outbox: "id, idempotencyKey, type, status, nextAttemptAt, createdAt",
+        localSales: "id, invoiceNumber, offlineInvoiceNumber, shiftId, createdAt",
+        syncLog: "++id, timestamp, event",
+        reviewFlags: "id, saleId, flagType, resolved, createdAt",
+        counters: "[registerId+date], registerId, date",
+      });
+      await v1Db.open();
+
+      // Enqueue a sale in the old shape (no unitName or unitFactor)
+      const oldOutboxSale = {
+        id: "outbox-old-1",
+        idempotencyKey: "idem-old-1",
+        type: "sale",
+        status: "pending",
+        attemptCount: 0,
+        nextAttemptAt: Date.now(),
+        createdAt: Date.now(),
+        payload: {
+          shiftId: "shift-old",
+          registerId: "reg-old",
+          invoiceNumber: "REG01-O-261127-0001",
+          isOffline: true,
+          items: [
+            {
+              variantId: "var-old-1",
+              quantity: 2,
+              unitPriceMinor: 1500,
+              taxRateBp: 0,
+            },
+          ],
+          payments: [{ method: "cash", amountMinor: 3000 }],
+          grossMinor: 3000,
+          discountMinor: 0,
+          subtotalNetMinor: 3000,
+          taxMinor: 0,
+          totalMinor: 3000,
+        },
+      };
+
+      await v1Db.table("outbox").put(oldOutboxSale);
+      await v1Db.close();
+
+      // 2. Open using PosOfflineDatabase (which has version 2 with upgrade hook)
+      const upgradedDb = new PosOfflineDatabase(migrateDbName);
+      await upgradedDb.open();
+
+      expect(upgradedDb.verno).toBe(2);
+
+      // Verify the queued sale is preserved and migrated with default unit fields
+      const migratedItem = await upgradedDb.outbox.get("outbox-old-1");
+      expect(migratedItem).toBeDefined();
+      expect(migratedItem?.id).toBe("outbox-old-1");
+      expect(migratedItem?.status).toBe("pending");
+
+      const salePayload: any = migratedItem?.payload;
+      expect(salePayload.invoiceNumber).toBe("REG01-O-261127-0001");
+      expect(salePayload.items).toHaveLength(1);
+      expect(salePayload.items[0].variantId).toBe("var-old-1");
+      expect(salePayload.items[0].quantity).toBe(2);
+      expect(salePayload.items[0].unitPriceMinor).toBe(1500);
+      expect(salePayload.items[0].unitName).toBe("pcs");
+      expect(salePayload.items[0].unitFactor).toBe(1);
+
+      await upgradedDb.close();
+    });
+  });
 });

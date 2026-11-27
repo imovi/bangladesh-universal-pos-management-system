@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Param,
@@ -11,21 +12,31 @@ import {
   Req,
   Ip,
   BadRequestException,
+  ForbiddenException,
 } from "@nestjs/common";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard.js";
 import { PermissionsGuard } from "../../common/guards/permissions.guard.js";
+import { ModuleGuard } from "../../common/guards/module.guard.js";
 import { RequirePermission } from "../../common/decorators/require-permission.decorator.js";
+import { RequireModule } from "../../common/decorators/require-module.decorator.js";
 import { VariantsService } from "./variants.service.js";
+import { UnitsService } from "./units.service.js";
+import { ModulesService } from "../modules/modules.service.js";
 import {
   PERMISSIONS,
   CreateBarcodeSchema,
   UpdateVariantSchema,
+  SetVariantUnitPriceSchema,
 } from "@universal-pos/shared";
 
 @Controller("variants")
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, ModuleGuard)
 export class VariantsController {
-  constructor(private readonly variantsService: VariantsService) {}
+  constructor(
+    private readonly variantsService: VariantsService,
+    private readonly unitsService: UnitsService,
+    private readonly modulesService: ModulesService,
+  ) {}
 
   @Get("lookup")
   @RequirePermission(PERMISSIONS.CATALOG_READ)
@@ -113,10 +124,68 @@ export class VariantsController {
     }
 
     const tenantId = req.user.tenantId;
+
+    if (parse.data.productUnitId) {
+      const isUnitsActive = await this.modulesService.isModuleActiveForTenant(tenantId, "units");
+      if (!isUnitsActive) {
+        throw new ForbiddenException({
+          code: "MODULE_DISABLED",
+          message: "এই বৈশিষ্ট্যের জন্য 'পরিমাপের একক ও রূপান্তর' মডিউলটি চালু থাকতে হবে।",
+        });
+      }
+    }
+
     return this.variantsService.addBarcode(
       tenantId,
       variantId,
       parse.data,
+      req.user.userId || req.user.id,
+      ip,
+    );
+  }
+
+  @Put(":id/units/:unitId/price")
+  @RequireModule("units")
+  @RequirePermission(PERMISSIONS.CATALOG_MANAGE)
+  async setUnitPrice(
+    @Req() req: any,
+    @Param("id") variantId: string,
+    @Param("unitId") unitId: string,
+    @Body() body: unknown,
+    @Ip() ip: string,
+  ) {
+    const parse = SetVariantUnitPriceSchema.safeParse(body);
+    if (!parse.success) {
+      throw new BadRequestException({
+        code: "VALIDATION_ERROR",
+        message: "Invalid variant unit price input",
+        details: parse.error.flatten(),
+      });
+    }
+
+    return this.unitsService.setVariantUnitPrice(
+      req.user.tenantId,
+      variantId,
+      unitId,
+      parse.data,
+      req.user.userId || req.user.id,
+      ip,
+    );
+  }
+
+  @Delete(":id/units/:unitId/price")
+  @RequireModule("units")
+  @RequirePermission(PERMISSIONS.CATALOG_MANAGE)
+  async clearUnitPrice(
+    @Req() req: any,
+    @Param("id") variantId: string,
+    @Param("unitId") unitId: string,
+    @Ip() ip: string,
+  ) {
+    return this.unitsService.clearVariantUnitPrice(
+      req.user.tenantId,
+      variantId,
+      unitId,
       req.user.userId || req.user.id,
       ip,
     );

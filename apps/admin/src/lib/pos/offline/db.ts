@@ -39,6 +39,46 @@ export class PosOfflineDatabase extends Dexie {
       reviewFlags: "id, saleId, flagType, resolved, createdAt",
       counters: "[registerId+date], registerId, date",
     });
+
+    this.version(2)
+      .stores({
+        catalog: "id, sku, categoryId, *barcodes, updatedAt",
+        stock: "variantId, updatedAt",
+        customers: "id, phone, name, updatedAt",
+        settings: "key",
+        session: "key",
+        outbox: "id, idempotencyKey, type, status, nextAttemptAt, createdAt",
+        localSales: "id, invoiceNumber, offlineInvoiceNumber, shiftId, createdAt",
+        syncLog: "++id, timestamp, event",
+        reviewFlags: "id, saleId, flagType, resolved, createdAt",
+        counters: "[registerId+date], registerId, date",
+      })
+      .upgrade((tx) => {
+        return Promise.all([
+          tx
+            .table("outbox")
+            .toCollection()
+            .modify((item: any) => {
+              if (item.type === "sale" && item.payload && Array.isArray(item.payload.items)) {
+                for (const line of item.payload.items) {
+                  if (line.unitName === undefined) line.unitName = "pcs";
+                  if (line.unitFactor === undefined) line.unitFactor = 1;
+                }
+              }
+            }),
+          tx
+            .table("localSales")
+            .toCollection()
+            .modify((item: any) => {
+              if (item.saleData && Array.isArray(item.saleData.items)) {
+                for (const line of item.saleData.items) {
+                  if (line.unitName === undefined) line.unitName = "pcs";
+                  if (line.unitFactor === undefined) line.unitFactor = 1;
+                }
+              }
+            }),
+        ]);
+      });
   }
 }
 

@@ -15,6 +15,8 @@ import { ShiftsService } from "../apps/api/dist/modules/shifts/shifts.service.js
 import { SalesService } from "../apps/api/dist/modules/sales/sales.service.js";
 import { UsersService } from "../apps/api/dist/modules/users/users.service.js";
 import { RolesService } from "../apps/api/dist/modules/roles/roles.service.js";
+import { UnitsService } from "../apps/api/dist/modules/catalog/units.service.js";
+import { VariantsService } from "../apps/api/dist/modules/catalog/variants.service.js";
 import { v7 as uuidv7 } from "uuid";
 import argon2 from "argon2";
 import {
@@ -67,6 +69,13 @@ async function seedTenantAndUsers(app: any, slug: string = "artisan-apparel") {
 
 async function seedChemicalDemoTenant(app: any) {
   const tenantsService = app.get(TenantsService);
+  const prods = app.get(ProductsService);
+  const unitsService = app.get(UnitsService);
+  const variantsService = app.get(VariantsService);
+  const inv = app.get(InventoryService);
+  const regs = app.get(RegistersService);
+  const usersService = app.get(UsersService);
+  const rolesService = app.get(RolesService);
 
   const signup = await tenantsService.signup({
     companyName: "Chemical Demo Co",
@@ -84,6 +93,153 @@ async function seedChemicalDemoTenant(app: any) {
       address: "Tejgaon Industrial Area, Dhaka",
     },
   });
+
+  const tId = signup.tenantId;
+  const bId = signup.branchId;
+  const oId = signup.ownerUserId;
+
+  const roles = await rolesService.findMany(tId);
+  const cashierRole = roles.find((r: any) => r.name === "Cashier");
+  if (cashierRole) {
+    await usersService.create(tId, {
+      name: "Chemical Cashier",
+      email: "cashier@chemical.com",
+      phone: "+8801700000021",
+      password: "Password123!",
+      roleIds: [cashierRole.id],
+      branchIds: [bId],
+    });
+  }
+
+  // Register for POS
+  await regs.create(tId, { branchId: bId, name: "Main Counter", code: "REG01" }, oId);
+
+  // 1. HCl: Base l, Decimal yes, ৳45/l, Units: 5L can (5), Drum (200, override ৳8,500)
+  const hcl = await prods.create(
+    tId,
+    {
+      name: "হাইড্রোক্লোরিক অ্যাসিড (HCl)",
+      sku: "CHEM-HCL",
+      baseUnit: "l",
+      allowDecimalQty: true,
+      priceMinor: 4500,
+      costMinor: 3000,
+    },
+    oId,
+  );
+  const hclVariant = hcl.variants[0];
+
+  const hclCan = await unitsService.createUnit(
+    tId,
+    hcl.id,
+    {
+      name: "5 লিটার ক্যান",
+      factor: 5,
+      isSaleUnit: true,
+      isPurchaseUnit: true,
+    },
+    oId,
+  );
+
+  const hclDrum = await unitsService.createUnit(
+    tId,
+    hcl.id,
+    {
+      name: "ড্রাম",
+      factor: 200,
+      isSaleUnit: true,
+      isPurchaseUnit: true,
+    },
+    oId,
+  );
+
+  await unitsService.setVariantUnitPrice(
+    tId,
+    hclVariant.id,
+    hclDrum.id,
+    {
+      priceMinor: 850000,
+    },
+    oId,
+  );
+
+  await variantsService.addBarcode(tId, hclVariant.id, { barcode: "CHEM-HCL-BASE" }, oId);
+  await variantsService.addBarcode(tId, hclVariant.id, { barcode: "CHEM-HCL-CAN5", productUnitId: hclCan.id }, oId);
+  await variantsService.addBarcode(tId, hclVariant.id, { barcode: "CHEM-HCL-DRUM200", productUnitId: hclDrum.id }, oId);
+
+  // 2. Caustic Soda: Base kg, Decimal yes, ৳120/kg, Unit: বস্তা (25)
+  const cs = await prods.create(
+    tId,
+    {
+      name: "কস্টিক সোডা",
+      sku: "CHEM-CS",
+      baseUnit: "kg",
+      allowDecimalQty: true,
+      priceMinor: 12000,
+      costMinor: 9000,
+    },
+    oId,
+  );
+  const csVariant = cs.variants[0];
+
+  const csBag = await unitsService.createUnit(
+    tId,
+    cs.id,
+    {
+      name: "বস্তা",
+      factor: 25,
+      isSaleUnit: true,
+      isPurchaseUnit: true,
+    },
+    oId,
+  );
+
+  await variantsService.addBarcode(tId, csVariant.id, { barcode: "CHEM-CS-BASE" }, oId);
+  await variantsService.addBarcode(tId, csVariant.id, { barcode: "CHEM-CS-BAG25", productUnitId: csBag.id }, oId);
+
+  // 3. Distilled Water: Base l, Decimal no, ৳30/l, Unit: কার্টন (12)
+  const dw = await prods.create(
+    tId,
+    {
+      name: "ডিস্টিলড ওয়াটার",
+      sku: "CHEM-DW",
+      baseUnit: "l",
+      allowDecimalQty: false,
+      priceMinor: 3000,
+      costMinor: 2000,
+    },
+    oId,
+  );
+  const dwVariant = dw.variants[0];
+
+  const dwCarton = await unitsService.createUnit(
+    tId,
+    dw.id,
+    {
+      name: "কার্টন",
+      factor: 12,
+      isSaleUnit: true,
+      isPurchaseUnit: true,
+    },
+    oId,
+  );
+
+  await variantsService.addBarcode(tId, dwVariant.id, { barcode: "CHEM-DW-BASE" }, oId);
+  await variantsService.addBarcode(tId, dwVariant.id, { barcode: "CHEM-DW-CTN12", productUnitId: dwCarton.id }, oId);
+
+  // Opening stock: 1000 l, 500 kg and 240 l
+  await inv.createOpeningStock(
+    tId,
+    {
+      branchId: bId,
+      items: [
+        { variantId: hclVariant.id, quantity: 1000, unitCostMinor: 3000 },
+        { variantId: csVariant.id, quantity: 500, unitCostMinor: 9000 },
+        { variantId: dwVariant.id, quantity: 240, unitCostMinor: 2000 },
+      ],
+    },
+    oId,
+  );
 
   return signup;
 }

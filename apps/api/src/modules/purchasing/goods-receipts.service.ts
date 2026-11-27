@@ -8,6 +8,9 @@ import {
   CreateGoodsReceiptDto,
   calculateWeightedAverageCost,
   formatDateKey,
+  computeBaseQuantity,
+  roundHalfUp,
+  parseQuantityThousandths,
 } from "@universal-pos/shared";
 
 @Injectable()
@@ -101,25 +104,80 @@ export class GoodsReceiptsService {
     });
   }
 
+  private async resolveReceiptItem(
+    tenantId: string,
+    tx: Prisma.TransactionClient,
+    item: CreateGoodsReceiptDto["items"][number],
+  ) {
+    let unitName = "pcs";
+    let unitFactor = 1;
+    let productUnitId = item.productUnitId || null;
+
+    const poItemId = (item as any).poItemId || item.purchaseOrderItemId;
+    if (item.productUnitId) {
+      const unit = await tx.productUnit.findUnique({
+        where: { id: item.productUnitId, tenantId },
+      });
+      if (!unit || !unit.isActive || !unit.isPurchaseUnit) {
+        throw new BadRequestException("এককটি ক্রয়ের জন্য প্রযোজ্য বা সক্রিয় নয়।");
+      }
+      unitName = unit.name;
+      unitFactor = Number(unit.factor);
+    } else if (poItemId) {
+      const poItem = await tx.purchaseOrderItem.findUnique({
+        where: { id: poItemId },
+      });
+      if (poItem) {
+        unitName = poItem.unitName || "pcs";
+        unitFactor = Number(poItem.unitFactor || 1);
+        productUnitId = poItem.productUnitId;
+      }
+    } else {
+      const variant = await tx.productVariant.findUnique({
+        where: { id: item.variantId, tenantId },
+        include: { product: true },
+      });
+      if (variant?.product?.baseUnit) {
+        unitName = variant.product.baseUnit;
+      }
+    }
+
+    const baseQtyReceived = computeBaseQuantity(item.qtyReceived, unitFactor);
+    const stockMovementUnitCostMinor = roundHalfUp(
+      BigInt(item.unitCostMinor) * 1000n,
+      parseQuantityThousandths(unitFactor),
+    );
+
+    return {
+      ...item,
+      productUnitId,
+      unitName,
+      unitFactor,
+      baseQtyReceived,
+      stockMovementUnitCostMinor,
+    };
+  }
+
   private async processReceiptItems(
     tenantId: string,
     tx: Prisma.TransactionClient,
     branchId: string,
-    items: CreateGoodsReceiptDto["items"],
+    resolvedItems: any[],
   ): Promise<void> {
-    for (const item of items) {
+    for (const item of resolvedItems) {
       await this.updateWeightedAverageCost(
         tenantId,
         tx,
         branchId,
         item.variantId,
-        item.qtyReceived,
-        item.unitCostMinor,
+        item.baseQtyReceived,
+        item.stockMovementUnitCostMinor,
       );
 
-      if (item.purchaseOrderItemId) {
+      const poItemId = (item as any).poItemId || item.purchaseOrderItemId;
+      if (poItemId) {
         await tx.purchaseOrderItem.update({
-          where: { id: item.purchaseOrderItemId },
+          where: { id: poItemId },
           data: {
             qtyReceived: {
               increment: new Prisma.Decimal(item.qtyReceived),
@@ -136,6 +194,7 @@ export class GoodsReceiptsService {
     grnId: string,
     grnNumber: string,
     dto: CreateGoodsReceiptDto,
+    resolvedItems: any[],
     supplierId?: string,
     userId?: string,
   ) {
@@ -145,17 +204,21 @@ export class GoodsReceiptsService {
         tenantId,
         grnNumber,
         supplierId: supplierId || null,
-        purchaseOrderId: dto.purchaseOrderId,
+        purchaseOrderId: (dto as any).poId || dto.purchaseOrderId,
         branchId: dto.branchId,
         receivedByUserId: userId,
         notes: dto.notes,
         receivedAt: dto.receivedAt || new Date(),
         items: {
-          create: dto.items.map((item) => ({
+          create: resolvedItems.map((item) => ({
             id: uuidv7(),
             tenantId,
-            purchaseOrderItemId: item.purchaseOrderItemId,
+            purchaseOrderItemId: item.poItemId || item.purchaseOrderItemId || null,
             variantId: item.variantId,
+            productUnitId: item.productUnitId || null,
+            unitName: item.unitName,
+            unitFactor: new Prisma.Decimal(item.unitFactor),
+            baseQtyReceived: new Prisma.Decimal(item.baseQtyReceived),
             qtyReceived: new Prisma.Decimal(item.qtyReceived),
             unitCostMinor: BigInt(item.unitCostMinor),
           })),
@@ -186,13 +249,19 @@ export class GoodsReceiptsService {
         }
       }
 
-      await this.processReceiptItems(tenantId, tx, dto.branchId, dto.items);
+      const resolvedItems = [];
+      for (const item of dto.items) {
+        resolvedItems.push(await this.resolveReceiptItem(tenantId, tx, item));
+      }
+
+      await this.processReceiptItems(tenantId, tx, dto.branchId, resolvedItems);
       const goodsReceipt = await this.insertGoodsReceipt(
         tenantId,
         tx,
         grnId,
         grnNumber,
         dto,
+        resolvedItems,
         resolvedSupplierId,
         userId,
       );
@@ -200,12 +269,12 @@ export class GoodsReceiptsService {
       await this.inventoryService.applyMovements(
         tenantId,
         tx,
-        dto.items.map((item) => ({
+        resolvedItems.map((item) => ({
           branchId: dto.branchId,
           variantId: item.variantId,
-          qtyDelta: item.qtyReceived,
+          qtyDelta: item.baseQtyReceived,
           type: "purchase",
-          unitCostMinor: item.unitCostMinor,
+          unitCostMinor: item.stockMovementUnitCostMinor,
           refType: "goods_receipt",
           refId: grnId,
           reason: `Goods receipt ${grnNumber}`,

@@ -13,6 +13,10 @@ export interface DiscountSpec {
 export interface SaleLineItemInput {
   lineId?: string;
   variantId: string;
+  productUnitId?: string | null;
+  unitName?: string | null;
+  unitFactor?: number | null;
+  baseQuantity?: number | string | null;
   unitPriceMinor: bigint | number;
   quantity: number | string;
   discount?: DiscountSpec;
@@ -27,6 +31,10 @@ export interface SaleCalculationOptions {
 export interface CalculatedSaleLine {
   lineId?: string;
   variantId: string;
+  productUnitId?: string | null;
+  unitName?: string | null;
+  unitFactor?: number | null;
+  baseQuantity?: number | string | null;
   unitPriceMinor: bigint;
   quantityThousandths: bigint;
   quantity: string;
@@ -236,6 +244,10 @@ export function calculateSaleTotals(
     return {
       lineId: item.lineId,
       variantId: item.variantId,
+      productUnitId: item.productUnitId ?? null,
+      unitName: item.unitName ?? null,
+      unitFactor: item.unitFactor ?? null,
+      baseQuantity: item.baseQuantity ?? null,
       unitPriceMinor: unitPrice,
       quantityThousandths: qtyThousandths,
       quantity: formatQuantityFromThousandths(qtyThousandths),

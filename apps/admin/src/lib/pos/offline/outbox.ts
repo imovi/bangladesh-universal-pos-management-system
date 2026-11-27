@@ -11,7 +11,7 @@ export interface EnqueueSaleResult {
 }
 
 export async function enqueueSale(
-  salePayload: CreateSalePayload,
+  salePayload: any,
   database?: PosOfflineDatabase
 ): Promise<EnqueueSaleResult> {
   const targetDb = database || db;

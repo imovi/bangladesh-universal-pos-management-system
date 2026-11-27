@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BUSINESS_TYPES } from "./types.js";
+import { isValidBaseUnit } from "./units.js";
 
 export const TenantSignupSchema = z.object({
   companyName: z.string().trim().min(2).max(100),
@@ -229,6 +230,15 @@ export const CreateProductSchema = z.object({
   brandId: z.string().uuid().optional().nullable(),
   collectionId: z.string().uuid().optional().nullable(),
   taxClassId: z.string().uuid().optional().nullable(),
+  baseUnit: z
+    .string()
+    .trim()
+    .refine((val) => !val || isValidBaseUnit(val), {
+      message: "Invalid base unit",
+    })
+    .default("pcs")
+    .optional(),
+  allowDecimalQty: z.boolean().default(false).optional(),
   sku: z.string().trim().min(2).max(50),
   priceMinor: z.coerce.number().int().min(0),
   costMinor: z.coerce.number().int().min(0).optional(),
@@ -247,11 +257,44 @@ export const UpdateProductSchema = z.object({
   brandId: z.string().uuid().optional().nullable(),
   collectionId: z.string().uuid().optional().nullable(),
   taxClassId: z.string().uuid().optional().nullable(),
+  baseUnit: z
+    .string()
+    .trim()
+    .refine((val) => !val || isValidBaseUnit(val), {
+      message: "Invalid base unit",
+    })
+    .optional(),
+  allowDecimalQty: z.boolean().optional(),
   isActive: z.boolean().optional(),
   customFields: z.record(z.unknown()).optional(),
   options: z.array(ProductOptionInputSchema).max(3).optional(),
 });
 export type UpdateProductDto = z.infer<typeof UpdateProductSchema>;
+
+export const CreateProductUnitSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  factor: z.coerce.number().positive(),
+  isSaleUnit: z.boolean().default(true).optional(),
+  isPurchaseUnit: z.boolean().default(true).optional(),
+  isActive: z.boolean().default(true).optional(),
+  sortOrder: z.coerce.number().int().default(0).optional(),
+});
+export type CreateProductUnitDto = z.infer<typeof CreateProductUnitSchema>;
+
+export const UpdateProductUnitSchema = z.object({
+  name: z.string().trim().min(1).max(100).optional(),
+  factor: z.coerce.number().positive().optional(),
+  isSaleUnit: z.boolean().optional(),
+  isPurchaseUnit: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  sortOrder: z.coerce.number().int().optional(),
+});
+export type UpdateProductUnitDto = z.infer<typeof UpdateProductUnitSchema>;
+
+export const SetVariantUnitPriceSchema = z.object({
+  priceMinor: z.coerce.number().int().min(0),
+});
+export type SetVariantUnitPriceDto = z.infer<typeof SetVariantUnitPriceSchema>;
 
 export const BulkPriceUpdateSchema = z.object({
   variants: z
@@ -272,6 +315,7 @@ export const CreateBarcodeSchema = z.object({
     .min(3)
     .max(50)
     .optional(),
+  productUnitId: z.string().uuid().optional().nullable(),
 });
 export type CreateBarcodeDto = z.infer<typeof CreateBarcodeSchema>;
 
@@ -328,6 +372,7 @@ export const PurchaseOrderItemInputSchema = z.object({
   variantId: z.string().uuid(),
   qtyOrdered: z.coerce.number().positive(),
   unitCostMinor: z.coerce.number().int().min(0),
+  productUnitId: z.string().uuid().optional(),
 });
 
 export const CreatePurchaseOrderSchema = z.object({
@@ -345,6 +390,7 @@ export const GoodsReceiptItemInputSchema = z.object({
   variantId: z.string().uuid(),
   qtyReceived: z.coerce.number().positive(),
   unitCostMinor: z.coerce.number().int().min(0),
+  productUnitId: z.string().uuid().optional(),
 });
 
 export const CreateGoodsReceiptSchema = z.object({

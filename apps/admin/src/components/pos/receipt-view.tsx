@@ -47,6 +47,8 @@ export interface ReceiptData {
     color?: string;
     quantity: number;
     unitPriceMinor: number;
+    unitName?: string;
+    unitFactor?: number;
     grossMinor: number;
     discountMinor: number;
     taxMinor: number;
@@ -113,6 +115,8 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
             unitPriceMinor: i.unitPriceMinor,
             totalMinor: i.totalMinor,
             discountMinor: i.discountMinor,
+            unitName: i.unitName,
+            unitFactor: i.unitFactor,
           })),
           grossMinor: receipt.grossMinor,
           discountMinor: receipt.discountMinor,
@@ -342,7 +346,9 @@ export function ReceiptView({ receipt, onNewSale, timezone = "Asia/Dhaka" }: Rec
                       </div>
                     )}
                   </td>
-                  <td className="py-1 text-center tabular-nums whitespace-nowrap">{item.quantity}</td>
+                  <td className="py-1 text-center tabular-nums whitespace-nowrap">
+                    {item.quantity}{item.unitName && item.unitName.toLowerCase() !== "pcs" && item.unitName !== "পিস" ? ` ${item.unitName}` : ""}
+                  </td>
                   <td className="py-1 text-right tabular-nums whitespace-nowrap">{formatMoney(item.unitPriceMinor)}</td>
                   <td className="py-1 text-right font-medium tabular-nums whitespace-nowrap">{formatMoney(item.totalMinor)}</td>
                 </tr>

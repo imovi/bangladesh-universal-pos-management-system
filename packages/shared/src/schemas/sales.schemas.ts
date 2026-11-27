@@ -9,6 +9,9 @@ export const LineDiscountInputSchema = z.object({
 export const SaleItemInputSchema = z.object({
   lineId: z.string().optional(),
   variantId: z.string().uuid(),
+  productUnitId: z.string().uuid().optional().nullable(),
+  unitName: z.string().trim().optional().nullable(),
+  unitFactor: z.coerce.number().positive().optional().nullable(),
   quantity: z.coerce.number().positive(),
   overrideUnitPriceMinor: z.coerce.number().int().min(0).optional(),
   unitPriceMinor: z.coerce.number().int().min(0).optional(),

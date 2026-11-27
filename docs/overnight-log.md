@@ -4511,3 +4511,145 @@ Every value in this output is a test value, a placeholder, a test-generated hash
    - Verified tenant existence in database (returns 404 `TENANT_NOT_FOUND`). Added API tests in `apps/api/test/modules.spec.ts`.
 4. **Platform Login Constant-Time Verification:**
    - Updated `platform.service.ts` to verify password against fixed dummy hash `DUMMY_ARGON2_HASH` when admin email does not exist, preventing timing side-channel attacks.
+
+- CI: `af35b9d` → run `46034887615` → completed success
+  - test: completed success
+  - smoke-prod: completed success
+  - load-check: completed success
+
+
+## Phase 2.1: units and unit conversion (module units)
+
+### 1. Data Model & Migration
+Applied migration `20261127020000_phase2_1_units_and_conversions`:
+- Added `base_unit` (default `"pcs"`) and `allow_decimal_qty` (default `false`) to `products`.
+- Created `product_units` table with unique constraint `(tenant_id, product_id, name)` and RLS policies.
+- Created `variant_unit_prices` table with unique constraint `(tenant_id, variant_id, product_unit_id)` and RLS policies.
+- Added `product_unit_id` to `barcode_definitions`.
+- Added `product_unit_id`, `unit_name`, `unit_factor`, and `base_quantity` to `sale_items`, `purchase_order_items`, and `goods_receipt_items`.
+- Added `base_quantity` to `sale_return_items`.
+- Backfilled all historical items with `unit_name = 'pcs'`, `unit_factor = 1.000`, and `base_quantity = quantity`.
+
+#### Migration Row Count Verification
+Command output from `scripts/count-units-migration.ts`:
+```json
+MIGRATION COUNTS (url=universal_pos?schema=public):
+{
+  "saleItems": 35,
+  "poItems": 2,
+  "grItems": 2,
+  "returnItems": 5
+}
+MIGRATION FACTOR 1 & BASE QTY COUNTS: {
+  sale_items_factor_1: 35n,
+  po_items_factor_1: 2n,
+  gr_items_factor_1: 2n,
+  sale_items_base_qty: 35n,
+  po_items_base_qty: 2n,
+  gr_items_base_qty: 2n,
+  return_items_base_qty: 5n
+}
+```
+
+### 2. Business Logic & Shared Utilities
+- Created `packages/shared/src/units.ts` with:
+  - Allowed base units whitelist and Bangla translations (`pcs`, `kg`, `g`, `mg`, `l`, `ml`, `meter`, `cm`, `mm`, `box`, `pack`, `strip`, `bottle`, `can`, `drum`, `bag`, `roll`, `pair`, `dozen`, `sq_ft`, `cft`, `tablet`, `capsule`).
+  - Safe 3-decimal math functions: `computeBaseQuantity`, `computeBaseQuantityThousandths`, `computeUnitDerivedPriceMinor`, `formatStockWithBiggestUnit`.
+- Updated `packages/shared/src/printing.ts`:
+  - Items with base unit `pcs` or without `unitName` format quantity without unit suffix.
+  - Fashion receipts remain 100% byte-for-byte identical; neither "pcs" nor "পিস" is printed.
+  - Items with non-default units format quantity with unit name (e.g., `২ ড্রাম × ৳১৮,০০০.০০`, `২.৫ কেজি × ৳১২০.০০`).
+- Updated `packages/shared/src/promotions.ts`:
+  - Buy-X-Get-Y promotions evaluate whole units: `floor(quantityThousandths / 1000n)`.
+  - Decimal quantity lines apply percentage promotions proportionally without precision issues.
+- Updated `apps/api/src/modules/sales/sales.service.ts`:
+  - Enforced `@RequireModule("units")` via `ModuleGuard`.
+  - Added unit factor locking: once a unit is referenced in a sale, its factor cannot be modified (409 Conflict `FACTOR_LOCKED`).
+  - Base unit locking: product `baseUnit` cannot be changed after stock movements or sales exist (409 Conflict).
+  - Synced offline sales with deactivated units are accepted and flagged with `SaleReviewFlag` (`UNIT_DEACTIVATED`).
+  - Updated sale payload hash helper to include `productUnitId` and `unitName`.
+
+### 3. Admin UI & POS
+- Admin catalog product create/edit pages:
+  - Base unit select dropdown (Bangla/English labels).
+  - Allow decimal quantity toggle switch.
+  - Product units table with unit name, factor, sale/purchase checkboxes, variant price overrides, and factor lock badge.
+- Inventory & Purchasing pages:
+  - Stock levels table formats stock in the largest packaging unit (e.g., `৪৫০ লিটার (২ ড্রাম ৫০ লিটার)`).
+  - Stock adjustments, opening stock, and transfers display the product's base unit.
+  - Purchase orders and goods receipts allow selecting packing units with automatic base quantity derivation.
+- POS terminal (`apps/admin/src/app/pos/page.tsx`):
+  - Unit selector dropdown per cart line item.
+  - Quantity input step dynamically adjusts (`step={item.allowDecimals ? "0.001" : "1"}`).
+  - Barcode scanner automatically resolves the barcode's assigned packaging unit.
+  - Upgraded IndexedDB schema to version 2 with Dexie migration hook backfilling queued outbox and local sales.
+
+### 4. Chemical Demo Seed
+Updated `scripts/seed-demo.ts` with `seedChemicalDemoTenant`:
+- Products:
+  - Hydrochloric Acid (HCl): base `l`, decimal `true`, ৳45/l, 5L can (factor 5, ৳225), 200L drum (factor 200, override ৳8,500), opening stock 1000 l.
+  - Caustic Soda: base `kg`, decimal `true`, ৳120/kg, 25kg bag (factor 25), opening stock 500 kg.
+  - Distilled Water: base `l`, decimal `false`, ৳30/l, 12L carton (factor 12), opening stock 240 l.
+- Barcodes assigned for each unit and opening stock credited.
+
+### 5. Verification & Tests
+
+#### TypeScript Compilation Check
+- `npx tsc -p apps/api/tsconfig.json --noEmit`: 0 errors.
+- `npx tsc -p packages/shared/tsconfig.json --noEmit`: 0 errors.
+- `npx tsc -p apps/admin/tsconfig.json --noEmit`: Exited with code 1, only the single known error:
+```text
+apps/admin/e2e/offline-selling.spec.ts(811,24): error TS18047: 'match' is possibly 'null'.
+```
+
+#### Shared Vitest Suite
+```text
+ ✓ test/modules.spec.ts (17 tests) 14ms
+ ✓ test/units.spec.ts (5 tests) 9ms
+ ✓ test/printing.spec.ts (15 tests) 34ms
+ ✓ test/promotions.spec.ts (29 tests) 309ms
+
+ Test Files  4 passed (4)
+      Tests  66 passed (66)
+```
+
+#### API Business Logic & Units Test Suite (`apps/api/test/units-pos.spec.ts`)
+```text
+ ✓ test/units-pos.spec.ts (13 tests) 2113ms
+   ✓ Test 1: sale of 2.5 kg caustic soda -> total ৳300, stock -2.5
+   ✓ Test 2: sale of 1 drum HCl -> price ৳8,500 (override), stock -200
+   ✓ Test 3: sale of 2 cans HCl -> price 2 × ৳225 = ৳450, stock -10
+   ✓ Test 4: decimal quantity on distilled water (allowDecimalQty: false) -> 400
+   ✓ Test 5: sale line with unit of another product -> 400
+   ✓ Test 6: return 1 of 2 drums -> restock +200, refund ৳8,500
+   ✓ Test 7: factor modification blocked with 409 FACTOR_LOCKED once used; return uses stored factor
+   ✓ Test 8: goods receipt of 2 drums at ৳8,000 each -> stock +400, unitCostMinor = ৳40 (4000)
+   ✓ Test 9: offline sale with deactivated unit -> accepted with review flag
+   ✓ Test 10: sale hash differs for same variant in two different units
+   ✓ Test 11: module off: baseUnit != pcs returns 403 MODULE_DISABLED; fashion sale works as before
+   ✓ Test 12: migration backfill: all historical sale items have factor 1 and baseQuantity = quantity
+   ✓ Test 13: decimal quantity line does not break promotions; buy-2-get-1 counts cans, not liters
+```
+
+#### Full API Test Suite
+```text
+ Test Files  66 passed (66)
+      Tests  438 passed (438)
+```
+
+#### E2E Spec
+Created `apps/admin/e2e/units-pos-flow.spec.ts` covering:
+- Multi-unit cart: 2.5 kg Caustic Soda, 1 Drum HCl, 1 Can HCl (switched from liter via unit select).
+- Cart total ৳9,025 and receipt text with unit names.
+- Stock drop on `/inventory/stock` by base quantities (HCl 1000 -> 795, CS 500 -> 497.5).
+- Return 1 drum: stock restored by +200 liters (HCl 795 -> 995).
+- Goods receipt for 2 drums: stock increased by +400 liters (HCl 995 -> 1395).
+- Offline sale of 1 can HCl: receipt with `-O-` invoice number, reconnect, outbox sync, and server stock -5 liters (HCl 1395 -> 1390).
+- `closeAllOpenShifts(request)` executed in `afterAll` outside any try/catch.
+
+#### Screenshots
+Captured in `docs/screenshots/phase2-1/`:
+- `01-product-form-units.png`: Product edit form with base unit, decimal toggle, and units table.
+- `02-pos-cart-units.png`: POS cart displaying drum, can, and kg lines with grand total ৳9,025.
+- `03-receipt-preview-units.png`: Thermal receipt preview displaying unit names for each item.
+- `04-stock-page-units.png`: Stock page displaying Bengali largest unit breakdown (`৪৫০ লিটার (২ ড্রাম ৫০ লিটার)`).

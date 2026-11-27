@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, useModules } from "@/lib/auth-context";
 import { useTranslation } from "@/i18n/context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +36,8 @@ interface ProductVariantOption {
   costMinor: number;
   productName: string;
   optionLabel: string;
+  baseUnit?: string;
+  units?: Array<{ id: string; name: string; factor: number; isPurchaseUnit: boolean; isActive: boolean }>;
 }
 
 interface GrnLineItem {
@@ -45,6 +47,10 @@ interface GrnLineItem {
   maxOrderedQty?: number;
   qtyReceived: number;
   unitCostTaka: string;
+  productUnitId?: string;
+  unitName?: string;
+  unitFactor?: number;
+  baseUnit?: string;
 }
 
 function NewGoodsReceiptContent() {
@@ -54,6 +60,8 @@ function NewGoodsReceiptContent() {
 
   const { apiFetch, user } = useAuth();
   const { strings } = useTranslation();
+  const { isModuleActive } = useModules();
+  const isUnitsActive = isModuleActive("units");
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -68,6 +76,7 @@ function NewGoodsReceiptContent() {
 
   const [lines, setLines] = useState<GrnLineItem[]>([]);
   const [selectedVariantId, setSelectedVariantId] = useState("");
+  const [selectedUnitId, setSelectedUnitId] = useState("");
   const [selectedQty, setSelectedQty] = useState("5");
   const [selectedCost, setSelectedCost] = useState("500");
 
@@ -119,6 +128,8 @@ function NewGoodsReceiptContent() {
                   costMinor: Number(v.costMinor || 0),
                   productName: prod.name,
                   optionLabel: optionLabel ? `${prod.name} (${optionLabel})` : prod.name,
+                  baseUnit: prod.baseUnit || "pcs",
+                  units: prod.units || [],
                 });
               }
             }
@@ -157,6 +168,10 @@ function NewGoodsReceiptContent() {
                   maxOrderedQty: item.qtyOrdered,
                   qtyReceived: remaining > 0 ? remaining : item.qtyOrdered,
                   unitCostTaka: (Number(item.unitCostMinor) / 100).toFixed(2),
+                  productUnitId: item.productUnitId || undefined,
+                  unitName: item.unitName || "pcs",
+                  unitFactor: Number(item.unitFactor || 1),
+                  baseUnit: item.variant?.product?.baseUnit || "pcs",
                 };
               });
               setLines(initialLines);
@@ -176,10 +191,16 @@ function NewGoodsReceiptContent() {
     const variant = availableVariants.find((v) => v.id === selectedVariantId);
     if (!variant) return;
 
-    const qty = parseInt(selectedQty, 10);
+    const qty = parseFloat(selectedQty);
     if (isNaN(qty) || qty <= 0) return;
 
-    const existingIndex = lines.findIndex((l) => l.variantId === selectedVariantId);
+    const unit = variant.units?.find((u) => u.id === selectedUnitId);
+    const unitName = unit ? unit.name : (variant.baseUnit || "pcs");
+    const unitFactor = unit ? Number(unit.factor) : 1;
+
+    const existingIndex = lines.findIndex(
+      (l) => l.variantId === selectedVariantId && l.productUnitId === (selectedUnitId || undefined),
+    );
     if (existingIndex >= 0) {
       const updated = [...lines];
       updated[existingIndex].qtyReceived += qty;
@@ -193,6 +214,10 @@ function NewGoodsReceiptContent() {
           variantLabel: `${variant.sku} — ${variant.optionLabel}`,
           qtyReceived: qty,
           unitCostTaka: selectedCost,
+          productUnitId: selectedUnitId || undefined,
+          unitName,
+          unitFactor,
+          baseUnit: variant.baseUnit || "pcs",
         },
       ]);
     }
@@ -203,7 +228,7 @@ function NewGoodsReceiptContent() {
   };
 
   const handleQtyChange = (index: number, newQty: string) => {
-    const val = parseInt(newQty, 10);
+    const val = parseFloat(newQty);
     const updated = [...lines];
     updated[index].qtyReceived = isNaN(val) ? 0 : val;
     setLines(updated);
@@ -238,6 +263,7 @@ function NewGoodsReceiptContent() {
         variantId: l.variantId,
         qtyReceived: l.qtyReceived,
         unitCostMinor: Math.round(Number(l.unitCostTaka) * 100),
+        productUnitId: l.productUnitId || undefined,
       }));
 
       const payload = {
@@ -431,13 +457,18 @@ function NewGoodsReceiptContent() {
           {!poIdParam && (
             <div className="p-4 rounded-lg bg-muted/40 border border-border space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-                <div className="sm:col-span-6">
+                <div className={isUnitsActive ? "sm:col-span-4" : "sm:col-span-6"}>
                   <label className="text-xs font-semibold text-muted-foreground block mb-1">
                     পণ্য / ভ্যারিয়েন্ট নির্বাচন
                   </label>
                   <select
                     value={selectedVariantId}
-                    onChange={(e) => setSelectedVariantId(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedVariantId(e.target.value);
+                      setSelectedUnitId("");
+                      const v = availableVariants.find((x) => x.id === e.target.value);
+                      if (v && v.costMinor > 0) setSelectedCost((v.costMinor / 100).toString());
+                    }}
                     className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
                   >
                     {availableVariants.map((v) => (
@@ -448,17 +479,48 @@ function NewGoodsReceiptContent() {
                   </select>
                 </div>
 
+                {isUnitsActive && (
+                  <div className="sm:col-span-2">
+                    <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                      একক (Unit)
+                    </label>
+                    <select
+                      value={selectedUnitId}
+                      onChange={(e) => setSelectedUnitId(e.target.value)}
+                      className="w-full h-10 px-2 rounded-md border border-input bg-background text-sm"
+                      data-testid="grn-item-unit-select"
+                    >
+                      <option value="">
+                        {availableVariants.find((v) => v.id === selectedVariantId)?.baseUnit || "pcs"}
+                      </option>
+                      {(availableVariants.find((v) => v.id === selectedVariantId)?.units || [])
+                        .filter((u) => u.isActive && u.isPurchaseUnit)
+                        .map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name} (×{u.factor})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
+
                 <div className="sm:col-span-2">
                   <label className="text-xs font-semibold text-muted-foreground block mb-1">
                     {strings.purchasing.receivedQty}
                   </label>
                   <Input
                     type="number"
-                    min="1"
+                    min="0.001"
+                    step="any"
                     value={selectedQty}
                     onChange={(e) => setSelectedQty(e.target.value)}
                     className="h-10"
                   />
+                  {isUnitsActive && selectedUnitId && (
+                    <span className="text-[11px] text-primary font-medium block mt-1">
+                      = {Number(selectedQty || 0) * Number(availableVariants.find((v) => v.id === selectedVariantId)?.units?.find((u) => u.id === selectedUnitId)?.factor || 1)} {availableVariants.find((v) => v.id === selectedVariantId)?.baseUnit || "pcs"}
+                    </span>
+                  )}
                 </div>
 
                 <div className="sm:col-span-2">
@@ -495,7 +557,7 @@ function NewGoodsReceiptContent() {
               <thead className="bg-muted/50 border-b border-border text-xs text-muted-foreground font-semibold uppercase">
                 <tr>
                   <th className="px-4 py-3">পণ্য বিবরণ</th>
-                  <th className="px-4 py-3 text-center w-32">
+                  <th className="px-4 py-3 text-center w-36">
                     {strings.purchasing.receivedQty}
                   </th>
                   <th className="px-4 py-3 text-right w-36">
@@ -523,20 +585,31 @@ function NewGoodsReceiptContent() {
                           {line.variantLabel}
                           {line.maxOrderedQty !== undefined && (
                             <span className="block text-xs text-muted-foreground">
-                              অর্ডারকৃত ছিল: {line.maxOrderedQty} টি
+                              অর্ডারকৃত ছিল: {line.maxOrderedQty} {line.unitName || "pcs"}
                             </span>
                           )}
                         </td>
 
                         <td className="px-4 py-3 text-center">
-                          <Input
-                            type="number"
-                            min="1"
-                            value={line.qtyReceived}
-                            onChange={(e) => handleQtyChange(idx, e.target.value)}
-                            data-testid={`grn-qty-input-${idx}`}
-                            className="h-9 text-center font-mono font-bold"
-                          />
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                min="0.001"
+                                step="any"
+                                value={line.qtyReceived}
+                                onChange={(e) => handleQtyChange(idx, e.target.value)}
+                                data-testid={`grn-qty-input-${idx}`}
+                                className="h-8 w-20 text-center font-mono font-bold"
+                              />
+                              <span className="text-xs text-muted-foreground font-mono">{line.unitName || "pcs"}</span>
+                            </div>
+                            {line.unitFactor && line.unitFactor !== 1 && (
+                              <span className="text-[11px] text-muted-foreground block font-mono">
+                                = {line.qtyReceived * line.unitFactor} {line.baseUnit || "pcs"}
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         <td className="px-4 py-3 text-right">

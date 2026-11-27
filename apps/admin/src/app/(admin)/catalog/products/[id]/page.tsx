@@ -33,6 +33,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { BarcodePrintModal } from "@/components/barcodes/barcode-print-modal";
+import { BASE_UNITS, getBaseUnit, computeUnitDerivedPriceMinor } from "@universal-pos/shared";
+import { useModules } from "@/lib/auth-context";
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -50,6 +52,30 @@ export default function ProductDetailPage() {
   const [isBarcodePrintOpen, setIsBarcodePrintOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  const { isModuleActive } = useModules();
+  const isUnitsActive = isModuleActive("units");
+
+  // Unit creation / editing modal
+  const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
+  const [editingUnit, setEditingUnit] = useState<any | null>(null);
+  const [unitName, setUnitName] = useState("");
+  const [unitFactor, setUnitFactor] = useState("");
+  const [unitIsSale, setUnitIsSale] = useState(true);
+  const [unitIsPurchase, setUnitIsPurchase] = useState(true);
+  const [unitIsActive, setUnitIsActive] = useState(true);
+
+  // Variant Unit Price modal
+  const [priceOverrideModal, setPriceOverrideModal] = useState<{
+    variant: any;
+    unit: any;
+    currentPriceMinor: number | null;
+    derivedPriceMinor: number;
+  } | null>(null);
+  const [overridePriceTaka, setOverridePriceTaka] = useState("");
+
+  // Barcode unit selection
+  const [barcodeUnitId, setBarcodeUnitId] = useState<string>("");
 
   const canSeeCost = hasPermission("report.profit") || hasPermission("purchase.read");
 
@@ -105,10 +131,10 @@ export default function ProductDetailPage() {
 
   // Add Barcode Mutation
   const addBarcodeMutation = useMutation({
-    mutationFn: async ({ variantId, barcode }: { variantId: string; barcode: string }) => {
+    mutationFn: async ({ variantId, barcode, productUnitId }: { variantId: string; barcode: string; productUnitId?: string }) => {
       const res = await apiFetch(`/variants/${variantId}/barcodes`, {
         method: "POST",
-        body: JSON.stringify({ barcode }),
+        body: JSON.stringify({ barcode, productUnitId: productUnitId || undefined }),
       });
       const body = await res.json();
       if (!res.ok || !body.success) {
@@ -120,7 +146,112 @@ export default function ProductDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["product", productId] });
       setBarcodeVariantId(null);
       setNewBarcode("");
+      setBarcodeUnitId("");
       setActionSuccess("বারকোড সফলভাবে যোগ করা হয়েছে (Barcode added)");
+      setTimeout(() => setActionSuccess(null), 3000);
+    },
+    onError: (err: any) => {
+      setActionError(err.message);
+    },
+  });
+
+  // Update Product Settings (Base Unit & Decimal Qty)
+  const updateProductSettingsMutation = useMutation({
+    mutationFn: async (payload: { baseUnit?: string; allowDecimalQty?: boolean }) => {
+      const res = await apiFetch(`/products/${productId}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json();
+      if (!res.ok || !body.success) {
+        if (res.status === 409 || body.error?.code === "BASE_UNIT_CHANGE_NOT_ALLOWED") {
+          throw new Error("পণ্যটির স্টক মুভমেন্ট বা বিক্রয় বিদ্যমান থাকায় বেস ইউনিট পরিবর্তন করা সম্ভব নয়।");
+        }
+        throw new Error(body.error?.message || "Failed to update product");
+      }
+      return body.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["product", productId] });
+      setActionSuccess("পণ্যের সেটিংস সফলভাবে সংরক্ষিত হয়েছে");
+      setTimeout(() => setActionSuccess(null), 3000);
+    },
+    onError: (err: any) => {
+      setActionError(err.message);
+    },
+  });
+
+  // Save Unit (Create or Update)
+  const saveUnitMutation = useMutation({
+    mutationFn: async (payload: { id?: string; name: string; factor: number; isSaleUnit: boolean; isPurchaseUnit: boolean; isActive?: boolean }) => {
+      const isEdit = !!payload.id;
+      const url = isEdit ? `/products/${productId}/units/${payload.id}` : `/products/${productId}/units`;
+      const method = isEdit ? "PATCH" : "POST";
+      const res = await apiFetch(url, {
+        method,
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json();
+      if (!res.ok || !body.success) {
+        if (res.status === 409 || body.error?.code === "UNIT_FACTOR_LOCKED") {
+          throw new Error("বিক্রয় বা ক্রয় অর্ডারে ব্যবহৃত এককের রূপান্তর ফ্যাক্টর পরিবর্তন করা যাবে না। অনুগ্রহ করে একটি নতুন একক তৈরি করুন।");
+        }
+        throw new Error(body.error?.message || "Failed to save unit");
+      }
+      return body.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["product", productId] });
+      setIsUnitModalOpen(false);
+      setEditingUnit(null);
+      setActionSuccess("একক সফলভাবে সংরক্ষিত হয়েছে");
+      setTimeout(() => setActionSuccess(null), 3000);
+    },
+    onError: (err: any) => {
+      setActionError(err.message);
+    },
+  });
+
+  // Set Variant Unit Price Override
+  const setVariantUnitPriceMutation = useMutation({
+    mutationFn: async ({ variantId, unitId, priceMinor }: { variantId: string; unitId: string; priceMinor: number }) => {
+      const res = await apiFetch(`/variants/${variantId}/units/${unitId}/price`, {
+        method: "PUT",
+        body: JSON.stringify({ priceMinor }),
+      });
+      const body = await res.json();
+      if (!res.ok || !body.success) {
+        throw new Error(body.error?.message || "Failed to set unit price");
+      }
+      return body.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["product", productId] });
+      setPriceOverrideModal(null);
+      setActionSuccess("এককের বিশেষ মূল্য নির্ধারণ করা হয়েছে");
+      setTimeout(() => setActionSuccess(null), 3000);
+    },
+    onError: (err: any) => {
+      setActionError(err.message);
+    },
+  });
+
+  // Clear Variant Unit Price Override
+  const clearVariantUnitPriceMutation = useMutation({
+    mutationFn: async ({ variantId, unitId }: { variantId: string; unitId: string }) => {
+      const res = await apiFetch(`/variants/${variantId}/units/${unitId}/price`, {
+        method: "DELETE",
+      });
+      const body = await res.json();
+      if (!res.ok || !body.success) {
+        throw new Error(body.error?.message || "Failed to clear unit price");
+      }
+      return body.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["product", productId] });
+      setPriceOverrideModal(null);
+      setActionSuccess("এককের নির্ধারিত মূল্য মুছে ফেলা হয়েছে");
       setTimeout(() => setActionSuccess(null), 3000);
     },
     onError: (err: any) => {
@@ -311,6 +442,223 @@ export default function ProductDetailPage() {
           </Card>
         )}
 
+        {/* Units and Conversions Section */}
+        {isUnitsActive && (
+          <Card className="shadow-sm" data-testid="units-management-card">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <span>{locale === "bn" ? "একক ও পরিমাপ (Units & Packing)" : "Units & Packing"}</span>
+                  <Badge variant="outline" className="text-xs">Module: Units</Badge>
+                </CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {locale === "bn"
+                    ? "পণ্যটির বেস একক, দশমিক অনুমতি এবং বিভিন্ন প্যাকিং একক ও মূল্য নির্ধারণ করুন"
+                    : "Configure base unit, decimal quantities, and packing units"}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                className="gap-1 text-xs"
+                data-testid="add-unit-button"
+                onClick={() => {
+                  setEditingUnit(null);
+                  setUnitName("");
+                  setUnitFactor("");
+                  setUnitIsSale(true);
+                  setUnitIsPurchase(true);
+                  setUnitIsActive(true);
+                  setIsUnitModalOpen(true);
+                }}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>{locale === "bn" ? "নতুন একক যোগ করুন" : "Add Packing Unit"}</span>
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Base Unit & Decimal Qty settings */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-lg bg-muted/30 border">
+                <div className="space-y-1.5">
+                  <Label htmlFor="detailBaseUnit" className="text-xs font-semibold">
+                    {locale === "bn" ? "বেস একক (Base Unit)" : "Base Unit"}
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      id="detailBaseUnit"
+                      value={product.baseUnit || "pcs"}
+                      onChange={(e) => {
+                        updateProductSettingsMutation.mutate({ baseUnit: e.target.value });
+                      }}
+                      className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
+                      data-testid="detail-base-unit-select"
+                    >
+                      {BASE_UNITS.map((u) => (
+                        <option key={u.code} value={u.code}>
+                          {locale === "bn" ? `${u.nameBn} (${u.code})` : `${u.nameEn} (${u.code})`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {locale === "bn"
+                      ? "স্টক মুভমেন্ট বা বিক্রয় হয়ে গেলে বেস একক পরিবর্তন করা যাবে না।"
+                      : "Cannot change base unit once stock movements or sales exist."}
+                  </p>
+                </div>
+
+                <div className="flex flex-col justify-center space-y-1.5">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="detailAllowDecimal"
+                      checked={Boolean(product.allowDecimalQty)}
+                      onChange={(e) => {
+                        updateProductSettingsMutation.mutate({ allowDecimalQty: e.target.checked });
+                      }}
+                      className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                      data-testid="detail-allow-decimal-switch"
+                    />
+                    <Label htmlFor="detailAllowDecimal" className="text-xs font-semibold cursor-pointer">
+                      {locale === "bn" ? "ভগ্নাংশ বা দশমিক পরিমাণ অনুমোদন করুন (Allow Decimal Qty)" : "Allow Decimal Quantity"}
+                    </Label>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground pl-6">
+                    {locale === "bn" ? "সক্রিয় থাকলে ২.৫ কেজি ইত্যাদি দশমিক বিক্রি সম্ভব।" : "Enables fractional quantities (e.g. 2.5 kg)."}
+                  </p>
+                </div>
+              </div>
+
+              {/* Packing Units Table */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">
+                  {locale === "bn" ? "প্যাকিং এককসমূহ (Units)" : "Packing Units"}
+                </h3>
+                <div className="rounded-md border overflow-hidden">
+                  <Table data-testid="product-units-table">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{locale === "bn" ? "এককের নাম" : "Unit Name"}</TableHead>
+                        <TableHead>{locale === "bn" ? "রূপান্তর ফ্যাক্টর" : "Factor"}</TableHead>
+                        <TableHead className="text-center">{locale === "bn" ? "বিক্রয় একক" : "Sale Unit"}</TableHead>
+                        <TableHead className="text-center">{locale === "bn" ? "ক্রয় একক" : "Purchase Unit"}</TableHead>
+                        <TableHead className="text-center">{locale === "bn" ? "অবস্থা" : "Status"}</TableHead>
+                        <TableHead className="text-right">{locale === "bn" ? "ভ্যারিয়েন্ট মূল্য ও ওভাররাইড" : "Variant Prices"}</TableHead>
+                        <TableHead className="text-right w-24">{strings.common.actions}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(!product.units || product.units.length === 0) ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-6 text-xs text-muted-foreground">
+                            {locale === "bn" ? "কোনো অতিরিক্ত একক নেই (শুধুমাত্র বেস এককে বিক্রি/ক্রয় হয়)" : "No additional packing units."}
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        product.units.map((u: any) => {
+                          const baseDef = getBaseUnit(product.baseUnit || "pcs");
+                          const baseLabel = locale === "bn" ? (baseDef?.nameBn || product.baseUnit) : (baseDef?.nameEn || product.baseUnit);
+                          const factorFormula = `১ ${u.name} = ${u.factor} ${baseLabel}`;
+
+                          return (
+                            <TableRow key={u.id} data-testid="unit-row">
+                              <TableCell className="font-semibold text-xs text-foreground">
+                                {u.name}
+                              </TableCell>
+                              <TableCell className="text-xs font-mono">
+                                <Badge variant="secondary" className="font-mono text-xs">
+                                  {factorFormula}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-center text-xs">
+                                {u.isSaleUnit ? (
+                                  <Badge variant="outline" className="text-[11px] bg-emerald-500/10 text-emerald-600">হ্যাঁ</Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[11px] text-muted-foreground">না</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-center text-xs">
+                                {u.isPurchaseUnit ? (
+                                  <Badge variant="outline" className="text-[11px] bg-emerald-500/10 text-emerald-600">হ্যাঁ</Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[11px] text-muted-foreground">না</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-center text-xs">
+                                <Badge variant={u.isActive ? "success" : "outline"} className="text-[11px]">
+                                  {u.isActive ? strings.common.active : strings.common.inactive}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right text-xs">
+                                <div className="flex flex-col gap-1 items-end">
+                                  {variants.map((v: any) => {
+                                    const override = v.unitPrices?.find((up: any) => up.productUnitId === u.id);
+                                    const derivedPrice = computeUnitDerivedPriceMinor(v.priceMinor, u.factor);
+                                    return (
+                                      <div key={v.id} className="flex items-center gap-1.5 font-mono text-[11px]">
+                                        <span className="text-muted-foreground">{v.sku}:</span>
+                                        {override ? (
+                                          <span className="font-bold text-primary">
+                                            {formatMoney(override.priceMinor)}
+                                            <span className="text-[10px] text-muted-foreground ml-1">(override)</span>
+                                          </span>
+                                        ) : (
+                                          <span className="text-muted-foreground">
+                                            {formatMoney(derivedPrice)}
+                                            <span className="text-[10px] text-muted-foreground ml-1">(derived)</span>
+                                          </span>
+                                        )}
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-5 px-1.5 text-[10px]"
+                                          onClick={() => {
+                                            setPriceOverrideModal({
+                                              variant: v,
+                                              unit: u,
+                                              currentPriceMinor: override ? Number(override.priceMinor) : null,
+                                              derivedPriceMinor: Number(derivedPrice),
+                                            });
+                                            setOverridePriceTaka(override ? (Number(override.priceMinor) / 100).toString() : (Number(derivedPrice) / 100).toString());
+                                          }}
+                                        >
+                                          {override ? "বদলান" : "মূল্য নির্ধারণ"}
+                                        </Button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs px-2 gap-1"
+                                  onClick={() => {
+                                    setEditingUnit(u);
+                                    setUnitName(u.name);
+                                    setUnitFactor(String(u.factor));
+                                    setUnitIsSale(u.isSaleUnit);
+                                    setUnitIsPurchase(u.isPurchaseUnit);
+                                    setUnitIsActive(u.isActive);
+                                    setIsUnitModalOpen(true);
+                                  }}
+                                >
+                                  <Edit2 className="h-3 w-3" />
+                                  <span>{strings.common.edit}</span>
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Variants Detailed Table */}
         <Card className="shadow-sm">
           <CardHeader className="pb-3">
@@ -364,6 +712,11 @@ export default function ProductDetailPage() {
                                 className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted text-[11px] font-mono border"
                               >
                                 {b.barcode || b}
+                                {b.productUnit?.name && (
+                                  <span className="text-[10px] text-primary font-sans font-medium">
+                                    ({b.productUnit.name})
+                                  </span>
+                                )}
                                 <button
                                   type="button"
                                   onClick={() => deleteBarcodeMutation.mutate({ variantId: v.id, barcode: b.barcode || b })}
@@ -438,6 +791,29 @@ export default function ProductDetailPage() {
                     autoFocus
                   />
                 </div>
+                {isUnitsActive && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="barcodeUnitSelect">
+                      {locale === "bn" ? "একক নির্বাচন (ঐচ্ছিক)" : "Unit Selection (Optional)"}
+                    </Label>
+                    <select
+                      id="barcodeUnitSelect"
+                      value={barcodeUnitId}
+                      onChange={(e) => setBarcodeUnitId(e.target.value)}
+                      className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
+                      data-testid="barcode-unit-select"
+                    >
+                      <option value="">{locale === "bn" ? `বেস একক (${product.baseUnit || "pcs"})` : `Base Unit (${product.baseUnit || "pcs"})`}</option>
+                      {(product.units || [])
+                        .filter((u: any) => u.isActive)
+                        .map((u: any) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name} (১ {u.name} = {u.factor} {getBaseUnit(product.baseUnit || "pcs")?.nameBn || product.baseUnit})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" size="sm" onClick={() => setBarcodeVariantId(null)}>
                     {strings.common.cancel}
@@ -445,7 +821,7 @@ export default function ProductDetailPage() {
                   <Button
                     size="sm"
                     disabled={!newBarcode.trim() || addBarcodeMutation.isPending}
-                    onClick={() => addBarcodeMutation.mutate({ variantId: barcodeVariantId, barcode: newBarcode.trim() })}
+                    onClick={() => addBarcodeMutation.mutate({ variantId: barcodeVariantId, barcode: newBarcode.trim(), productUnitId: barcodeUnitId || undefined })}
                   >
                     {locale === "bn" ? "যোগ করুন" : "Add"}<span className="sr-only"> (Add)</span>
                   </Button>
@@ -547,6 +923,190 @@ export default function ProductDetailPage() {
                   >
                     {strings.common.save}
                   </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Add/Edit Unit Modal */}
+        {isUnitModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+            <Card className="w-full max-w-md shadow-xl border">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-bold">
+                  {editingUnit ? (locale === "bn" ? "একক পরিবর্তন করুন" : "Edit Unit") : (locale === "bn" ? "নতুন প্যাকিং একক যোগ করুন" : "Add Packing Unit")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="unitNameInput">{locale === "bn" ? "এককের নাম" : "Unit Name"} *</Label>
+                  <Input
+                    id="unitNameInput"
+                    placeholder="যেমন: ড্রাম, বস্তা, 5 লিটার ক্যান"
+                    value={unitName}
+                    onChange={(e) => setUnitName(e.target.value)}
+                    data-testid="unit-name-input"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="unitFactorInput">
+                    {locale === "bn" ? `রূপান্তর ফ্যাক্টর (প্রতি এককে কত ${getBaseUnit(product.baseUnit || "pcs")?.nameBn || product.baseUnit})` : `Conversion Factor (base units per 1 of this unit)`} *
+                  </Label>
+                  <Input
+                    id="unitFactorInput"
+                    type="number"
+                    step="0.001"
+                    min="0.001"
+                    placeholder="যেমন: 200 বা 25"
+                    value={unitFactor}
+                    onChange={(e) => setUnitFactor(e.target.value)}
+                    data-testid="unit-factor-input"
+                  />
+                  {unitName.trim() && unitFactor && (
+                    <p className="text-xs text-primary font-medium">
+                      ১ {unitName} = {unitFactor} {getBaseUnit(product.baseUnit || "pcs")?.nameBn || product.baseUnit}
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <label className="flex items-center space-x-2 text-xs cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={unitIsSale}
+                      onChange={(e) => setUnitIsSale(e.target.checked)}
+                      className="rounded border-gray-300"
+                      data-testid="unit-sale-checkbox"
+                    />
+                    <span>{locale === "bn" ? "বিক্রয়ে প্রযোজ্য" : "Sale Unit"}</span>
+                  </label>
+
+                  <label className="flex items-center space-x-2 text-xs cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={unitIsPurchase}
+                      onChange={(e) => setUnitIsPurchase(e.target.checked)}
+                      className="rounded border-gray-300"
+                      data-testid="unit-purchase-checkbox"
+                    />
+                    <span>{locale === "bn" ? "ক্রয়ে প্রযোজ্য" : "Purchase Unit"}</span>
+                  </label>
+                </div>
+
+                {editingUnit && (
+                  <label className="flex items-center space-x-2 text-xs cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      checked={unitIsActive}
+                      onChange={(e) => setUnitIsActive(e.target.checked)}
+                      className="rounded border-gray-300"
+                    />
+                    <span>{locale === "bn" ? "সক্রিয় রাখুন" : "Active"}</span>
+                  </label>
+                )}
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" size="sm" onClick={() => setIsUnitModalOpen(false)}>
+                    {strings.common.cancel}
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={!unitName.trim() || !unitFactor || isNaN(parseFloat(unitFactor)) || parseFloat(unitFactor) <= 0 || saveUnitMutation.isPending}
+                    data-testid="btn-save-unit"
+                    onClick={() => {
+                      saveUnitMutation.mutate({
+                        id: editingUnit?.id,
+                        name: unitName.trim(),
+                        factor: parseFloat(unitFactor),
+                        isSaleUnit: unitIsSale,
+                        isPurchaseUnit: unitIsPurchase,
+                        isActive: unitIsActive,
+                      });
+                    }}
+                  >
+                    {strings.common.save}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Variant Unit Price Override Modal */}
+        {priceOverrideModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+            <Card className="w-full max-w-sm shadow-xl border">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-bold">
+                  {locale === "bn"
+                    ? `এককের বিশেষ মূল্য নির্ধারণ (${priceOverrideModal.unit.name})`
+                    : `Set Unit Price Override (${priceOverrideModal.unit.name})`}
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  ভ্যারিয়েন্ট: {priceOverrideModal.variant.sku}
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="overridePriceInput">
+                    {locale === "bn" ? "বিক্রয় মূল্য (৳)" : "Selling Price (৳)"}
+                  </Label>
+                  <Input
+                    id="overridePriceInput"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder={`স্বাভাবিক মূল্য: ৳${(priceOverrideModal.derivedPriceMinor / 100).toFixed(2)}`}
+                    value={overridePriceTaka}
+                    onChange={(e) => setOverridePriceTaka(e.target.value)}
+                    autoFocus
+                    data-testid="override-price-input"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    বেস মূল্য অনুযায়ী হিসাবকৃত মূল্য: ৳{(priceOverrideModal.derivedPriceMinor / 100).toFixed(2)}
+                  </p>
+                </div>
+
+                <div className="flex justify-between items-center pt-2">
+                  {priceOverrideModal.currentPriceMinor !== null ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:bg-destructive/10 text-xs"
+                      onClick={() => {
+                        clearVariantUnitPriceMutation.mutate({
+                          variantId: priceOverrideModal.variant.id,
+                          unitId: priceOverrideModal.unit.id,
+                        });
+                      }}
+                    >
+                      {locale === "bn" ? "ওভাররাইড মুছুন" : "Clear Override"}
+                    </Button>
+                  ) : <div />}
+
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setPriceOverrideModal(null)}>
+                      {strings.common.cancel}
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={!overridePriceTaka || isNaN(parseFloat(overridePriceTaka)) || parseFloat(overridePriceTaka) < 0}
+                      data-testid="save-override-price-btn"
+                      onClick={() => {
+                        const minor = Math.round(parseFloat(overridePriceTaka) * 100);
+                        setVariantUnitPriceMutation.mutate({
+                          variantId: priceOverrideModal.variant.id,
+                          unitId: priceOverrideModal.unit.id,
+                          priceMinor: minor,
+                        });
+                      }}
+                    >
+                      {strings.common.save}
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>

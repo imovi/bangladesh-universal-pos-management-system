@@ -24,6 +24,7 @@ import {
   roundHalfUp,
   parseDateFilterRange,
   reversePoints,
+  computeBaseQuantity,
 } from "@universal-pos/shared";
 import {
   lockSaleItems,
@@ -223,12 +224,16 @@ export class ReturnsService {
           returningQtyThousandths,
         );
 
+        const storedFactor = saleItem.unitFactor ? Number(saleItem.unitFactor) : 1;
+        const returnBaseQty = computeBaseQuantity(item.quantity, storedFactor);
+
         returnItemsData.push({
           id: uuidv7(),
           tenantId,
           saleItemId: item.saleItemId,
           variantId: saleItem.variantId,
           quantity: new Prisma.Decimal(item.quantity),
+          baseQuantity: new Prisma.Decimal(returnBaseQty),
           unitRefundMinor,
           taxRefundMinor: refundCalc.taxRefundMinor,
           totalRefundMinor: refundCalc.refundMinor,
@@ -239,7 +244,7 @@ export class ReturnsService {
           stockMovementsToApply.push({
             branchId: sale.branchId,
             variantId: saleItem.variantId,
-            qtyDelta: Number(item.quantity),
+            qtyDelta: returnBaseQty,
             type: "sale_return",
             refType: "sale_return",
             refId: returnId,

@@ -185,7 +185,7 @@ export class ReportsService {
         },
       });
 
-      const map = new Map<string, { variantId: string; sku: string; productId: string; productName: string; variantName: string | null; qty: number; rev: bigint }>();
+      const map = new Map<string, { variantId: string; sku: string; productId: string; productName: string; variantName: string | null; qty: number; rev: bigint; baseUnit: string }>();
       for (const it of items) {
         const vId = it.variantId;
         const variantOptions = it.variant.optionValues?.length
@@ -199,8 +199,9 @@ export class ReportsService {
           variantName: variantOptions,
           qty: 0,
           rev: 0n,
+          baseUnit: (it.variant.product as any).baseUnit || "pcs",
         };
-        entry.qty += Number(it.quantity);
+        entry.qty += Number((it as any).baseQuantity ?? it.quantity);
         entry.rev += it.totalMinor;
         map.set(vId, entry);
       }
@@ -212,8 +213,9 @@ export class ReportsService {
         productName: e.productName,
         variantName: e.variantName,
         quantitySold: e.qty,
+        baseUnit: e.baseUnit,
         revenueMinor: Number(e.rev),
-        averagePriceMinor: e.qty > 0 ? Number(e.rev / BigInt(e.qty)) : 0,
+        averagePriceMinor: e.qty > 0 ? Number(e.rev / BigInt(Math.max(1, Math.round(e.qty)))) : 0,
       }));
     });
   }
@@ -303,7 +305,7 @@ export class ReportsService {
 
       const cells = product.variants.map((v) => {
         const stockQty = v.stockLevels.reduce((s, sl) => s + Number(sl.qty), 0);
-        const qtySold = v.saleItems.reduce((s, si) => s + Number(si.quantity), 0);
+        const qtySold = v.saleItems.reduce((s, si) => s + Number((si as any).baseQuantity ?? si.quantity), 0);
         const optMap: Record<string, string> = {};
         for (const ov of v.optionValues) {
           if (ov.optionValue?.option) {
@@ -334,7 +336,7 @@ export class ReportsService {
       let cogsMinor = 0n;
       for (const it of items) {
         revenueMinor += it.totalMinor;
-        cogsMinor += it.unitCostMinor * BigInt(Math.round(Number(it.quantity)));
+        cogsMinor += BigInt(Math.round(Number(it.unitCostMinor) * Number((it as any).baseQuantity ?? it.quantity)));
       }
 
       let returnedRevenueMinor = 0n;
@@ -342,7 +344,7 @@ export class ReportsService {
       for (const ri of returnItems) {
         returnedRevenueMinor += ri.totalRefundMinor;
         if (ri.condition === "resellable") {
-          returnedCogsMinor += ri.saleItem.unitCostMinor * BigInt(Math.round(Number(ri.quantity)));
+          returnedCogsMinor += BigInt(Math.round(Number(ri.saleItem.unitCostMinor) * Number((ri as any).baseQuantity ?? ri.quantity)));
         }
       }
 
@@ -656,6 +658,7 @@ export class ReportsService {
         },
         select: {
           quantity: true,
+          baseQuantity: true,
           variant: { select: { productId: true, product: { select: { name: true } } } },
         },
       });
@@ -665,7 +668,7 @@ export class ReportsService {
         const pId = si.variant.productId;
         const pName = si.variant.product.name;
         const curr = productSalesMap.get(pId) || { productId: pId, productName: pName, soldUnits: 0 };
-        curr.soldUnits += Math.round(Number(si.quantity));
+        curr.soldUnits += Math.round(Number((si as any).baseQuantity ?? si.quantity));
         productSalesMap.set(pId, curr);
       }
 
@@ -946,7 +949,7 @@ export class ReportsService {
           entry.salesSet.add(s.id);
           entry.discountGivenMinor += s.billPromotionDiscountMinor;
           for (const it of s.items) {
-            entry.unitsSold += Number(it.quantity);
+            entry.unitsSold += Number((it as any).baseQuantity ?? it.quantity);
             entry.grossMinor += it.subtotalMinor;
           }
         }
@@ -970,7 +973,7 @@ export class ReportsService {
               promoMap.set(it.promotionId, entry);
             }
             entry.salesSet.add(s.id);
-            entry.unitsSold += Number(it.quantity);
+            entry.unitsSold += Number((it as any).baseQuantity ?? it.quantity);
             entry.grossMinor += it.subtotalMinor;
             entry.discountGivenMinor += it.promotionDiscountMinor;
           }
@@ -991,7 +994,7 @@ export class ReportsService {
           daily.discountGivenMinor += s.billPromotionDiscountMinor;
           for (const it of s.items) {
             if (it.promotionId || s.billPromotionId) {
-              daily.unitsSold += Number(it.quantity);
+              daily.unitsSold += Number((it as any).baseQuantity ?? it.quantity);
               daily.grossMinor += it.subtotalMinor;
             }
             if (it.promotionId) {
@@ -1005,7 +1008,7 @@ export class ReportsService {
         const promoId = ri.saleItem.promotionId || ri.saleReturn.sale?.billPromotionId;
         if (promoId && promoMap.has(promoId)) {
           const entry = promoMap.get(promoId)!;
-          entry.returnUnits += Number(ri.quantity);
+          entry.returnUnits += Number((ri as any).baseQuantity ?? ri.quantity);
           entry.returnRefundMinor += ri.totalRefundMinor;
         }
       }

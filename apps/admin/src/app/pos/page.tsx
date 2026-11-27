@@ -979,9 +979,30 @@ export default function PosPage() {
   }, [cartItems.length, activeShift, activeReceipt, isEffectivelyOnline]);
 
   // Add Item to Cart
-  const handleAddToCart = (variant: PosProductVariant, product: PosProduct, qty = 1) => {
+  const handleAddToCart = (
+    variant: PosProductVariant,
+    product: PosProduct,
+    qty = 1,
+    productUnitId?: string,
+  ) => {
+    const unit = productUnitId ? product.units?.find((u) => u.id === productUnitId) : undefined;
+    const unitName = unit ? unit.name : (product.baseUnit || "pcs");
+    const unitFactor = unit ? Number(unit.factor) : 1;
+
+    let lineUnitPriceMinor = variant.priceMinor;
+    if (unit) {
+      const override = variant.unitPrices?.find((up) => up.productUnitId === unit.id);
+      if (override) {
+        lineUnitPriceMinor = override.priceMinor;
+      } else {
+        lineUnitPriceMinor = Math.round(variant.priceMinor * unitFactor);
+      }
+    }
+
     setCartItems((prev) => {
-      const existingIdx = prev.findIndex((item) => item.variantId === variant.id);
+      const existingIdx = prev.findIndex(
+        (item) => item.variantId === variant.id && (item.productUnitId || "") === (productUnitId || ""),
+      );
       if (existingIdx >= 0) {
         const next = [...prev];
         next[existingIdx] = {
@@ -1009,16 +1030,55 @@ export default function PosPage() {
         sku: variant.sku,
         size,
         color,
-        unitPriceMinor: variant.priceMinor,
+        unitPriceMinor: lineUnitPriceMinor,
         quantity: qty,
         taxRateBp: variant.taxRateBp ?? product.taxClass?.rateBp ?? 0,
-        allowDecimals: product.allowDecimals ?? false,
+        allowDecimals: Boolean(product.allowDecimalQty ?? product.allowDecimals),
+        productUnitId: unit?.id,
+        unitName,
+        unitFactor,
+        baseUnit: product.baseUnit || "pcs",
       };
 
       return [...prev, newItem];
     });
 
     playSuccessBeep();
+  };
+
+  // Unit Change on Cart Item
+  const handleUnitChange = (idx: number, newUnitId: string) => {
+    setCartItems((prev) => {
+      const next = [...prev];
+      const target = next[idx];
+      if (!target) return prev;
+
+      const product = products.find((p) => p.id === target.productId);
+      const variant = product?.variants?.find((v) => v.id === target.variantId);
+
+      const unit = newUnitId ? product?.units?.find((u) => u.id === newUnitId) : undefined;
+      const unitName = unit ? unit.name : (product?.baseUnit || "pcs");
+      const unitFactor = unit ? Number(unit.factor) : 1;
+
+      let lineUnitPriceMinor = variant ? variant.priceMinor : target.unitPriceMinor;
+      if (unit && variant) {
+        const override = variant.unitPrices?.find((up) => up.productUnitId === unit.id);
+        if (override) {
+          lineUnitPriceMinor = override.priceMinor;
+        } else {
+          lineUnitPriceMinor = Math.round(variant.priceMinor * unitFactor);
+        }
+      }
+
+      next[idx] = {
+        ...target,
+        productUnitId: unit?.id,
+        unitName,
+        unitFactor,
+        unitPriceMinor: lineUnitPriceMinor,
+      };
+      return next;
+    });
   };
 
   // Barcode / SKU scan or Enter Handler
@@ -1033,7 +1093,7 @@ export default function PosPage() {
     // First: Match against in-memory products by exact barcode or SKU
     const match = matchBarcodeOrSku(code, products, branchId);
     if (match.matched && match.variant && match.product) {
-      handleAddToCart(match.variant, match.product, 1);
+      handleAddToCart(match.variant, match.product, 1, match.productUnitId);
       setSearchQuery("");
       return;
     }
@@ -1052,7 +1112,7 @@ export default function PosPage() {
         const serverProducts = Array.isArray(data.data) ? data.data : (data.data?.items || data.items || []);
         const serverMatch = matchBarcodeOrSku(code, serverProducts, branchId);
         if (serverMatch.matched && serverMatch.variant && serverMatch.product) {
-          handleAddToCart(serverMatch.variant, serverMatch.product, 1);
+          handleAddToCart(serverMatch.variant, serverMatch.product, 1, serverMatch.productUnitId);
           setSearchQuery("");
           return;
         }
@@ -1204,6 +1264,9 @@ export default function PosPage() {
         newItems: cartItems.map((it) => ({
           variantId: it.variantId,
           quantity: it.quantity,
+          productUnitId: it.productUnitId || undefined,
+          unitName: it.unitName || (it.baseUnit || "pcs"),
+          unitFactor: it.unitFactor || 1,
           overrideUnitPriceMinor: it.overrideUnitPriceMinor,
           discount: it.discount
             ? {
@@ -1288,6 +1351,8 @@ export default function PosPage() {
               size: it.size,
               color: it.color,
               quantity: it.quantity,
+              unitName: it.unitName,
+              unitFactor: it.unitFactor,
               unitPriceMinor: it.overrideUnitPriceMinor ?? it.unitPriceMinor,
               grossMinor: calcLine?.grossMinor ?? it.unitPriceMinor * it.quantity,
               discountMinor: (calcLine?.lineDiscountMinor ?? 0) + (calcLine?.allocatedBillDiscountMinor ?? 0),
@@ -1398,6 +1463,9 @@ export default function PosPage() {
         return {
           variantId: it.variantId,
           productId: it.productId,
+          productUnitId: it.productUnitId || undefined,
+          unitName: it.unitName || (it.baseUnit || "pcs"),
+          unitFactor: it.unitFactor || 1,
           quantity: it.quantity,
           overrideUnitPriceMinor: it.overrideUnitPriceMinor,
           unitPriceMinor: it.overrideUnitPriceMinor !== undefined ? it.overrideUnitPriceMinor : it.unitPriceMinor,
@@ -1483,7 +1551,8 @@ export default function PosPage() {
         for (const it of salePayload.items) {
           try {
             const cur = await db.stock.get(it.variantId);
-            const newQty = (cur?.stockQty ?? 0) - it.quantity;
+            const baseQty = it.quantity * ((it as any).unitFactor || 1);
+            const newQty = (cur?.stockQty ?? 0) - baseQty;
             await db.stock.put({
               variantId: it.variantId,
               stockQty: newQty,
@@ -1574,6 +1643,8 @@ export default function PosPage() {
             size: it.size,
             color: it.color,
             quantity: it.quantity,
+            unitName: it.unitName,
+            unitFactor: it.unitFactor,
             unitPriceMinor: it.overrideUnitPriceMinor ?? it.unitPriceMinor,
             grossMinor: calcLine?.grossMinor ?? it.unitPriceMinor * it.quantity,
             discountMinor: (calcLine?.lineDiscountMinor ?? 0) + (calcLine?.allocatedBillDiscountMinor ?? 0),
@@ -2571,6 +2642,7 @@ export default function PosPage() {
                 const unitPrice = item.overrideUnitPriceMinor ?? item.unitPriceMinor;
                 const hasDiscount = Boolean(item.discount);
                 const hasPriceOverride = item.overrideUnitPriceMinor !== undefined;
+                const product = products.find((p) => p.id === item.productId);
 
                 return (
                   <div key={idx} className="p-3 flex items-start gap-2 hover:bg-muted/10 transition-colors">
@@ -2587,12 +2659,37 @@ export default function PosPage() {
                             </span>
                           </>
                         )}
+                        {item.unitName && item.unitName.toLowerCase() !== "pcs" && item.unitName !== "পিস" && (
+                          <>
+                            <span>•</span>
+                            <span className="font-medium text-primary">
+                              {item.quantity} {item.unitName} × {formatMoney(unitPrice)}
+                            </span>
+                          </>
+                        )}
                       </div>
 
-                      <div className="flex items-center gap-2 mt-1.5">
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                         <span className="text-xs font-mono font-medium">
                           {formatMoney(unitPrice)}
                         </span>
+
+                        {/* Unit Select (if product has sale units) */}
+                        {product?.units && product.units.length > 0 && (
+                          <select
+                            value={item.productUnitId || ""}
+                            onChange={(e) => handleUnitChange(idx, e.target.value)}
+                            data-testid={`cart-unit-select-${idx}`}
+                            className="text-[11px] h-6 px-1.5 py-0 rounded border border-input bg-background font-medium text-foreground"
+                          >
+                            <option value="">{product.baseUnit || "pcs"}</option>
+                            {product.units.map((u) => (
+                              <option key={u.id} value={u.id}>
+                                {u.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
 
                         {/* Line Discount Trigger */}
                         <button
@@ -2677,12 +2774,12 @@ export default function PosPage() {
                       </Button>
                       <input
                         type="number"
-                        min="1"
+                        min={item.allowDecimals ? "0.001" : "1"}
                         step={item.allowDecimals ? "0.001" : "1"}
                         value={item.quantity}
                         onChange={(e) => handleDirectQuantity(idx, e.target.value)}
                         aria-label={locale === "bn" ? "পরিমাণ" : "Quantity"}
-                        className="w-10 h-8 text-center text-xs font-mono font-bold bg-muted/40 border border-input rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="w-14 h-8 text-center text-xs font-mono font-bold bg-muted/40 border border-input rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
                         data-testid={`qty-input-${idx}`}
                       />
                       <Button

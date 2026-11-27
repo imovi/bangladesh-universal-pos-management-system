@@ -30,6 +30,10 @@ export interface CartItem {
   discount?: CartLineDiscount;
   availableStock?: number;
   allowDecimals?: boolean;
+  productUnitId?: string;
+  unitName?: string;
+  unitFactor?: number;
+  baseUnit?: string;
 }
 
 export interface CartTotalsResult {
@@ -358,6 +362,7 @@ export function matchBarcodeOrSku(
   product?: any;
   variant?: any;
   stock?: number;
+  productUnitId?: string;
 } {
   const trimmed = query.trim().toLowerCase();
   if (!trimmed) return { matched: false };
@@ -366,10 +371,23 @@ export function matchBarcodeOrSku(
     if (!product.variants || product.variants.length === 0) continue;
 
     for (const variant of product.variants) {
+      let matchedUnitId: string | undefined = undefined;
+
       // Check exact barcode match
-      const barcodeMatch = (variant.barcodes || []).some(
-        (b: any) => b.barcode && b.barcode.toLowerCase() === trimmed,
-      );
+      const matchedBarcodeObj = (variant.barcodes || []).find((b: any) => {
+        const val = typeof b === "string" ? b : b.barcode;
+        return val && val.toLowerCase() === trimmed;
+      });
+
+      const barcodeMatch = Boolean(matchedBarcodeObj);
+      if (barcodeMatch && typeof matchedBarcodeObj === "object" && matchedBarcodeObj.productUnitId) {
+        matchedUnitId = matchedBarcodeObj.productUnitId;
+      }
+
+      if (!matchedUnitId && barcodeMatch && Array.isArray(variant.barcodeUnits)) {
+        const bu = variant.barcodeUnits.find((b: any) => b.barcode && b.barcode.toLowerCase() === trimmed);
+        if (bu?.productUnitId) matchedUnitId = bu.productUnitId;
+      }
 
       // Check exact SKU match
       const skuMatch = variant.sku && variant.sku.toLowerCase() === trimmed;
@@ -381,6 +399,7 @@ export function matchBarcodeOrSku(
           product,
           variant,
           stock,
+          productUnitId: matchedUnitId,
         };
       }
     }

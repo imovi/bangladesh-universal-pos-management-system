@@ -39,6 +39,7 @@ export function computeSalePayloadHash(dto: CreateSaleDto): string {
     items: dto.items.map((it) => ({
       lineId: it.lineId ?? null,
       variantId: it.variantId,
+      productUnitId: it.productUnitId ?? null,
       quantity: Number(it.quantity),
       overrideUnitPriceMinor:
         it.overrideUnitPriceMinor !== undefined
@@ -63,7 +64,9 @@ export function isSameSalePayload(existing: any, dto: CreateSaleDto): boolean {
   if (dto.items.length !== existing.items?.length) return false;
   return dto.items.every((incoming) => {
     const match = existing.items?.find(
-      (it: any) => it.variantId === incoming.variantId,
+      (it: any) =>
+        it.variantId === incoming.variantId &&
+        (it.productUnitId ?? null) === (incoming.productUnitId ?? null),
     );
     return match && Number(match.quantity) === incoming.quantity;
   });

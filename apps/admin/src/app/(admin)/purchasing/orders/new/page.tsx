@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, useModules } from "@/lib/auth-context";
 import { useTranslation } from "@/i18n/context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +34,8 @@ interface ProductVariantOption {
   costMinor: number;
   productName: string;
   optionLabel: string;
+  baseUnit?: string;
+  units?: Array<{ id: string; name: string; factor: number; isPurchaseUnit: boolean; isActive: boolean }>;
 }
 
 interface PoLineItem {
@@ -41,12 +43,18 @@ interface PoLineItem {
   variantLabel: string;
   qtyOrdered: number;
   unitCostTaka: string;
+  productUnitId?: string;
+  unitName?: string;
+  unitFactor?: number;
+  baseUnit?: string;
 }
 
 export default function NewPurchaseOrderPage() {
   const router = useRouter();
   const { apiFetch, user } = useAuth();
   const { strings, locale } = useTranslation();
+  const { isModuleActive } = useModules();
+  const isUnitsActive = isModuleActive("units");
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -59,6 +67,7 @@ export default function NewPurchaseOrderPage() {
 
   const [lines, setLines] = useState<PoLineItem[]>([]);
   const [selectedVariantId, setSelectedVariantId] = useState("");
+  const [selectedUnitId, setSelectedUnitId] = useState("");
   const [selectedQty, setSelectedQty] = useState("10");
   const [selectedCost, setSelectedCost] = useState("500");
 
@@ -110,6 +119,8 @@ export default function NewPurchaseOrderPage() {
                   costMinor: Number(v.costMinor || 0),
                   productName: prod.name,
                   optionLabel: optionLabel ? `${prod.name} (${optionLabel})` : prod.name,
+                  baseUnit: prod.baseUnit || "pcs",
+                  units: prod.units || [],
                 });
               }
             }
@@ -127,9 +138,10 @@ export default function NewPurchaseOrderPage() {
     loadData();
   }, [user]);
 
-  // When selected variant changes, pre-fill its current cost
+  // When selected variant changes, pre-fill its current cost and reset unit
   const handleVariantSelectChange = (id: string) => {
     setSelectedVariantId(id);
+    setSelectedUnitId("");
     const v = availableVariants.find((x) => x.id === id);
     if (v && v.costMinor > 0) {
       setSelectedCost((v.costMinor / 100).toString());
@@ -142,11 +154,17 @@ export default function NewPurchaseOrderPage() {
     const variant = availableVariants.find((v) => v.id === selectedVariantId);
     if (!variant) return;
 
-    const qty = parseInt(selectedQty, 10);
+    const qty = parseFloat(selectedQty);
     if (isNaN(qty) || qty <= 0) return;
 
-    // Check if already in lines
-    const existingIndex = lines.findIndex((l) => l.variantId === selectedVariantId);
+    const unit = variant.units?.find((u) => u.id === selectedUnitId);
+    const unitName = unit ? unit.name : (variant.baseUnit || "pcs");
+    const unitFactor = unit ? Number(unit.factor) : 1;
+
+    // Check if already in lines with same variant and unit
+    const existingIndex = lines.findIndex(
+      (l) => l.variantId === selectedVariantId && l.productUnitId === (selectedUnitId || undefined),
+    );
     if (existingIndex >= 0) {
       const updated = [...lines];
       updated[existingIndex].qtyOrdered += qty;
@@ -160,6 +178,10 @@ export default function NewPurchaseOrderPage() {
           variantLabel: `${variant.sku} — ${variant.optionLabel}`,
           qtyOrdered: qty,
           unitCostTaka: selectedCost,
+          productUnitId: selectedUnitId || undefined,
+          unitName,
+          unitFactor,
+          baseUnit: variant.baseUnit || "pcs",
         },
       ]);
     }
@@ -191,6 +213,7 @@ export default function NewPurchaseOrderPage() {
         variantId: l.variantId,
         qtyOrdered: l.qtyOrdered,
         unitCostMinor: Math.round(Number(l.unitCostTaka) * 100),
+        productUnitId: l.productUnitId || undefined,
       }));
 
       const payload = {
@@ -352,7 +375,7 @@ export default function NewPurchaseOrderPage() {
           {/* Add Line Inputs */}
           <div className="p-4 rounded-lg bg-muted/40 border border-border space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-              <div className="sm:col-span-6">
+              <div className={isUnitsActive ? "sm:col-span-4" : "sm:col-span-6"}>
                 <label className="text-xs font-semibold text-muted-foreground block mb-1">
                   {locale === "bn" ? "পণ্য / ভ্যারিয়েন্ট নির্বাচন করুন" : "Select Product / Variant"}
                 </label>
@@ -370,18 +393,49 @@ export default function NewPurchaseOrderPage() {
                 </select>
               </div>
 
+              {isUnitsActive && (
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                    {locale === "bn" ? "একক (Unit)" : "Unit"}
+                  </label>
+                  <select
+                    value={selectedUnitId}
+                    onChange={(e) => setSelectedUnitId(e.target.value)}
+                    className="w-full h-10 px-2 rounded-md border border-input bg-background text-sm"
+                    data-testid="po-item-unit-select"
+                  >
+                    <option value="">
+                      {availableVariants.find((v) => v.id === selectedVariantId)?.baseUnit || "pcs"}
+                    </option>
+                    {(availableVariants.find((v) => v.id === selectedVariantId)?.units || [])
+                      .filter((u) => u.isActive && u.isPurchaseUnit)
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name} (×{u.factor})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
+
               <div className="sm:col-span-2">
                 <label className="text-xs font-semibold text-muted-foreground block mb-1">
                   {strings.purchasing.orderedQty}
                 </label>
                 <Input
                   type="number"
-                  min="1"
+                  min="0.001"
+                  step="any"
                   value={selectedQty}
                   onChange={(e) => setSelectedQty(e.target.value)}
                   data-testid="po-item-qty-input"
                   className="h-10"
                 />
+                {isUnitsActive && selectedUnitId && (
+                  <span className="text-[11px] text-primary font-medium block mt-1">
+                    = {Number(selectedQty || 0) * Number(availableVariants.find((v) => v.id === selectedVariantId)?.units?.find((u) => u.id === selectedUnitId)?.factor || 1)} {availableVariants.find((v) => v.id === selectedVariantId)?.baseUnit || "pcs"}
+                  </span>
+                )}
               </div>
 
               <div className="sm:col-span-2">
@@ -442,8 +496,13 @@ export default function NewPurchaseOrderPage() {
                         <td className="px-4 py-3 font-medium text-foreground">
                           {line.variantLabel}
                         </td>
-                        <td className="px-4 py-3 text-center font-mono font-bold">
-                          {line.qtyOrdered}
+                        <td className="px-4 py-3 text-center font-mono">
+                          <span className="font-bold">{line.qtyOrdered} {line.unitName || "pcs"}</span>
+                          {line.unitFactor && line.unitFactor !== 1 && (
+                            <span className="text-[11px] text-muted-foreground block">
+                              = {line.qtyOrdered * line.unitFactor} {line.baseUnit || "pcs"}
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right font-mono">
                           ৳ {Number(line.unitCostTaka).toFixed(2)}

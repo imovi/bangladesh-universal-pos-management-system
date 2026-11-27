@@ -68,6 +68,11 @@ export class ModulesService {
     });
   }
 
+  async isModuleActiveForTenant(tenantId: string, key: ModuleKey): Promise<boolean> {
+    const activeKeys = await this.getActiveModuleKeysForTenant(tenantId);
+    return activeKeys.includes(key);
+  }
+
   async updateModuleEnabled(
     tenantId: string,
     key: string,

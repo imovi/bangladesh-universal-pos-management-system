@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { TenantContextService } from "../../common/database/tenant-context.service.js";
@@ -150,11 +151,21 @@ export class VariantsService {
         throw new ConflictException(`Barcode '${barcodeValue}' already assigned in this tenant`);
       }
 
+      if (dto.productUnitId) {
+        const unit = await tx.productUnit.findFirst({
+          where: { id: dto.productUnitId, productId: variant.productId, tenantId },
+        });
+        if (!unit) {
+          throw new BadRequestException("এককটি এই পণ্যের জন্য প্রযোজ্য নয়।");
+        }
+      }
+
       const created = await tx.variantBarcode.create({
         data: {
           tenantId,
           variantId,
           barcode: barcodeValue,
+          productUnitId: dto.productUnitId || null,
         },
       });
 
@@ -164,7 +175,7 @@ export class VariantsService {
         action: "variant.barcode_add",
         entityType: "VariantBarcode",
         entityId: created.id,
-        after: { variantId, barcode: barcodeValue },
+        after: { variantId, barcode: barcodeValue, productUnitId: dto.productUnitId || null },
         ip,
       });
 

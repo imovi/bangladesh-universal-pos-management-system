@@ -274,7 +274,7 @@ export default function StockAdjustmentsPage() {
                               <div className="text-muted-foreground font-mono">{item.variant.sku} {opt && `(${opt})`}</div>
                             </div>
                             <Badge variant="outline" className="font-mono">
-                              মজুদ: {item.qty}
+                              মজুদ: {item.qty} {item.variant?.product?.baseUnit || "pcs"}
                             </Badge>
                           </button>
                         );
@@ -290,7 +290,7 @@ export default function StockAdjustmentsPage() {
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-sm">{selectedVariant.variant.product.name}</span>
                     <Badge variant="secondary" className="font-mono text-xs">
-                      বর্তমান স্টক: {selectedVariant.qty}
+                      বর্তমান স্টক: {selectedVariant.qty} {selectedVariant.variant?.product?.baseUnit || "pcs"}
                     </Badge>
                   </div>
                   <div className="text-muted-foreground font-mono text-[11px]">
@@ -402,20 +402,22 @@ export default function StockAdjustmentsPage() {
                     <div className="flex items-center justify-between p-4 rounded-lg bg-muted/40 border">
                       <div className="text-center flex-1">
                         <div className="text-xs text-muted-foreground">পূর্বের মজুদ (Before)</div>
-                        <div className="text-2xl font-bold font-mono mt-1">{currentQty}</div>
+                        <div className="text-2xl font-bold font-mono mt-1">
+                          {currentQty} <span className="text-xs font-normal text-muted-foreground">{selectedVariant.variant?.product?.baseUnit || "pcs"}</span>
+                        </div>
                       </div>
 
                       <div className="flex flex-col items-center px-4">
                         <ArrowRight className="h-5 w-5 text-muted-foreground" />
                         <span className={`text-xs font-bold font-mono mt-1 ${computedDelta > 0 ? "text-emerald-600" : computedDelta < 0 ? "text-destructive" : "text-muted-foreground"}`}>
-                          {computedDelta > 0 ? `+${computedDelta}` : computedDelta}
+                          {computedDelta > 0 ? `+${computedDelta}` : computedDelta} {selectedVariant.variant?.product?.baseUnit || "pcs"}
                         </span>
                       </div>
 
                       <div className="text-center flex-1">
                         <div className="text-xs text-muted-foreground">পরের মজুদ (After)</div>
                         <div className="text-2xl font-bold font-mono mt-1 text-primary">
-                          {computedAfter}
+                          {computedAfter} <span className="text-xs font-normal text-muted-foreground">{selectedVariant.variant?.product?.baseUnit || "pcs"}</span>
                         </div>
                       </div>
                     </div>

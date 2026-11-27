@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { formatDateKey } from "@universal-pos/shared";
+import { formatDateKey, getActiveModules } from "@universal-pos/shared";
 import { TenantContextService } from "../../common/database/tenant-context.service.js";
 
 @Injectable()
@@ -37,7 +37,7 @@ export class PosCatalogService {
         promoWhere.updatedAt = { gte: sinceDate };
       }
 
-      const [products, variants, categories, taxClasses, promotions, coupons] = await Promise.all([
+      const [products, variants, categories, taxClasses, promotions, coupons, flags] = await Promise.all([
         tx.product.findMany({
           where: productWhere,
           select: {
@@ -45,6 +45,18 @@ export class PosCatalogService {
             name: true,
             categoryId: true,
             taxClassId: true,
+            baseUnit: true,
+            allowDecimalQty: true,
+            units: {
+              where: { isActive: true, isSaleUnit: true },
+              select: {
+                id: true,
+                name: true,
+                factor: true,
+                sortOrder: true,
+              },
+              orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+            },
             isActive: true,
             updatedAt: true,
           },
@@ -60,6 +72,7 @@ export class PosCatalogService {
               },
             },
             barcodes: true,
+            unitPrices: true,
             stockLevels: {
               where: { branchId },
               select: { qty: true, updatedAt: true },
@@ -99,7 +112,14 @@ export class PosCatalogService {
             updatedAt: true,
           },
         }),
+        tx.featureFlag.findMany({
+          where: { key: { startsWith: "module." } },
+          select: { key: true, allowed: true, enabled: true },
+        }),
       ]);
+
+      const activeModules = getActiveModules(flags);
+      const isUnitsActive = activeModules.includes("units");
 
       let maxUpdated = 0;
       for (const p of products) {
@@ -174,7 +194,21 @@ export class PosCatalogService {
           .filter((c) => c.usageLimitTotal !== null || c.usageLimitPerCustomer !== null)
           .map((c) => c.code.toUpperCase()),
         products: products.map((p) => ({
-          ...p,
+          id: p.id,
+          name: p.name,
+          categoryId: p.categoryId,
+          taxClassId: p.taxClassId,
+          baseUnit: isUnitsActive ? (p.baseUnit || "pcs") : "pcs",
+          allowDecimalQty: isUnitsActive ? Boolean(p.allowDecimalQty) : false,
+          units: isUnitsActive
+            ? p.units.map((u) => ({
+                id: u.id,
+                name: u.name,
+                factor: Number(u.factor),
+                sortOrder: u.sortOrder,
+              }))
+            : [],
+          isActive: p.isActive,
           updatedAt: p.updatedAt.toISOString(),
         })),
         variants: variants.map((v) => {
@@ -188,6 +222,12 @@ export class PosCatalogService {
             isActive: v.isActive,
             stockQty,
             barcodes: v.barcodes.map((b) => b.barcode),
+            barcodeUnits: isUnitsActive
+              ? v.barcodes.map((b) => ({ barcode: b.barcode, productUnitId: b.productUnitId || null }))
+              : [],
+            unitPrices: isUnitsActive
+              ? v.unitPrices.map((up) => ({ productUnitId: up.productUnitId, priceMinor: Number(up.priceMinor) }))
+              : [],
             optionValues: v.optionValues.map((ov) => ({
               optionName: ov.optionValue.option.name,
               value: ov.optionValue.value,

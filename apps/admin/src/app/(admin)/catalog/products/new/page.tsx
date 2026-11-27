@@ -22,7 +22,8 @@ import {
 import { ArrowLeft, Plus, X, AlertCircle, Copy } from "lucide-react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { sortSizes } from "@universal-pos/shared";
+import { sortSizes, BASE_UNITS } from "@universal-pos/shared";
+import { useModules } from "@/lib/auth-context";
 
 const NewProductFormSchema = z.object({
   name: z.string().trim().min(2, "Name must be at least 2 characters"),
@@ -54,7 +55,11 @@ export default function NewProductPage() {
   const router = useRouter();
   const { strings, locale } = useTranslation();
   const { apiFetch, hasPermission } = useAuth();
+  const { isModuleActive } = useModules();
+  const isUnitsActive = isModuleActive("units");
 
+  const [baseUnit, setBaseUnit] = useState("pcs");
+  const [allowDecimalQty, setAllowDecimalQty] = useState(false);
   const [sizes, setSizes] = useState<string[]>(["S", "M", "L", "XL"]);
   const [colors, setColors] = useState<string[]>(["Black", "Navy", "White"]);
   const [newSizeInput, setNewSizeInput] = useState("");
@@ -281,6 +286,11 @@ export default function NewProductPage() {
         variants: variantsPayload.length > 0 ? variantsPayload : undefined,
       };
 
+      if (isUnitsActive) {
+        payload.baseUnit = baseUnit;
+        payload.allowDecimalQty = allowDecimalQty;
+      }
+
       const res = await apiFetch("/products", {
         method: "POST",
         body: JSON.stringify(payload),
@@ -501,6 +511,57 @@ export default function NewProductPage() {
                   </div>
                 )}
               </div>
+
+              {isUnitsActive && (
+                <div className="p-4 rounded-lg border bg-muted/20 space-y-4 mt-2">
+                  <div className="font-semibold text-sm flex items-center justify-between">
+                    <span>{locale === "bn" ? "একক ও পরিমাপ (Units & Measurement)" : "Units & Measurement"}</span>
+                    <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">Module: Units</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="baseUnit" className="text-sm font-medium">
+                        {locale === "bn" ? "বেস একক (Base Unit)" : "Base Unit"}
+                      </Label>
+                      <select
+                        id="baseUnit"
+                        value={baseUnit}
+                        onChange={(e) => setBaseUnit(e.target.value)}
+                        className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                        data-testid="product-base-unit-select"
+                      >
+                        {BASE_UNITS.map((u) => (
+                          <option key={u.code} value={u.code}>
+                            {locale === "bn" ? `${u.nameBn} (${u.code})` : `${u.nameEn} (${u.code})`}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[11px] text-muted-foreground">
+                        {locale === "bn" ? "মজুদ সর্বদা বেস এককে সংরক্ষিত হয়।" : "Stock is always kept in base units."}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col justify-center space-y-1.5 pt-2">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="allowDecimalQty"
+                          checked={allowDecimalQty}
+                          onChange={(e) => setAllowDecimalQty(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                          data-testid="product-allow-decimal-switch"
+                        />
+                        <Label htmlFor="allowDecimalQty" className="text-sm font-medium cursor-pointer">
+                          {locale === "bn" ? "ভগ্নাংশ বা দশমিক পরিমাণ অনুমোদন করুন" : "Allow Decimal Quantity"}
+                        </Label>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground pl-6">
+                        {locale === "bn" ? "যেমন: ২.৫ কেজি বা ১.৭৫ লিটার বিক্রি করা যাবে।" : "Allows selling quantities like 2.5 kg or 1.75 liters."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 

@@ -20,6 +20,7 @@ import {
   calculateShiftCashTotals,
   calculateSaleTotals,
   roundHalfUp,
+  computeBaseQuantity,
 } from "@universal-pos/shared";
 import { enforceDiscountAndOverrideLimits } from "./sales-discount.helper.js";
 import {
@@ -214,12 +215,16 @@ export class ExchangesService {
           returningQtyThousandths,
         );
 
+        const origFactor = saleItem.unitFactor ? Number(saleItem.unitFactor) : 1;
+        const returnBaseQty = computeBaseQuantity(item.quantity, origFactor);
+
         returnItemsData.push({
           id: uuidv7(),
           tenantId,
           saleItemId: item.saleItemId,
           variantId: saleItem.variantId,
           quantity: new Prisma.Decimal(item.quantity),
+          baseQuantity: new Prisma.Decimal(returnBaseQty),
           unitRefundMinor,
           taxRefundMinor: refundCalc.taxRefundMinor,
           totalRefundMinor: refundCalc.refundMinor,
@@ -230,7 +235,7 @@ export class ExchangesService {
           stockMovementsToApply.push({
             branchId: dto.branchId,
             variantId: saleItem.variantId,
-            qtyDelta: Number(item.quantity),
+            qtyDelta: returnBaseQty,
             type: "sale_return",
             refType: "sale_return",
             refId: exchangeReturnId,
@@ -254,15 +259,22 @@ export class ExchangesService {
       // 6. Calculate new sale items
       const newVariants = await tx.productVariant.findMany({
         where: { id: { in: dto.newItems.map((i) => i.variantId) }, tenantId },
-        include: { product: { include: { taxClass: true } } },
+        include: { product: { include: { taxClass: true } }, unitPrices: true },
       });
       const newVariantMap = new Map(newVariants.map((v) => [v.id, v]));
+
+      const newUnitIds = dto.newItems.map((i: any) => i.productUnitId).filter(Boolean) as string[];
+      const newUnits = newUnitIds.length > 0
+        ? await tx.productUnit.findMany({ where: { id: { in: newUnitIds }, tenantId } })
+        : [];
+      const newUnitMap = new Map(newUnits.map((u) => [u.id, u]));
 
       const defaultTax = await tx.taxClass.findFirst({ where: { tenantId, isDefault: true } });
       const defaultTaxRateBp = defaultTax?.rateBp ?? 0;
 
       const newOriginalPrices: (bigint | null)[] = [];
-      const newLineInputs = dto.newItems.map((it) => {
+      const lineUnitSnapshots: { productUnitId: string | null; unitName: string; unitFactor: number; baseQuantity: number }[] = [];
+      const newLineInputs = dto.newItems.map((it: any) => {
         const v = newVariantMap.get(it.variantId);
         if (!v || !v.isActive || !v.product || !v.product.isActive) {
           throw new UnprocessableEntityException({
@@ -271,6 +283,29 @@ export class ExchangesService {
           });
         }
         let unitPriceMinor = v.priceMinor;
+        let unitName = "pcs";
+        let unitFactor = 1;
+        if (it.productUnitId) {
+          const unit = newUnitMap.get(it.productUnitId);
+          if (unit) {
+            unitName = unit.name;
+            unitFactor = Number(unit.factor);
+            const overridePrice = v.unitPrices.find((up) => up.productUnitId === unit.id);
+            if (overridePrice) {
+              unitPriceMinor = overridePrice.priceMinor;
+            } else {
+              unitPriceMinor = BigInt(Math.round(Number(v.priceMinor) * unitFactor));
+            }
+          }
+        }
+        const baseQuantity = computeBaseQuantity(it.quantity, unitFactor);
+        lineUnitSnapshots.push({
+          productUnitId: it.productUnitId || null,
+          unitName,
+          unitFactor,
+          baseQuantity,
+        });
+
         if (it.overrideUnitPriceMinor !== undefined) {
           const canOverride =
             user?.isOwner ||
@@ -279,7 +314,7 @@ export class ExchangesService {
           if (!canOverride) {
             throw new ForbiddenException("Price override requires sale.price_override permission");
           }
-          newOriginalPrices.push(v.priceMinor);
+          newOriginalPrices.push(unitPriceMinor);
           unitPriceMinor = BigInt(it.overrideUnitPriceMinor);
         } else {
           newOriginalPrices.push(null);
@@ -381,11 +416,13 @@ export class ExchangesService {
 
       // 9. Cost mapping for movements
       const newCostMap = new Map(newVariants.map((v) => [v.id, v.costMinor]));
-      for (const line of newSaleCalc.lines) {
+      for (let i = 0; i < newSaleCalc.lines.length; i++) {
+        const line = newSaleCalc.lines[i];
+        const snapshot = lineUnitSnapshots[i];
         stockMovementsToApply.push({
           branchId: dto.branchId,
           variantId: line.variantId,
-          qtyDelta: -Number(line.quantity),
+          qtyDelta: -Number(snapshot?.baseQuantity ?? line.quantity),
           unitCostMinor: newCostMap.get(line.variantId) ?? 0n,
           type: "sale",
           refType: "sale",
@@ -415,20 +452,27 @@ export class ExchangesService {
           notes: dto.notes ? `Exchange against ${origSale.invoiceNumber}: ${dto.notes}` : `Exchange against ${origSale.invoiceNumber}`,
           requestPayloadHash: payloadHash,
           items: {
-            create: newSaleCalc.lines.map((l: any, idx: number) => ({
-              id: uuidv7(),
-              tenantId,
-              variantId: l.variantId,
-              unitPriceMinor: l.unitPriceMinor,
-              originalUnitPriceMinor: newOriginalPrices[idx] ?? null,
-              unitCostMinor: newCostMap.get(l.variantId) ?? 0n,
-              quantity: new Prisma.Decimal(l.quantity),
-              subtotalMinor: l.grossMinor,
-              discountMinor: l.lineDiscountMinor + l.allocatedBillDiscountMinor,
-              taxRateBp: l.taxRateBp,
-              taxMinor: l.taxMinor,
-              totalMinor: l.totalMinor,
-            })),
+            create: newSaleCalc.lines.map((l: any, idx: number) => {
+              const snapshot = lineUnitSnapshots[idx];
+              return {
+                id: uuidv7(),
+                tenantId,
+                variantId: l.variantId,
+                productUnitId: snapshot?.productUnitId ?? null,
+                unitName: snapshot?.unitName ?? "pcs",
+                unitFactor: new Prisma.Decimal(snapshot?.unitFactor ?? 1),
+                baseQuantity: new Prisma.Decimal(snapshot?.baseQuantity ?? l.quantity),
+                unitPriceMinor: l.unitPriceMinor,
+                originalUnitPriceMinor: newOriginalPrices[idx] ?? null,
+                unitCostMinor: newCostMap.get(l.variantId) ?? 0n,
+                quantity: new Prisma.Decimal(l.quantity),
+                subtotalMinor: l.grossMinor,
+                discountMinor: l.lineDiscountMinor + l.allocatedBillDiscountMinor,
+                taxRateBp: l.taxRateBp,
+                taxMinor: l.taxMinor,
+                totalMinor: l.totalMinor,
+              };
+            }),
           },
           payments: {
             create: dto.payments.map((p) => ({

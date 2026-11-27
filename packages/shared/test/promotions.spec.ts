@@ -1330,6 +1330,125 @@ describe("Milestone E1: Promotions & Loyalty Engine", () => {
       expect(reversePoints(10, 0n, 100000n)).toBe(0);
       expect(reversePoints(10, 50000n, 0n)).toBe(0);
     });
+
+    it("a decimal quantity line does not break any promotion type", () => {
+      const now = new Date();
+      const promos: PromotionRule[] = [
+        {
+          id: "p-percent",
+          name: "10% off",
+          type: "PERCENT_OFF",
+          status: "active",
+          priority: 1,
+          stackableWithBill: true,
+          membersOnly: false,
+          targetType: "ALL",
+          startAt: new Date(now.getTime() - 10000),
+          endAt: new Date(now.getTime() + 10000),
+          config: { percentBp: 1000 },
+        },
+        {
+          id: "p-amount",
+          name: "20 Tk off",
+          type: "AMOUNT_OFF",
+          status: "active",
+          priority: 1,
+          stackableWithBill: true,
+          membersOnly: false,
+          targetType: "ALL",
+          startAt: new Date(now.getTime() - 10000),
+          endAt: new Date(now.getTime() + 10000),
+          config: { amountMinor: 2000n },
+        },
+        {
+          id: "p-fixed",
+          name: "Fixed 80 Tk",
+          type: "FIXED_PRICE",
+          status: "active",
+          priority: 1,
+          stackableWithBill: true,
+          membersOnly: false,
+          targetType: "ALL",
+          startAt: new Date(now.getTime() - 10000),
+          endAt: new Date(now.getTime() + 10000),
+          config: { fixedPriceMinor: 8000n },
+        },
+        {
+          id: "p-b2g1",
+          name: "Buy 2 Get 1",
+          type: "BUY_X_GET_Y",
+          status: "active",
+          priority: 1,
+          stackableWithBill: true,
+          membersOnly: false,
+          targetType: "ALL",
+          startAt: new Date(now.getTime() - 10000),
+          endAt: new Date(now.getTime() + 10000),
+          config: { buyQty: 2, getQty: 1, getDiscountPercentBp: 10000 },
+        },
+        {
+          id: "p-bill",
+          name: "Bill threshold",
+          type: "BILL_THRESHOLD",
+          status: "active",
+          priority: 1,
+          stackableWithBill: true,
+          membersOnly: false,
+          targetType: "ALL",
+          startAt: new Date(now.getTime() - 10000),
+          endAt: new Date(now.getTime() + 10000),
+          config: { minSpendMinor: 10000n, discountPercentBp: 500 },
+        },
+      ];
+
+      for (const promo of promos) {
+        expect(() => {
+          evaluatePromotions({
+            lines: [{ variantId: "v1", productId: "p1", unitPriceMinor: 10000n, quantity: "2.500" }],
+            promotions: [promo],
+          });
+        }).not.toThrow();
+      }
+    });
+
+    it("a buy-2-get-1 promotion on cans counts cans, not liters", () => {
+      // 3 cans of 5 liters each = 15 liters base quantity.
+      // Line is 3 cans @ ৳225 (22500 poisha).
+      // buy-2-get-1 promotion on cans counts whole cans (3 units), awarding 1 free can (22500 poisha discount).
+      const b2g1: PromotionRule = {
+        id: "b2g1-cans",
+        name: "Buy 2 Cans Get 1 Free",
+        type: "BUY_X_GET_Y",
+        status: "active",
+        priority: 1,
+        stackableWithBill: true,
+        membersOnly: false,
+        targetType: "ALL",
+        startAt: new Date(Date.now() - 3600000),
+        endAt: new Date(Date.now() + 3600000),
+        config: {
+          buyQty: 2,
+          getQty: 1,
+          getDiscountPercentBp: 10000,
+        },
+      };
+
+      const result = evaluatePromotions({
+        lines: [
+          {
+            variantId: "v-hcl",
+            productId: "p-hcl",
+            unitPriceMinor: 22500n,
+            quantity: "3", // 3 cans
+          },
+        ],
+        promotions: [b2g1],
+      });
+
+      // 3 cans @ 22500 = 67500 gross. Exactly 1 free can = 22500 discount.
+      expect(result.linePromotionDiscountMinor).toBe(22500n);
+      expect(result.netMinor).toBe(45000n);
+    });
   });
 
 });

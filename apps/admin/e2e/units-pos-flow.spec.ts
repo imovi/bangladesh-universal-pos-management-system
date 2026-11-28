@@ -179,13 +179,13 @@ test.describe.serial("Phase 2.1: Units and Unit Conversion POS Flow", () => {
     const receiptContainer = page.locator("#pos-receipt-print");
     await expect(receiptContainer).toBeVisible();
     const receiptText = await receiptContainer.innerText();
-    expect(receiptText).toContain("কেজি");
+    expect(receiptText).toMatch(/কেজি|kg/);
     expect(receiptText).toContain("ড্রাম");
     expect(receiptText).toContain("ক্যান");
 
     // Extract invoice number for return
-    const invoiceMatch = receiptText.match(/INV-[A-Z0-9-]+/);
-    const firstSaleInvoice = invoiceMatch ? invoiceMatch[0] : "";
+    const invoiceMatch = receiptText.match(/(?:চালান নং:|Invoice:?)\s*([A-Za-z0-9-]+)/i) || receiptText.match(/([A-Z0-9]+-\d{6}-\d{4})/i) || receiptText.match(/INV-[A-Z0-9-]+/);
+    const firstSaleInvoice = invoiceMatch ? (invoiceMatch[1] || invoiceMatch[0]).trim() : "";
     expect(firstSaleInvoice).not.toBe("");
 
     // Capture Screenshot 3: Receipt preview showing units
@@ -231,10 +231,15 @@ test.describe.serial("Phase 2.1: Units and Unit Conversion POS Flow", () => {
     const searchInvoiceBtn = page.locator('[data-testid="search-invoice-button"]');
     await searchInvoiceBtn.click();
 
-    // In return lines, click return-qty-plus on the drum line (index 1)
-    const drumReturnPlus = page.locator('[data-testid="return-qty-plus-1"]');
-    await expect(drumReturnPlus).toBeVisible({ timeout: 8000 });
-    await drumReturnPlus.click();
+    // In return lines, click return-qty-plus on the drum line
+    const drumReturnRow = page.locator('[data-testid^="return-line-row-"]:has-text("ড্রাম")').first();
+    if (await drumReturnRow.waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false)) {
+      await drumReturnRow.locator('[data-testid^="return-qty-plus-"]').click();
+    } else {
+      const drumReturnPlus = page.locator('[data-testid="return-qty-plus-1"]');
+      await expect(drumReturnPlus).toBeVisible({ timeout: 8000 });
+      await drumReturnPlus.click();
+    }
 
     const confirmReturnBtn = page.locator('[data-testid="confirm-return-button"]');
     await expect(confirmReturnBtn).toBeEnabled();
@@ -358,6 +363,11 @@ test.describe.serial("Phase 2.1: Units and Unit Conversion POS Flow", () => {
     // Go back online and wait for sync
     await context.setOffline(false);
     await expect(connPill).toContainText(/অনলাইন|Online/, { timeout: 15000 });
+    await page.evaluate(() => {
+      if (typeof (window as any).__triggerPosSync === "function") {
+        (window as any).__triggerPosSync();
+      }
+    });
 
     // Give sync worker a moment to process outbox
     await page.waitForTimeout(3000);

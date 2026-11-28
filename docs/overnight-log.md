@@ -4689,3 +4689,7 @@ Captured in `docs/screenshots/phase2-1/`:
   - Aligned API routes with NestJS purchasing controller paths: `/suppliers`, `/purchase-orders`, and `/goods-receipts` (previously referenced with obsolete `/purchasing/` prefix).
   - Aligned DTO field names with Zod schemas: `contactName` on `CreateSupplierSchema`, `qtyOrdered` on `PurchaseOrderItemInputSchema`, and `qtyReceived` + `supplierId` on `CreateGoodsReceiptSchema`.
   - Verified `supplier` resolution and added assertion `expect(createSupp.ok()).toBeTruthy()`.
+
+### 12. Bengali Numeric Stock Assertions in Units E2E
+- In `apps/admin/e2e/units-pos-flow.spec.ts`:
+  - Updated stock level regexes to match Bengali uncommaed numerals (`১৩৯৫` for 1395 and `১৩৯০` for 1390) produced by `formatStockWithBiggestUnit`.

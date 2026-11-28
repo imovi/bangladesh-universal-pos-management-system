@@ -331,7 +331,7 @@ test.describe.serial("Phase 2.1: Units and Unit Conversion POS Flow", () => {
     const stockTableAfterGR = page.locator('[data-testid="stock-levels-table"]');
     await expect(stockTableAfterGR).toBeVisible({ timeout: 10000 });
     const stockAfterGRText = await stockTableAfterGR.innerText();
-    expect(stockAfterGRText).toMatch(/১,৩৯৫|1,395|1395/);
+    expect(stockAfterGRText).toMatch(/১৩৯৫|১,৩৯৫|1,395|1395/);
 
     // 11. Go offline, sell 1 can, go online, wait for sync, check server sale & stock
     await page.goto("/pos");
@@ -403,6 +403,6 @@ test.describe.serial("Phase 2.1: Units and Unit Conversion POS Flow", () => {
     const finalStockTable = page.locator('[data-testid="stock-levels-table"]');
     await expect(finalStockTable).toBeVisible({ timeout: 10000 });
     const finalStockText = await finalStockTable.innerText();
-    expect(finalStockText).toMatch(/১,৩৯০|1,390|1390/);
+    expect(finalStockText).toMatch(/১৩৯০|১,৩৯০|1,390|1390/);
   });
 });

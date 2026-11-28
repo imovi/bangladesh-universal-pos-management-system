@@ -4693,3 +4693,7 @@ Captured in `docs/screenshots/phase2-1/`:
 ### 12. Bengali Numeric Stock Assertions in Units E2E
 - In `apps/admin/e2e/units-pos-flow.spec.ts`:
   - Updated stock level regexes to match Bengali uncommaed numerals (`১৩৯৫` for 1395 and `১৩৯০` for 1390) produced by `formatStockWithBiggestUnit`.
+
+### 13. Dismiss Receipt Modal Before Online Check in Units E2E
+- In `apps/admin/e2e/units-pos-flow.spec.ts`:
+  - Added click on `[data-testid="new-sale-button"]` after verifying the offline receipt to close `ReceiptView`, re-mounting the main POS header before asserting `[data-testid="connection-status-pill"]` transitions back to Online.

@@ -362,6 +362,11 @@ test.describe.serial("Phase 2.1: Units and Unit Conversion POS Flow", () => {
     const offlineBadge = page.locator('[data-testid="offline-receipt-badge"]');
     await expect(offlineBadge).toBeVisible({ timeout: 15000 });
 
+    // Click new sale button to close receipt and return to POS screen
+    const newSaleBtn = page.locator('[data-testid="new-sale-button"]');
+    await newSaleBtn.click();
+    await expect(offlineBadge).toBeHidden({ timeout: 5000 });
+
     // Go back online and wait for sync
     await context.setOffline(false);
     await expect(connPill).toContainText(/অনলাইন|Online/, { timeout: 15000 });

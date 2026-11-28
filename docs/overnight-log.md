@@ -4697,3 +4697,28 @@ Captured in `docs/screenshots/phase2-1/`:
 ### 13. Dismiss Receipt Modal Before Online Check in Units E2E
 - In `apps/admin/e2e/units-pos-flow.spec.ts`:
   - Added click on `[data-testid="new-sale-button"]` after verifying the offline receipt to close `ReceiptView`, re-mounting the main POS header before asserting `[data-testid="connection-status-pill"]` transitions back to Online.
+
+### 14. Performance Optimization for Sale Item DB Query & Final CI Verification
+- **Issue:** Under concurrent 10-register load check (Scenario 1), p95 latency reached 410ms (just over 400ms threshold) in run `46094593915` (failure on `93298b8`) despite 0 errors and all 163 E2E tests passing.
+- **Root Cause:** In `apps/api/src/modules/sales/sales.service.ts` (`loadShiftAndVariants`), Prisma included `units: true` and `unitPrices: true` unconditionally on every variant lookup, causing 2 additional subqueries per sale transaction even for fashion retail products without product units.
+- **Optimization:** Conditioned inclusion of `units` and `unitPrices` on `dto.items.some((i) => !!i.productUnitId)` in `sales.service.ts` and `exchanges.service.ts`.
+- **Result:** Latency dropped drastically; Scenario 1 p95 fell from 410ms to 180ms. All CI suites green.
+
+### CI Run History for Phase 2.1
+- CI: `3b27751` → run `46074672447` → completed failure
+- CI: `33aac95` → run `46077335221` → completed failure
+- CI: `b5ede77` → run `46079672891` → completed failure
+- CI: `50e7c91` → run `46081158722` → completed failure
+- CI: `80f306a` → run `46082940381` → completed failure
+- CI: `cca0a1f` → run `46084282934` → completed failure
+- CI: `fa95884` → run `46088195178` → completed failure
+- CI: `c31a048` → run `46090096591` → completed failure
+- CI: `6dd4911` → run `46093338456` → completed failure
+- CI: `93298b8` → run `46094593915` → completed failure
+- CI: `7ccb0a1` → run `46098857257` → completed success
+  - test: 163 passed (9.7m), 438 API unit tests passed
+  - smoke-prod: status=running, restarts=0, health=healthy, tableCount=57
+  - load-check:
+    - scenario 1 (sale_load_10_registers): p95Ms: 180 (< 400ms), throughput: 3.7 req/s, totalSales: 450, errors: 0, stockExpected: 1350, stockActual: 1350, budgetMet: true
+    - scenario 2 (sync_burst_300_sales): durationSec: 3.41, throughput: 88 req/s, totalSales: 300, errors: 0, budgetMet: true
+    - scenario 3 (sales_summary_report_50k): durationMs: 54 (< 2000ms), salesCount: 50000/50000, budgetMet: true

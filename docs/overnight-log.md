@@ -4680,6 +4680,12 @@ Captured in `docs/screenshots/phase2-1/`:
 ### 10. Units E2E Receipt Formatting and Return Invoice Extraction Fix
 - In `apps/admin/e2e/units-pos-flow.spec.ts`:
   - Updated receipt unit check to match `/কেজি|kg/` to accept `"2.5 kg"` as rendered by the POS receipt for products with baseUnit `kg`.
-  - Updated invoice regex to match POS invoice numbering formats (`चालান নং:` / `REG01-YYMMDD-NNNN`).
+  - Updated invoice regex to match POS invoice numbering formats (`চালান নং:` / `REG01-YYMMDD-NNNN`).
   - Switched return drum row selection to find by row text `"ড্রাম"`.
   - Added explicit `__triggerPosSync()` invocation on reconnect.
+
+### 11. Purchasing Endpoints and Schemas Alignment in Units E2E
+- In `apps/admin/e2e/units-pos-flow.spec.ts`:
+  - Aligned API routes with NestJS purchasing controller paths: `/suppliers`, `/purchase-orders`, and `/goods-receipts` (previously referenced with obsolete `/purchasing/` prefix).
+  - Aligned DTO field names with Zod schemas: `contactName` on `CreateSupplierSchema`, `qtyOrdered` on `PurchaseOrderItemInputSchema`, and `qtyReceived` + `supplierId` on `CreateGoodsReceiptSchema`.
+  - Verified `supplier` resolution and added assertion `expect(createSupp.ok()).toBeTruthy()`.

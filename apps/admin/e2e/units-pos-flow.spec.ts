@@ -268,24 +268,25 @@ test.describe.serial("Phase 2.1: Units and Unit Conversion POS Flow", () => {
     const branchData = (await branchesRes.json()).data;
     const branch = Array.isArray(branchData) ? branchData[0] : (branchData?.items?.[0] ?? branchData);
 
-    const suppliersRes = await request.get(`${API_BASE_URL}/purchasing/suppliers`, {
+    const suppliersRes = await request.get(`${API_BASE_URL}/suppliers`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const suppBody = await suppliersRes.json();
-    const suppData = suppBody.data;
-    let supplier = Array.isArray(suppData) ? suppData[0] : (suppData?.items?.[0] ?? suppData);
+    const suppList = Array.isArray(suppBody.data) ? suppBody.data : (suppBody.data?.items ?? []);
+    let supplier = suppList[0];
     if (!supplier) {
-      const createSupp = await request.post(`${API_BASE_URL}/purchasing/suppliers`, {
+      const createSupp = await request.post(`${API_BASE_URL}/suppliers`, {
         headers: { Authorization: `Bearer ${token}` },
-        data: { name: "Chemical Supply Co.", contactPerson: "Rafiq", phone: "01711223344" },
+        data: { name: "Chemical Supply Co.", contactName: "Rafiq", phone: "01711223344" },
       });
+      expect(createSupp.ok()).toBeTruthy();
       supplier = (await createSupp.json()).data;
     }
 
     const hclDrumUnit = hclProduct.units.find((u: any) => u.factor === 200 || u.name.includes("ড্রাম"));
     const hclVariant = hclProduct.variants[0];
 
-    const poRes = await request.post(`${API_BASE_URL}/purchasing/orders`, {
+    const poRes = await request.post(`${API_BASE_URL}/purchase-orders`, {
       headers: { Authorization: `Bearer ${token}` },
       data: {
         supplierId: supplier.id,
@@ -294,7 +295,7 @@ test.describe.serial("Phase 2.1: Units and Unit Conversion POS Flow", () => {
           {
             variantId: hclVariant.id,
             productUnitId: hclDrumUnit.id,
-            orderedQty: 2,
+            qtyOrdered: 2,
             unitCostMinor: 800000,
           },
         ],
@@ -303,17 +304,18 @@ test.describe.serial("Phase 2.1: Units and Unit Conversion POS Flow", () => {
     expect(poRes.ok()).toBeTruthy();
     const po = (await poRes.json()).data;
 
-    const grRes = await request.post(`${API_BASE_URL}/purchasing/goods-receipts`, {
+    const grRes = await request.post(`${API_BASE_URL}/goods-receipts`, {
       headers: { Authorization: `Bearer ${token}` },
       data: {
         purchaseOrderId: po.id,
+        supplierId: supplier.id,
         branchId: branch.id,
         items: [
           {
             purchaseOrderItemId: po.items[0].id,
             variantId: hclVariant.id,
             productUnitId: hclDrumUnit.id,
-            receivedQty: 2,
+            qtyReceived: 2,
             unitCostMinor: 800000,
           },
         ],

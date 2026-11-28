@@ -409,16 +409,17 @@ export class SalesService {
       });
     }
     const defaultTax = await tx.taxClass.findFirst({ where: { tenantId, isDefault: true } });
+    const hasAnyUnit = dto.items.some((i) => !!i.productUnitId);
     const variants = await tx.productVariant.findMany({
       where: { id: { in: dto.items.map((i) => i.variantId) }, tenantId },
       include: {
         product: {
           include: {
             taxClass: true,
-            units: true,
+            ...(hasAnyUnit ? { units: true } : {}),
           },
         },
-        unitPrices: true,
+        ...(hasAnyUnit ? { unitPrices: true } : {}),
       },
     });
     return { shift, defaultTaxRateBp: defaultTax?.rateBp ?? 0, variants, isShiftClosed };

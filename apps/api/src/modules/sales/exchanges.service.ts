@@ -257,9 +257,13 @@ export class ExchangesService {
       }
 
       // 6. Calculate new sale items
+      const hasAnyUnit = dto.newItems.some((i: any) => !!i.productUnitId);
       const newVariants = await tx.productVariant.findMany({
         where: { id: { in: dto.newItems.map((i) => i.variantId) }, tenantId },
-        include: { product: { include: { taxClass: true } }, unitPrices: true },
+        include: {
+          product: { include: { taxClass: true } },
+          ...(hasAnyUnit ? { unitPrices: true } : {}),
+        },
       });
       const newVariantMap = new Map(newVariants.map((v) => [v.id, v]));
 
